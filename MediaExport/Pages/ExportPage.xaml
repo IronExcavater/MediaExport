@@ -6,9 +6,16 @@
     xmlns:local="using:MediaExport.Pages"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:viewModels="using:MediaExport.ViewModels"
+    d:DataContext="{d:DesignInstance Type=viewModels:ExportViewModel}"
     mc:Ignorable="d">
 
     <Grid>
-
+        <TextBox
+            Text="{Binding Url, Mode=TwoWay}"
+            PlaceholderText="https://" />
+        <Button
+            Content="Search"
+            Command="{Binding SearchCommand}" />
     </Grid>
 </Page>

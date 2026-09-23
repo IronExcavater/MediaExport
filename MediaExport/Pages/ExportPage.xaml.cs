@@ -1,3 +1,4 @@
+using MediaExport.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -23,6 +24,8 @@ namespace MediaExport.Pages;
 /// </summary>
 public sealed partial class ExportPage : Page
 {
+    private ExportViewModel? _viewModel;
+
     public ExportPage()
     {
         InitializeComponent();

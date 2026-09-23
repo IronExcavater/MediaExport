@@ -1,4 +1,5 @@
-﻿using System;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -6,6 +7,13 @@ using System.Threading.Tasks;
 
 namespace MediaExport.ViewModels;
 
-internal class ExportViewModel
+public partial class ExportViewModel : ObservableObject, IDisposable
 {
+    [ObservableProperty]
+    public partial string Url { get; set; } = string.Empty;
+
+    public void Dispose()
+    {
+        throw new NotImplementedException();
+    }
 }

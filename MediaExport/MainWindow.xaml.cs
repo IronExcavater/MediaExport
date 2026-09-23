@@ -1,4 +1,5 @@
 using MediaExport.Pages;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
@@ -16,33 +17,29 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
+        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
+
     }
 
-    private void Navigation_ItemInvoked(
+    private void TitleBar_PaneToggleRequested(TitleBar sender, object args)
+    {
+        navView.IsPaneOpen = !navView.IsPaneOpen;
+    }
+
+    private void NavView_SelectionChanged(
         NavigationView sender,
-        NavigationViewItemInvokedEventArgs args)
+        NavigationViewSelectionChangedEventArgs args)
     {
-        Type? page = GetPageType(args);
-
-        if (page is null || ContentFrame.CurrentSourcePageType == page)
-            return;
-
-        ContentFrame.Navigate(page);
-    }
-
-    private static Type? GetPageType(NavigationViewItemInvokedEventArgs args)
-    {
-        if (args.IsSettingsInvoked)
-            return typeof(SettingsPage);
-        
-        switch (args.InvokedItemContainer?.Tag?.ToString())
+        if (args.IsSettingsSelected)
         {
-            case "export":
-                return typeof(ExportPage);
-            case "activity":
-                return typeof(ActivityPage);
-            default:
-                return null;
+            navFrame.Navigate(typeof(SettingsPage));
+        }
+        else if (args.SelectedItemContainer is NavigationViewItem item)
+        {
+            Type? page = Type.GetType(item.Tag?.ToString() ?? string.Empty);
+            if (page is not null)
+                navFrame.Navigate(page);
         }
     }
 }
