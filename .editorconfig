@@ -1,0 +1,5 @@
+root = true
+
+[*.{cs,vb}]
+file_header_template = Copyright (C) 2026 Niclas Rogulski. All rights reserved.\nSPDX-License-Identifier: MPL-2.0
+dotnet_diagnostic.IDE0073.severity = warning

@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "MediaExport (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "MediaExport (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

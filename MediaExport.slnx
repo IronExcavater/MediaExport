@@ -1,0 +1,15 @@
+<Solution>
+  <Configurations>
+    <Platform Name="ARM64" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="MediaExport.Core/MediaExport.Core.csproj" Id="b41cb6ac-ac6a-4080-b57e-aa400724f969" />
+  <Project Path="MediaExport.Tests/MediaExport.Tests.csproj" Id="f68d76f1-baea-4a14-b905-9d187488b214" />
+  <Project Path="MediaExport/MediaExport.csproj">
+    <Platform Solution="*|ARM64" Project="ARM64" />
+    <Platform Solution="*|x64" Project="x64" />
+    <Platform Solution="*|x86" Project="x86" />
+    <Deploy />
+  </Project>
+</Solution>
