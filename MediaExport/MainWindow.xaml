@@ -38,19 +38,21 @@
             Grid.Row="1"
             IsBackButtonVisible="Collapsed"
             IsPaneToggleButtonVisible="False"
-            SelectionChanged="NavView_SelectionChanged">
+            SelectionChanged="NavView_SelectionChanged"
+            PaneDisplayMode="LeftCompact"
+            Loaded="NavView_Loaded">
 
             <NavigationView.MenuItems>
                 <NavigationViewItem
                     Content="Export"
-                    Tag="export">
+                    Tag="MediaExport.Pages.ExportPage">
                     <NavigationViewItem.Icon>
                         <SymbolIcon Symbol="Download" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem
                     Content="Activity"
-                    Tag="activity">
+                    Tag="MediaExport.Pages.ActivityPage">
                     <NavigationViewItem.Icon>
                         <SymbolIcon Symbol="Clock" />
                     </NavigationViewItem.Icon>
