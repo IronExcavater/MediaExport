@@ -1,4 +1,9 @@
-using MediaExport.Pages;
+// Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
+// SPDX-License-Identifier: MPL-2.0
+
+using MediaExport.Activity;
+using MediaExport.Export;
+using MediaExport.Settings;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -6,14 +11,8 @@ using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Linq;
 
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
-
 namespace MediaExport;
 
-/// <summary>
-/// An empty window that can be used on its own or navigated to within a Frame.
-/// </summary>
 public sealed partial class MainWindow : Window
 {
     public MainWindow()
@@ -32,6 +31,7 @@ public sealed partial class MainWindow : Window
         AppWindow.TitleBar.ButtonHoverForegroundColor = Colors.White;
 
         navView.Loaded += NavView_Loaded;
+        navFrame.Navigate(typeof(ExportPage));
     }
     private void NavView_Loaded(object sender, RoutedEventArgs e)
     {
@@ -61,7 +61,12 @@ public sealed partial class MainWindow : Window
         }
         else if (args.SelectedItemContainer is NavigationViewItem item)
         {
-            Type? page = Type.GetType(item.Tag?.ToString() ?? string.Empty);
+            Type? page = item.Tag?.ToString() switch
+            {
+                "export" => typeof(ExportPage),
+                "activity" => typeof(ActivityPage),
+                _ => throw new ArgumentException("Unknown page tag")
+            };
             if (page is not null)
                 navFrame.Navigate(page);
         }

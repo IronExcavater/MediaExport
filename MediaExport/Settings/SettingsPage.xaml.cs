@@ -1,4 +1,6 @@
-using MediaExport.ViewModels;
+// Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
+// SPDX-License-Identifier: MPL-2.0
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -14,20 +16,13 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
 
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
-
-namespace MediaExport.Pages;
-
-/// <summary>
-/// An empty page that can be used on its own or navigated to within a Frame.
-/// </summary>
-public sealed partial class ExportPage : Page
+namespace MediaExport.Settings
 {
-    private ExportViewModel? _viewModel;
-
-    public ExportPage()
+    public sealed partial class SettingsPage : Page
     {
-        InitializeComponent();
+        public SettingsPage()
+        {
+            InitializeComponent();
+        }
     }
 }

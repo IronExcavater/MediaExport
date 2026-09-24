@@ -13,11 +13,7 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-  <ItemGroup>
-    <None Remove="Pages\ActivityPage.xaml" />
-    <None Remove="Pages\ExportPage.xaml" />
-    <None Remove="Pages\SettingsPage.xaml" />
-  </ItemGroup>
+
 
   <ItemGroup>
     <Content Include="Assets\SplashScreen.scale-200.png" />
@@ -43,6 +39,8 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
   </ItemGroup>
@@ -50,19 +48,23 @@
     <ProjectReference Include="..\MediaExport.Core\MediaExport.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Page Update="Pages\SettingsPage.xaml">
+    <Page Update="Settings\SettingsPage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>
   <ItemGroup>
-    <Page Update="Pages\ActivityPage.xaml">
+    <Page Update="Activity\ActivityPage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>
   <ItemGroup>
-    <Page Update="Pages\ExportPage.xaml">
+    <Page Update="Export\ExportPage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Activity\" />
+    <Folder Include="Settings\" />
   </ItemGroup>
 
   <!--
