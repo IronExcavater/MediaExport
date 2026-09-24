@@ -18,7 +18,6 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-
         <TitleBar
             x:Name="titleBar"
             Title="Media Export"
