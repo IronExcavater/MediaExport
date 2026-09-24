@@ -23,7 +23,7 @@ public partial class ExportViewModel : ObservableObject, IDisposable
     }
 
     public IReadOnlyList<IMediaSearchProvider> SearchProviders { get; }
-    public ObservableCollection<MediaSearchResult> SearchResults { get; } = new ObservableCollection<MediaSearchResult>();
+    public ObservableCollection<MediaSearchResult> SearchResults { get; } = [];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTextInput))]
