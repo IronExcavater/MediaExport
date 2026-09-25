@@ -5,24 +5,41 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:MediaExport.Media.Controls">
 
-    <Grid MinHeight="88" ColumnSpacing="12">
+    <Grid MinHeight="72" ColumnSpacing="10">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="144" />
+            <ColumnDefinition Width="112" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <Image
-            Width="144"
-            Height="81"
+            Width="112"
+            Height="63"
             HorizontalAlignment="Left"
             VerticalAlignment="Center"
             Source="{x:Bind ThumbnailSource, Mode=OneTime}"
             Stretch="UniformToFill" />
 
         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
-            <TextBlock Text="{x:Bind Media.Title, Mode=OneTime}" TextWrapping="Wrap" MaxLines="2" />
-            <TextBlock Text="{x:Bind Media.Creator, Mode=OneTime}" Opacity="0.72" TextTrimming="CharacterEllipsis" />
-            <TextBlock Text="{x:Bind DurationText, Mode=OneTime}" Opacity="0.72" />
+            <TextBlock Text="{x:Bind TitleText, Mode=OneTime}" TextWrapping="Wrap" MaxLines="2" />
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    VerticalAlignment="Center"
+                    Opacity="0.72"
+                    Text="{x:Bind CreatorText, Mode=OneTime}"
+                    TextTrimming="CharacterEllipsis" />
+                <Border
+                    Grid.Column="1"
+                    Padding="5,1"
+                    Background="#1AFFFFFF"
+                    CornerRadius="3"
+                    Visibility="{x:Bind DurationVisibility, Mode=OneTime}">
+                    <TextBlock FontSize="12" Text="{x:Bind DurationText, Mode=OneTime}" />
+                </Border>
+            </Grid>
         </StackPanel>
     </Grid>
 </local:MediaViewBase>

@@ -1,7 +1,6 @@
 // Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
-using MediaExport.Core.Media.Models;
 using System.Text.Json;
 using YtdlpClient = ManuHub.Ytdlp.NET.Ytdlp;
 
@@ -11,20 +10,25 @@ public sealed class YtdlpService
 {
     private readonly YtdlpClient _ytdlp = new("yt-dlp.exe");
 
-    public async Task<IReadOnlyList<MediaSearchResult>> SearchAsync(
+    public async Task<IReadOnlyList<YtdlpSearchResult>> SearchAsync(
         string searchTarget,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(searchTarget))
             return [];
 
-        string json = await _ytdlp.GetMetadataRawAsync(searchTarget, cancellationToken)
-            ?? throw new InvalidOperationException("yt-dlp returned no search metadata.");
+        cancellationToken.ThrowIfCancellationRequested();
+
+        string? json = await _ytdlp.GetMetadataRawAsync(searchTarget, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(json))
+            throw new InvalidOperationException("yt-dlp returned no search metadata.");
 
         return ReadSearchResults(json);
     }
 
-    internal static IReadOnlyList<MediaSearchResult> ReadSearchResults(string json)
+    internal static IReadOnlyList<YtdlpSearchResult> ReadSearchResults(string json)
     {
         using JsonDocument document = JsonDocument.Parse(json);
         JsonElement entries = document.RootElement.TryGetProperty("entries", out JsonElement value)
@@ -34,19 +38,18 @@ public sealed class YtdlpService
         if (entries.ValueKind != JsonValueKind.Array)
             return [];
 
-        var results = new List<MediaSearchResult>();
+        var results = new List<YtdlpSearchResult>();
         foreach (JsonElement entry in entries.EnumerateArray())
         {
             string? identity = GetString(entry, "id");
-            string? sourceUrl = GetSourceUrl(entry, identity);
             string? title = GetString(entry, "title");
 
-            if (string.IsNullOrWhiteSpace(identity) || string.IsNullOrWhiteSpace(sourceUrl) || string.IsNullOrWhiteSpace(title))
+            if (string.IsNullOrWhiteSpace(identity) || string.IsNullOrWhiteSpace(title))
                 continue;
 
-            results.Add(new MediaSearchResult(
+            results.Add(new YtdlpSearchResult(
                 identity,
-                sourceUrl,
+                GetSourceUrl(entry),
                 GetThumbnailUri(entry),
                 title,
                 GetString(entry, "uploader") ?? GetString(entry, "channel"),
@@ -61,17 +64,11 @@ public sealed class YtdlpService
             ? value.GetString()
             : null;
 
-    private static string? GetSourceUrl(JsonElement entry, string? identity)
+    private static string? GetSourceUrl(JsonElement entry)
     {
         string? directUrl = GetString(entry, "webpage_url") ?? GetString(entry, "original_url");
         if (!string.IsNullOrWhiteSpace(directUrl))
             return directUrl;
-
-        if (string.Equals(GetString(entry, "ie_key"), "Youtube", StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrWhiteSpace(identity))
-        {
-            return $"https://www.youtube.com/watch?v={identity}";
-        }
 
         return GetString(entry, "url");
     }

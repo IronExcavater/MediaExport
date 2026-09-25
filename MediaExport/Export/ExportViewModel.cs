@@ -16,6 +16,8 @@ namespace MediaExport.Export;
 
 public partial class ExportViewModel : ObservableObject, IDisposable
 {
+    private static readonly TimeSpan SearchDebounceDelay = TimeSpan.FromMilliseconds(250);
+
     private CancellationTokenSource? _searchCancellation;
 
     public ExportViewModel(IEnumerable<IMediaSearchProvider> searchProviders)
@@ -26,8 +28,7 @@ public partial class ExportViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
-        _searchCancellation?.Cancel();
-        _searchCancellation?.Dispose();
+        CancelSearch();
     }
 
     public IReadOnlyList<IMediaSearchProvider> Providers { get; }
@@ -53,21 +54,40 @@ public partial class ExportViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(HasSelectedResult))]
     public partial MediaSearchResult? SelectedResult { get; set; }
 
+    [ObservableProperty]
+    public partial bool IsPreviewOpen { get; set; }
+
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
     public bool HasSelectedResult => SelectedResult is not null;
 
-    partial void OnSearchTextChanged(string value) => IsSuggestionListOpen = false;
+    public void ShowSuggestions() =>
+        IsSuggestionListOpen = !IsSearching && Suggestions.Count > 0;
 
-    [RelayCommand]
-    private async Task SearchAsync()
+    partial void OnSearchTextChanged(string value)
     {
-        if (SelectedProvider is null || string.IsNullOrWhiteSpace(SearchText))
+        IsSuggestionListOpen = false;
+
+        if (!string.IsNullOrWhiteSpace(value))
             return;
 
-        _searchCancellation?.Cancel();
-        _searchCancellation?.Dispose();
-        var searchCancellation = new CancellationTokenSource();
-        _searchCancellation = searchCancellation;
+        CancelSearch();
+        Suggestions.Clear();
+        ErrorMessage = null;
+        SelectedResult = null;
+        IsSearching = false;
+    }
+
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task SearchAsync()
+    {
+        if (SelectedProvider is null)
+            return;
+
+        string query = SearchText.Trim();
+        if (query.Length == 0)
+            return;
+
+        CancellationTokenSource searchCancellation = StartSearch();
         CancellationToken token = searchCancellation.Token;
 
         IsSearching = true;
@@ -77,7 +97,8 @@ public partial class ExportViewModel : ObservableObject, IDisposable
 
         try
         {
-            IReadOnlyList<MediaSearchResult> results = await SelectedProvider.SearchAsync(SearchText, token);
+            await Task.Delay(SearchDebounceDelay, token);
+            IReadOnlyList<MediaSearchResult> results = await SelectedProvider.SearchAsync(query, token);
 
             if (token.IsCancellationRequested)
                 return;
@@ -104,7 +125,38 @@ public partial class ExportViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void SelectResult(MediaSearchResult result)
     {
+        CancelSearch();
         SelectedResult = result;
         IsSuggestionListOpen = false;
+    }
+
+    [RelayCommand]
+    private void ShowPreview()
+    {
+        if (SelectedResult?.EmbedUri is not null)
+            IsPreviewOpen = true;
+    }
+
+    partial void OnSelectedResultChanged(MediaSearchResult? value) => IsPreviewOpen = false;
+
+    private CancellationTokenSource StartSearch()
+    {
+        CancelSearch();
+
+        var searchCancellation = new CancellationTokenSource();
+        _searchCancellation = searchCancellation;
+        return searchCancellation;
+    }
+
+    private void CancelSearch()
+    {
+        CancellationTokenSource? searchCancellation = _searchCancellation;
+        _searchCancellation = null;
+
+        if (searchCancellation is null)
+            return;
+
+        searchCancellation.Cancel();
+        searchCancellation.Dispose();
     }
 }

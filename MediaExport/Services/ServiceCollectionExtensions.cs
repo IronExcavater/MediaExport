@@ -14,6 +14,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton<YtdlpService>();
         services.AddSingleton<IMediaSearchProvider, YouTubeSearchProvider>();
+        services.AddSingleton<IMediaSearchProvider, SoundCloudSearchProvider>();
         services.AddSingleton<ExportViewModel>();
 
         return services;
