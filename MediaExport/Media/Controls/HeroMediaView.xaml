@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<local:MediaViewBase
+    x:Class="MediaExport.Media.Controls.HeroMediaView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:MediaExport.Media.Controls">
+
+    <StackPanel MaxWidth="720" Spacing="8">
+        <Image
+            MaxHeight="405"
+            HorizontalAlignment="Left"
+            Source="{x:Bind ThumbnailSource, Mode=OneTime}"
+            Stretch="Uniform" />
+        <TextBlock Text="{x:Bind Media.Title, Mode=OneTime}" TextWrapping="Wrap" />
+        <TextBlock Text="{x:Bind Media.Creator, Mode=OneTime}" Opacity="0.72" />
+        <TextBlock Text="{x:Bind DurationText, Mode=OneTime}" Opacity="0.72" />
+        <TextBlock Text="{x:Bind Media.SourceUrl, Mode=OneTime}" TextWrapping="Wrap" Opacity="0.72" />
+    </StackPanel>
+</local:MediaViewBase>

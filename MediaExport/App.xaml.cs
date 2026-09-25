@@ -1,8 +1,6 @@
 ﻿// Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
-using MediaExport.Core.Tools;
-using MediaExport.Core.Media;
 using Microsoft.UI.Xaml;
 using System;
 using Microsoft.Extensions.DependencyInjection;

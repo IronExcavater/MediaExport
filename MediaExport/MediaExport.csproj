@@ -48,6 +48,9 @@
     <ProjectReference Include="..\MediaExport.Core\MediaExport.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Page Update="Media\Controls\HeroMediaView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Update="Settings\SettingsPage.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -65,6 +68,11 @@
   <ItemGroup>
     <Folder Include="Activity\" />
     <Folder Include="Settings\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Media\Controls\CompactMediaView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
   </ItemGroup>
 
   <!--
