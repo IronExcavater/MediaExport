@@ -12,7 +12,7 @@ public interface IMediaSearchProvider
 {
     string Id { get; }
     string DisplayName { get; }
-    string IconGlyph { get; }
+    MediaProviderIcon Icon { get; }
 
     Task<IReadOnlyList<MediaSearchResult>> SearchAsync(
         string query,

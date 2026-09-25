@@ -7,33 +7,62 @@
     xmlns:media="using:MediaExport.Media.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:viewModels="using:MediaExport.Export"
-    x:Name="Root"
+    Background="Transparent"
     d:DataContext="{d:DesignInstance Type=viewModels:ExportViewModel, IsDesignTimeCreatable=False}"
     mc:Ignorable="d">
 
-    <ScrollViewer>
-        <StackPanel Padding="24" Spacing="12">
+    <Grid Padding="32,24,32,32" RowSpacing="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="210" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="24" />
+            </Grid.ColumnDefinitions>
             <ComboBox
-                Header="Provider"
+                MinWidth="210"
+                MinHeight="40"
+                PlaceholderText="Provider"
                 ItemsSource="{Binding Providers}"
                 SelectedItem="{Binding SelectedProvider, Mode=TwoWay}">
+                <ComboBox.ItemContainerStyle>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                    </Style>
+                </ComboBox.ItemContainerStyle>
                 <ComboBox.ItemTemplate>
                     <DataTemplate>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="{Binding IconGlyph}" />
-                            <TextBlock Text="{Binding DisplayName}" />
-                        </StackPanel>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="48" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <media:ProviderIconView Icon="{Binding Icon}" />
+                            <TextBlock
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Text="{Binding DisplayName}" />
+                        </Grid>
                     </DataTemplate>
                 </ComboBox.ItemTemplate>
             </ComboBox>
 
             <AutoSuggestBox
+                x:Name="searchBox"
+                Grid.Column="1"
+                MinWidth="520"
                 Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                 ItemsSource="{Binding Suggestions}"
                 IsSuggestionListOpen="{Binding IsSuggestionListOpen, Mode=TwoWay}"
                 TextMemberPath="Title"
-                PlaceholderText="Search YouTube"
+                PlaceholderText="Search media"
                 QueryIcon="Find"
+                GotFocus="SearchBox_GotFocus"
+                TextChanged="SearchBox_TextChanged"
                 QuerySubmitted="SearchBox_QuerySubmitted"
                 SuggestionChosen="SearchBox_SuggestionChosen">
                 <AutoSuggestBox.ItemTemplate>
@@ -43,13 +72,62 @@
                 </AutoSuggestBox.ItemTemplate>
             </AutoSuggestBox>
 
-            <ProgressRing IsActive="{Binding IsSearching}" Visibility="{Binding IsSearching, Converter={StaticResource BooleanToVisibilityConverter}}" />
-            <TextBlock Text="{Binding ErrorMessage}" Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}" TextWrapping="Wrap" />
+            <ProgressRing
+                Grid.Column="2"
+                Width="20"
+                Height="20"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                IsActive="{Binding IsSearching}"
+                Visibility="{Binding IsSearching, Converter={StaticResource BooleanToVisibilityConverter}}" />
+        </Grid>
 
-            <StackPanel Visibility="{Binding HasSelectedResult, Converter={StaticResource BooleanToVisibilityConverter}}" Spacing="2">
-                <TextBlock Text="Selected" />
-                <media:HeroMediaView Media="{Binding SelectedResult}" />
-            </StackPanel>
-        </StackPanel>
-    </ScrollViewer>
+        <ScrollViewer
+            Grid.Row="1"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <Grid MinHeight="300">
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Opacity="0.68"
+                    Text="Search for media to begin."
+                    Visibility="{Binding HasSelectedResult, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=True}">
+                </TextBlock>
+
+                <Grid
+                    ColumnSpacing="28"
+                    Visibility="{Binding HasSelectedResult, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition MinWidth="320" Width="2*" />
+                        <ColumnDefinition MinWidth="420" Width="3*" />
+                    </Grid.ColumnDefinitions>
+
+                    <media:HeroMediaView
+                        Media="{Binding SelectedResult}"
+                        PreviewRequested="HeroMediaView_PreviewRequested" />
+
+                    <Grid Grid.Column="1">
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Opacity="0.68"
+                            Text="Select the thumbnail to preview."
+                            Visibility="{Binding IsPreviewOpen, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=True}" />
+                        <WebView2
+                            Source="{Binding SelectedResult.EmbedUri}"
+                            Visibility="{Binding IsPreviewOpen, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </Grid>
+                </Grid>
+            </Grid>
+        </ScrollViewer>
+
+        <TeachingTip
+            x:Name="errorTip"
+            Target="{x:Bind searchBox}"
+            Title="Search"
+            Subtitle="{Binding ErrorMessage}"
+            IsOpen="{Binding HasError, Mode=OneWay}"
+            CloseButtonClick="ErrorTip_CloseButtonClick" />
+    </Grid>
 </Page>

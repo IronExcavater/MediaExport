@@ -6,14 +6,17 @@ using MediaExport.Core.Media.Ytdlp;
 
 namespace MediaExport.Core.Media.Providers;
 
-public sealed class YouTubeSearchProvider(YtdlpService ytdlp) : IMediaSearchProvider
+public sealed class YouTubeSearchProvider(YtdlpService ytdlp) : YtdlpSearchProvider(ytdlp)
 {
-    public string Id => "youtube";
-    public string DisplayName => "YouTube";
-    public string IconGlyph => "\uE768";
+    public override string Id => "youtube";
+    public override string DisplayName => "YouTube";
+    public override MediaProviderIcon Icon => MediaProviderIcon.YouTube;
 
-    public Task<IReadOnlyList<MediaSearchResult>> SearchAsync(
-        string query,
-        CancellationToken cancellationToken = default) =>
-        ytdlp.SearchAsync($"ytsearch10:{query.Trim()}", cancellationToken);
+    protected override string SearchPrefix => "ytsearch";
+
+    protected override string GetSourceUrl(YtdlpSearchResult result) =>
+        result.SourceUrl ?? $"https://www.youtube.com/watch?v={Uri.EscapeDataString(result.Identity)}";
+
+    protected override Uri GetEmbedUri(MediaSearchResult media) =>
+        new($"https://www.youtube.com/embed/{Uri.EscapeDataString(media.Identity)}?autoplay=1&rel=0");
 }
