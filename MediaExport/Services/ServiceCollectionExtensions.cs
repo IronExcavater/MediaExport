@@ -1,8 +1,8 @@
 ﻿// Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
-using MediaExport.Core.Media;
-using MediaExport.Core.Tools;
+using MediaExport.Core.Media.Providers;
+using MediaExport.Core.Media.Ytdlp;
 using MediaExport.Export;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -12,10 +12,8 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddMediaExport(this IServiceCollection services)
     {
-        services.AddSingleton<MediaService>();
-        services.AddSingleton<ToolchainService>();
-
-        // Retain viewModel states between page visits
+        services.AddSingleton<YtdlpService>();
+        services.AddSingleton<IMediaSearchProvider, YouTubeSearchProvider>();
         services.AddSingleton<ExportViewModel>();
 
         return services;
