@@ -12,18 +12,35 @@
     d:DataContext="{d:DesignInstance Type=local:ExportViewModel, IsDesignTimeCreatable=False}"
     mc:Ignorable="d">
 
+    <Page.Resources>
+        <Style x:Key="OptionExpanderStyle" TargetType="Expander">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style x:Key="OptionIconStyle" TargetType="FontIcon">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="OptionSummaryStyle" BasedOn="{StaticResource CaptionTextBlockStyle}" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+    </Page.Resources>
+
     <Grid>
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup>
                 <VisualState x:Name="Wide">
                     <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="1100" />
+                        <AdaptiveTrigger MinWindowWidth="1000" />
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
                         <Setter Target="workspace.ColumnSpacing" Value="24" />
                         <Setter Target="exportPanel.(Grid.Row)" Value="0" />
                         <Setter Target="exportPanel.(Grid.Column)" Value="1" />
+                        <Setter Target="exportPanel.(Grid.RowSpan)" Value="2" />
                         <Setter Target="exportPanel.Width" Value="320" />
+                        <Setter Target="options.(Grid.Row)" Value="1" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="Narrow" />
@@ -70,13 +87,12 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <media:HeroMediaView
-                    AudioSource="{Binding AudioPreviewUri}"
-                    IsAudioLoading="{Binding IsPreviewLoading}"
-                    Media="{Binding SelectedResult}" />
+                <media:HeroMediaView IsPlayerHidden="{Binding IsPlayerObscured}" Media="{Binding SelectedResult}" />
 
+                <!-- Essentials: what to save, and where. -->
                 <Border
                     x:Name="exportPanel"
                     Grid.Row="1"
@@ -88,7 +104,10 @@
                     CornerRadius="8">
                     <StackPanel Spacing="16">
                         <SelectorBar Margin="-8,-8,-8,0">
-                            <SelectorBarItem IsSelected="{Binding IsVideoExport, Mode=TwoWay}" Text="Video">
+                            <SelectorBarItem
+                                IsEnabled="{Binding CanExportVideo}"
+                                IsSelected="{Binding IsVideoExport, Mode=TwoWay}"
+                                Text="Video">
                                 <SelectorBarItem.Icon>
                                     <FontIcon Glyph="&#xE714;" />
                                 </SelectorBarItem.Icon>
@@ -109,19 +128,43 @@
                                 SelectedItem="{Binding SelectedVideoFormat, Mode=TwoWay}" />
                             <ComboBox
                                 HorizontalAlignment="Stretch"
-                                DisplayMemberPath="Label"
+                                DropDownOpened="Quality_DropDownOpened"
                                 Header="Quality"
                                 ItemsSource="{Binding Qualities}"
-                                SelectedItem="{Binding SelectedQuality, Mode=TwoWay}" />
+                                SelectedItem="{Binding SelectedQuality, Mode=TwoWay}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="local:QualityChoice">
+                                        <Grid ColumnSpacing="8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{x:Bind Label}" />
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                Foreground="{ThemeResource TextFillColorDisabledBrush}"
+                                                Text="Not available"
+                                                Visibility="{x:Bind IsAvailable, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=True}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                         </StackPanel>
 
-                        <ComboBox
-                            HorizontalAlignment="Stretch"
-                            DisplayMemberPath="Label"
-                            Header="Format"
-                            ItemsSource="{Binding AudioFormats}"
-                            SelectedItem="{Binding SelectedAudioFormat, Mode=TwoWay}"
-                            Visibility="{Binding IsAudioExport, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <StackPanel Spacing="12" Visibility="{Binding IsAudioExport, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <ComboBox
+                                HorizontalAlignment="Stretch"
+                                DisplayMemberPath="Label"
+                                Header="Format"
+                                ItemsSource="{Binding AudioFormats}"
+                                SelectedItem="{Binding SelectedAudioFormat, Mode=TwoWay}" />
+                            <ComboBox
+                                HorizontalAlignment="Stretch"
+                                DisplayMemberPath="Label"
+                                Header="Quality"
+                                ItemsSource="{Binding AudioBitrates}"
+                                SelectedItem="{Binding SelectedAudioBitrate, Mode=TwoWay}" />
+                        </StackPanel>
 
                         <StackPanel Spacing="8">
                             <TextBlock Text="Save to" />
@@ -151,56 +194,243 @@
                             </Button>
                         </StackPanel>
 
-                        <Button
-                            HorizontalAlignment="Stretch"
-                            Command="{Binding ExportCommand}"
-                            Style="{StaticResource AccentButtonStyle}">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon FontSize="16" Glyph="&#xE896;" />
-                                <TextBlock Text="Export" />
-                            </StackPanel>
-                        </Button>
+                        <!--
+                            One button for the whole export: start it, follow it (clicking cancels), then open the result.
+                            The hint beside it says why the button is as it is.
+                        -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
 
-                        <!-- The latest export of the selected media; one container so closed bars add no spacing. -->
-                        <Grid Visibility="{Binding HasSelectedJob, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <StackPanel
-                                Spacing="8"
-                                Visibility="{Binding SelectedJob.IsRunning, Converter={StaticResource BooleanToVisibilityConverter}, FallbackValue=Collapsed}">
-                                <Grid>
-                                    <TextBlock
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        Text="{Binding SelectedJob.Status}" />
-                                    <HyperlinkButton
-                                        Padding="4,0"
-                                        HorizontalAlignment="Right"
-                                        Command="{Binding SelectedJob.CancelCommand}"
-                                        Content="Cancel"
-                                        FontSize="12" />
-                                </Grid>
-                                <ProgressBar IsIndeterminate="{Binding SelectedJob.IsIndeterminate}" Value="{Binding SelectedJob.Progress}" />
-                            </StackPanel>
+                            <Grid>
+                                <Button
+                                    HorizontalAlignment="Stretch"
+                                    AutomationProperties.HelpText="{Binding Hint}"
+                                    AutomationProperties.Name="{Binding ExportLabel}"
+                                    Command="{Binding ExportCommand}"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Visibility="{Binding CanStartExport, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Button.KeyboardAccelerators>
+                                        <KeyboardAccelerator Key="E" Modifiers="Control" />
+                                    </Button.KeyboardAccelerators>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon FontSize="16" Glyph="{Binding ExportGlyph}" />
+                                        <TextBlock Text="{Binding ExportLabel}" />
+                                    </StackPanel>
+                                </Button>
 
-                            <InfoBar
-                                Title="Exported"
-                                IsClosable="False"
-                                IsOpen="{Binding SelectedJob.IsCompleted, FallbackValue=False}"
-                                Message="{Binding SelectedJob.Status}"
-                                Severity="Success">
-                                <InfoBar.ActionButton>
-                                    <Button Command="{Binding SelectedJob.ShowInFolderCommand}" Content="Show in folder" />
-                                </InfoBar.ActionButton>
-                            </InfoBar>
+                                <Button
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch"
+                                    AutomationProperties.Name="Cancel export"
+                                    Command="{Binding CancelExportCommand}"
+                                    ToolTipService.ToolTip="Cancel export"
+                                    Visibility="{Binding IsExporting, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding CurrentJob.Status}" TextTrimming="CharacterEllipsis" />
+                                        <FontIcon
+                                            Grid.Column="1"
+                                            FontSize="12"
+                                            Glyph="&#xE711;" />
+                                    </Grid>
+                                </Button>
 
-                            <InfoBar
-                                Title="Export stopped"
-                                IsClosable="False"
-                                IsOpen="{Binding SelectedJob.IsFailed, FallbackValue=False}"
-                                Message="{Binding SelectedJob.Status}"
-                                Severity="Error" />
+                                <SplitButton
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    AutomationProperties.HelpText="{Binding Hint}"
+                                    Command="{Binding CurrentJob.ShowInFolderCommand}"
+                                    Visibility="{Binding IsExportDone, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon FontSize="16" Glyph="&#xE838;" />
+                                        <TextBlock Text="Show in folder" />
+                                    </StackPanel>
+                                    <SplitButton.Flyout>
+                                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                            <MenuFlyoutItem Command="{Binding CurrentJob.OpenCommand}" Text="Open">
+                                                <MenuFlyoutItem.Icon>
+                                                    <FontIcon Glyph="&#xE768;" />
+                                                </MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                            <MenuFlyoutItem Command="{Binding ExportAgainCommand}" Text="Export again">
+                                                <MenuFlyoutItem.Icon>
+                                                    <FontIcon Glyph="&#xE896;" />
+                                                </MenuFlyoutItem.Icon>
+                                            </MenuFlyoutItem>
+                                        </MenuFlyout>
+                                    </SplitButton.Flyout>
+                                </SplitButton>
+
+                                <!-- Progress along the button's bottom edge; a failed export keeps it, in the error colour. -->
+                                <ProgressBar
+                                    Margin="4,0,4,1"
+                                    VerticalAlignment="Bottom"
+                                    IsHitTestVisible="False"
+                                    IsIndeterminate="{Binding CurrentJob.IsIndeterminate, FallbackValue=False}"
+                                    ShowError="{Binding IsExportFailed}"
+                                    Visibility="{Binding CurrentJob.ShowsProgress, Converter={StaticResource BooleanToVisibilityConverter}, FallbackValue=Collapsed}"
+                                    Value="{Binding CurrentJob.DisplayProgress, FallbackValue=0}" />
+                            </Grid>
+
+                            <!-- A margin rather than column spacing, so the button is full width when there's no hint. -->
+                            <Grid
+                                Grid.Column="1"
+                                Width="20"
+                                Margin="8,0,0,0"
+                                Background="Transparent"
+                                ToolTipService.ToolTip="{Binding Hint}"
+                                Visibility="{Binding HasHint, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <ProgressRing
+                                    Width="16"
+                                    Height="16"
+                                    IsActive="{Binding IsHintChecking}"
+                                    Visibility="{Binding IsHintChecking, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <FontIcon
+                                    FontSize="16"
+                                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                    Glyph="&#xE7BA;"
+                                    Visibility="{Binding IsHintWarning, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <FontIcon
+                                    FontSize="16"
+                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                    Glyph="&#xE783;"
+                                    Visibility="{Binding IsHintError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <FontIcon
+                                    FontSize="16"
+                                    Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                    Glyph="&#xE73E;"
+                                    Visibility="{Binding IsHintSuccess, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            </Grid>
                         </Grid>
                     </StackPanel>
                 </Border>
+
+                <!-- Details: the finer points, below the media where there's room for them. -->
+                <StackPanel
+                    x:Name="options"
+                    Grid.Row="2"
+                    Spacing="4">
+                    <TextBlock
+                        Margin="0,0,0,4"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="More options" />
+
+                    <Expander Style="{StaticResource OptionExpanderStyle}">
+                        <Expander.Header>
+                            <Grid Padding="0,12" ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE8C6;" Style="{StaticResource OptionIconStyle}" />
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="Trim" />
+                                    <TextBlock Style="{StaticResource OptionSummaryStyle}" Text="{Binding TrimSummary}" />
+                                </StackPanel>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Margin="32,0,0,0" Spacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBox
+                                    Width="120"
+                                    Header="Start"
+                                    PlaceholderText="0:00"
+                                    Text="{Binding TrimStart, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBox
+                                    Width="120"
+                                    Header="End"
+                                    PlaceholderText="{Binding TrimEndPlaceholder}"
+                                    Text="{Binding TrimEnd, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="Export only part of it. Leave a time empty to keep the start or the end." />
+                        </StackPanel>
+                    </Expander>
+
+                    <Expander Style="{StaticResource OptionExpanderStyle}" Visibility="{Binding IsVideoExport, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Expander.Header>
+                            <Grid Padding="0,12" ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xED1E;" Style="{StaticResource OptionIconStyle}" />
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="Subtitles" />
+                                    <TextBlock Style="{StaticResource OptionSummaryStyle}" Text="{Binding SubtitlesSummary}" />
+                                </StackPanel>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Margin="32,0,0,0" Spacing="8">
+                            <ToggleSwitch Header="Include subtitles" IsOn="{Binding DownloadSubtitles, Mode=TwoWay}" />
+                            <TextBox
+                                Width="252"
+                                HorizontalAlignment="Left"
+                                Header="Languages"
+                                IsEnabled="{Binding DownloadSubtitles}"
+                                PlaceholderText="en, fr"
+                                Text="{Binding SubtitleLanguages, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            <CheckBox
+                                Content="Use automatic captions when there are none"
+                                IsChecked="{Binding IncludeAutomaticSubtitles, Mode=TwoWay}"
+                                IsEnabled="{Binding DownloadSubtitles}" />
+                        </StackPanel>
+                    </Expander>
+
+                    <Expander Style="{StaticResource OptionExpanderStyle}">
+                        <Expander.Header>
+                            <Grid Padding="0,12" ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE8EC;" Style="{StaticResource OptionIconStyle}" />
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="Metadata" />
+                                    <TextBlock Style="{StaticResource OptionSummaryStyle}" Text="{Binding MetadataSummary}" />
+                                </StackPanel>
+                            </Grid>
+                        </Expander.Header>
+                        <StackPanel Margin="32,0,0,0">
+                            <CheckBox Content="Title, creator and date" IsChecked="{Binding EmbedMetadata, Mode=TwoWay}" />
+                            <CheckBox Content="Cover art" IsChecked="{Binding EmbedThumbnail, Mode=TwoWay}" />
+                            <CheckBox
+                                Content="Chapters"
+                                IsChecked="{Binding EmbedChapters, Mode=TwoWay}"
+                                Visibility="{Binding IsVideoExport, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
+                    </Expander>
+
+                    <Expander Style="{StaticResource OptionExpanderStyle}">
+                        <Expander.Header>
+                            <Grid Padding="0,12" ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE8AC;" Style="{StaticResource OptionIconStyle}" />
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="File name" />
+                                    <TextBlock Style="{StaticResource OptionSummaryStyle}" Text="{Binding FileNamePreview}" />
+                                </StackPanel>
+                            </Grid>
+                        </Expander.Header>
+                        <ComboBox
+                            Width="252"
+                            Margin="32,0,0,0"
+                            DisplayMemberPath="Label"
+                            ItemsSource="{Binding FileNames}"
+                            SelectedItem="{Binding SelectedFileName, Mode=TwoWay}" />
+                    </Expander>
+                </StackPanel>
             </Grid>
         </ScrollViewer>
     </Grid>

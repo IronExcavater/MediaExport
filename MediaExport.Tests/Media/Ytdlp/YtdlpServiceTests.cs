@@ -63,6 +63,34 @@ public sealed class YtdlpServiceTests
         }));
     }
 
+    [TestCase("ERROR: [soundcloud] 257461521: This video is DRM protected", "It's protected by DRM, so it can't be exported.")]
+    [TestCase("ERROR: [youtube] xxxxxxxxxxx: This video is unavailable", "This video is unavailable")]
+    [TestCase("ERROR: Unable to download webpage: timed out", "Unable to download webpage: timed out")]
+    public void DescribeError_strips_ytdlp_prefixes(string message, string expected) =>
+        Assert.That(YtdlpService.DescribeError(message), Is.EqualTo(expected));
+
+    [Test]
+    public void Export_options_become_trim_subtitle_and_bitrate_arguments()
+    {
+        var video = YtdlpService.GetExportArguments(new ExportOptions(MediaKind.Video, "mkv", null, "out")
+        {
+            TrimStart = TimeSpan.FromSeconds(30),
+            SubtitleLanguages = "en,fr",
+            EmbedChapters = false
+        });
+        var audio = YtdlpService.GetExportArguments(new ExportOptions(MediaKind.Audio, "mp3", null, "out") { AudioBitrate = 192 });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(video, Is.SupersetOf(new (string, string?)[]
+            {
+                ("--download-sections", "*30-inf"), ("--sub-langs", "en,fr"), ("--embed-subs", null)
+            }));
+            Assert.That(video, Does.Not.Contain(("--embed-chapters", (string?)null)));
+            Assert.That(audio, Does.Contain(("--audio-quality", (string?)"192K")));
+        });
+    }
+
     [Test]
     public void SearchAsync_preserves_a_cancelled_search()
     {

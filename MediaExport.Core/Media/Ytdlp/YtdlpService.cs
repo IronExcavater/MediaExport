@@ -4,16 +4,18 @@
 using ManuHub.Ytdlp.NET;
 using MediaExport.Core.Exporting;
 using MediaExport.Core.Media.Models;
+using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using YtdlpClient = ManuHub.Ytdlp.NET.Ytdlp;
 
 namespace MediaExport.Core.Media.Ytdlp;
 
 public sealed class YtdlpService : IMediaDownloader
 {
+    private const string Executable = "yt-dlp.exe";
     private const string OutputMarker = "__MEDIA_EXPORT_FILE__:";
-
-    private readonly YtdlpClient _ytdlp = new("yt-dlp.exe");
+    private const string DrmProblem = "It's protected by DRM, so it can't be exported.";
 
     public async Task<IReadOnlyList<YtdlpSearchResult>> SearchAsync(
         string searchTarget,
@@ -24,27 +26,32 @@ public sealed class YtdlpService : IMediaDownloader
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        string? json = await _ytdlp.GetMetadataRawAsync(searchTarget, cancellationToken);
+        var errors = new ErrorLog();
+        string? json = await new YtdlpClient(Executable, errors).GetMetadataRawAsync(searchTarget, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(json))
-            throw new InvalidOperationException("yt-dlp returned no search metadata.");
+            throw new InvalidOperationException(errors.Last ?? "The search returned nothing.");
 
         return ReadSearchResults(json);
     }
 
-    public async Task<Uri?> GetAudioStreamAsync(string sourceUrl, CancellationToken cancellationToken = default)
+    public async Task<MediaInspection> InspectAsync(string sourceUrl, CancellationToken cancellationToken = default)
     {
-        Metadata? metadata = await _ytdlp.GetMetadataAsync(sourceUrl, cancellationToken);
+        var errors = new ErrorLog();
+        Metadata? metadata = await new YtdlpClient(Executable, errors).GetMetadataAsync(sourceUrl, cancellationToken);
+        if (metadata is null)
+            return MediaInspection.Unavailable(errors.Last ?? "This media couldn't be read.");
 
-        // Progressive HTTP streams play directly in MediaPlayer; HLS variants are only a fallback.
-        FormatMetadata? stream = (metadata?.Formats ?? [])
-            .Where(format => format.Url is not null && format.Acodec is not null and not "none")
-            .OrderByDescending(format => format.Protocol is "http" or "https")
-            .ThenByDescending(format => format.Abr ?? 0)
-            .FirstOrDefault();
+        FormatMetadata[] formats = (metadata.Formats ?? []).Where(format => format.HasDrm != true).ToArray();
+        if (formats.Length == 0)
+            return MediaInspection.Unavailable(DrmProblem);
 
-        return Uri.TryCreate(stream?.Url, UriKind.Absolute, out Uri? uri) ? uri : null;
+        return new MediaInspection(
+            true,
+            null,
+            formats.Any(format => format.Vcodec is not null and not "none"),
+            formats.Max(format => format.Height));
     }
 
     public async Task<string> DownloadAsync(
@@ -55,16 +62,16 @@ public sealed class YtdlpService : IMediaDownloader
     {
         Directory.CreateDirectory(options.OutputFolder);
 
-        YtdlpClient download = _ytdlp
+        var errors = new ErrorLog();
+        YtdlpClient download = new YtdlpClient(Executable, errors)
             .WithOutputFolder(options.OutputFolder)
-            .WithOutputTemplate("%(title)s.%(ext)s")
+            .WithOutputTemplate($"{options.FileNameTemplate}.%(ext)s")
             .WithWindowsFilenames();
 
         foreach ((string name, string? value) in GetExportArguments(options))
             download = value is null ? download.AddFlag(name) : download.AddOption(name, value);
 
         string? outputPath = null;
-        string? lastError = null;
 
         void OnProgress(object? sender, DownloadProgressEventArgs args) =>
             progress?.Report(new ExportProgress(
@@ -83,12 +90,9 @@ public sealed class YtdlpService : IMediaDownloader
                 outputPath = line[(marker + OutputMarker.Length)..].Trim();
         }
 
-        void OnError(object? sender, string message) => lastError = message;
-
         download.ProgressDownload += OnProgress;
         download.PostProcessingStarted += OnPostProcessing;
         download.OutputMessage += OnOutput;
-        download.ErrorMessage += OnError;
         try
         {
             await download.DownloadAsync(sourceUrl, cancellationToken);
@@ -98,13 +102,12 @@ public sealed class YtdlpService : IMediaDownloader
             download.ProgressDownload -= OnProgress;
             download.PostProcessingStarted -= OnPostProcessing;
             download.OutputMessage -= OnOutput;
-            download.ErrorMessage -= OnError;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(outputPath) || !File.Exists(outputPath))
-            throw new InvalidOperationException(lastError ?? "The export finished without producing a file.");
+            throw new InvalidOperationException(errors.Last ?? "The export finished without producing a file.");
 
         return Path.GetFullPath(outputPath);
     }
@@ -116,20 +119,42 @@ public sealed class YtdlpService : IMediaDownloader
             ("--no-playlist", null),
             ("--encoding", "utf-8"), // Otherwise non-ANSI characters are dropped from the printed file path.
             ("--progress", null), // --print implies --quiet, which would hide progress.
-            ("--print", $"after_move:{OutputMarker}%(filepath)s"),
-            ("--embed-metadata", null)
+            ("--print", $"after_move:{OutputMarker}%(filepath)s")
         };
+
+        if (options.EmbedMetadata)
+            arguments.Add(("--embed-metadata", null));
+
+        if (options.TrimStart is not null || options.TrimEnd is not null)
+        {
+            string start = (options.TrimStart ?? TimeSpan.Zero).TotalSeconds.ToString(CultureInfo.InvariantCulture);
+            string end = options.TrimEnd?.TotalSeconds.ToString(CultureInfo.InvariantCulture) ?? "inf";
+            arguments.Add(("--download-sections", $"*{start}-{end}"));
+            arguments.Add(("--force-keyframes-at-cuts", null)); // Exact cuts rather than the nearest keyframe.
+        }
 
         if (options.Kind == MediaKind.Audio)
         {
             arguments.Add(("-f", "ba/b"));
             arguments.Add(("-x", null));
             arguments.Add(("--audio-format", options.Format));
-            arguments.Add(("--audio-quality", "0"));
-            if (options.Format is "mp3" or "m4a" or "opus")
+            arguments.Add(("--audio-quality", options.AudioBitrate is int bitrate ? $"{bitrate}K" : "0"));
+            if (options.EmbedThumbnail && options.Format is "mp3" or "m4a" or "opus")
                 arguments.Add(("--embed-thumbnail", null));
             return arguments;
         }
+
+        if (options.SubtitleLanguages is { Length: > 0 } languages)
+        {
+            arguments.Add(("--write-subs", null));
+            if (options.IncludeAutomaticSubtitles)
+                arguments.Add(("--write-auto-subs", null));
+            arguments.Add(("--sub-langs", languages));
+            arguments.Add(("--embed-subs", null));
+        }
+
+        if (options.EmbedThumbnail && options.Format is "mp4" or "mkv")
+            arguments.Add(("--embed-thumbnail", null));
 
         // Sorting (rather than filtering) falls back gracefully when the preferred height doesn't exist.
         var sort = new List<string>();
@@ -145,8 +170,28 @@ public sealed class YtdlpService : IMediaDownloader
             arguments.Add(("-S", string.Join(',', sort)));
         arguments.Add(("--merge-output-format", options.Format));
         arguments.Add(("--remux-video", options.Format));
-        arguments.Add(("--embed-chapters", null));
+        if (options.EmbedChapters)
+            arguments.Add(("--embed-chapters", null));
         return arguments;
+    }
+
+    /// <summary>Turns <c>ERROR: [soundcloud] 123: This video is DRM protected</c> into a sentence for people.</summary>
+    internal static string DescribeError(string message)
+    {
+        string text = Regex.Replace(message.Trim(), @"^ERROR:\s*(\[[^\]]+\]\s*)?([\w-]+:\s)?", string.Empty);
+        return text.Contains("DRM", StringComparison.OrdinalIgnoreCase) ? DrmProblem : text;
+    }
+
+    // Ytdlp.NET reports yt-dlp failures only through its logger, so each call gets its own.
+    private sealed class ErrorLog : ILogger
+    {
+        public string? Last { get; private set; }
+
+        public void Log(LogType type, string message)
+        {
+            if (type == LogType.Error)
+                Last = DescribeError(message);
+        }
     }
 
     internal static IReadOnlyList<YtdlpSearchResult> ReadSearchResults(string json)
