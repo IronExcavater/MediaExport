@@ -27,6 +27,8 @@ public sealed partial class MainWindow : Window
         ConfigureTitleBar();
         root.DataContext = _viewModel;
         BuildProviderMenu();
+
+        AppWindow.SetIcon("Assets/App/Square44x44Logo.scale-200.ico");
     }
 
     private void ConfigureTitleBar()
@@ -36,6 +38,7 @@ public sealed partial class MainWindow : Window
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         AppWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+
     }
 
     private void BuildProviderMenu()
