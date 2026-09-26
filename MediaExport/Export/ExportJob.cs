@@ -36,12 +36,13 @@ public sealed partial class ExportJob(MediaSearchResult media, ExportOptions opt
     };
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsCompleted), nameof(IsFailed), nameof(IsIndeterminate))]
+    [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsCompleted), nameof(IsFailed), nameof(IsCancelled))]
+    [NotifyPropertyChangedFor(nameof(IsIndeterminate), nameof(ShowsProgress), nameof(DisplayProgress))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand), nameof(OpenCommand), nameof(ShowInFolderCommand))]
     public partial ExportJobState State { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsIndeterminate))]
+    [NotifyPropertyChangedFor(nameof(IsIndeterminate), nameof(DisplayProgress))]
     public partial double Progress { get; private set; }
 
     [ObservableProperty]
@@ -50,12 +51,27 @@ public sealed partial class ExportJob(MediaSearchResult media, ExportOptions opt
     [ObservableProperty]
     public partial string? OutputPath { get; private set; }
 
+    /// <summary>Whether Activity shows this export with its player.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ExpandGlyph))]
+    public partial bool IsExpanded { get; set; }
+
+    public string ExpandGlyph => IsExpanded ? "" : "";
+
+    // Activity rows are announced by screen readers using ToString.
+    public override string ToString() => $"{Media.Title}, {Summary}, {Status}";
+
     public bool IsRunning => State == ExportJobState.Running;
     public bool IsCompleted => State == ExportJobState.Completed;
-    public bool IsFailed => State is ExportJobState.Failed or ExportJobState.Cancelled;
+    public bool IsFailed => State == ExportJobState.Failed;
+    public bool IsCancelled => State == ExportJobState.Cancelled;
 
     // yt-dlp reports nothing while it resolves the media or post-processes it.
     public bool IsIndeterminate => IsRunning && (Progress <= 0 || Progress >= 100);
+
+    /// <summary>A failed export keeps its bar, in the error colour, at the point it stopped.</summary>
+    public bool ShowsProgress => IsRunning || IsFailed;
+    public double DisplayProgress => IsFailed && Progress <= 0 ? 100 : Progress;
 
     public async Task RunAsync(IMediaDownloader downloader)
     {

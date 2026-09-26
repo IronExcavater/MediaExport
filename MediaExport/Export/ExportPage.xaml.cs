@@ -4,8 +4,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.Windows.Storage.Pickers;
-using System;
 
 namespace MediaExport.Export;
 
@@ -22,9 +20,21 @@ public sealed partial class ExportPage : Page
 
     private async void ChangeFolder_Click(object sender, RoutedEventArgs args)
     {
-        var picker = new FolderPicker(App.Current.MainWindow.AppWindow.Id);
-        PickFolderResult? folder = await picker.PickSingleFolderAsync();
-        if (folder is not null)
-            ViewModel.OutputFolder = folder.Path;
+        if (await App.PickFolderAsync() is { } folder)
+            ViewModel.OutputFolder = folder;
+    }
+
+    // ComboBox items can't bind IsEnabled, so qualities the media doesn't have are disabled as the list opens.
+    private void Quality_DropDownOpened(object? sender, object args)
+    {
+        var comboBox = (ComboBox)sender!;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            foreach (QualityChoice quality in ViewModel.Qualities)
+            {
+                if (comboBox.ContainerFromItem(quality) is ComboBoxItem item)
+                    item.IsEnabled = quality.IsAvailable;
+            }
+        });
     }
 }

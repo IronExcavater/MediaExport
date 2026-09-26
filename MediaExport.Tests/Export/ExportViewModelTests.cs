@@ -4,6 +4,7 @@
 using MediaExport.Core.Exporting;
 using MediaExport.Core.Media.Models;
 using MediaExport.Core.Media.Providers;
+using MediaExport.Core.Settings;
 using MediaExport.Export;
 using System.Collections.Generic;
 using System.Threading;
@@ -19,8 +20,11 @@ public sealed class ExportViewModelTests
     [Test]
     public void ShowSuggestions_reopens_cached_results_when_searching_is_idle()
     {
-        using var viewModel = new ExportViewModel([new RecordingSearchProvider()], new FakeDownloader());
-        viewModel.Suggestions.Add(Video);
+        using var viewModel = new ExportViewModel([new RecordingSearchProvider()], new FakeDownloader())
+        {
+            SearchText = "query"
+        };
+        viewModel.Suggestions.Add(new SearchSuggestion(Video, false));
 
         viewModel.ShowSuggestions();
 
@@ -78,9 +82,9 @@ public sealed class ExportViewModelTests
     }
 
     [Test]
-    public void Selecting_audio_defaults_to_an_audio_export_and_loads_its_preview()
+    public void Selecting_audio_defaults_to_an_audio_export_without_a_video_option()
     {
-        var downloader = new FakeDownloader();
+        var downloader = new FakeDownloader { Inspection = new MediaInspection(true, null, false, null) };
         using var viewModel = new ExportViewModel([new RecordingSearchProvider()], downloader);
 
         viewModel.SelectResultCommand.Execute(Track);
@@ -88,8 +92,50 @@ public sealed class ExportViewModelTests
         Assert.Multiple(() =>
         {
             Assert.That(viewModel.IsAudioExport, Is.True);
-            Assert.That(viewModel.AudioPreviewUri, Is.EqualTo(FakeDownloader.Stream));
+            Assert.That(viewModel.CanExportVideo, Is.False);
         });
+    }
+
+    [Test]
+    public void Protected_media_is_reported_and_cannot_be_exported()
+    {
+        var downloader = new FakeDownloader { Inspection = MediaInspection.Unavailable("It's protected by DRM.") };
+        using var viewModel = new ExportViewModel([new RecordingSearchProvider()], downloader);
+
+        viewModel.SelectResultCommand.Execute(Track);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.UnavailableReason, Is.EqualTo("It's protected by DRM."));
+            Assert.That(viewModel.ExportCommand.CanExecute(null), Is.False);
+        });
+    }
+
+    [Test]
+    public void Qualities_taller_than_the_media_become_unavailable()
+    {
+        var downloader = new FakeDownloader { Inspection = new MediaInspection(true, null, true, 720) };
+        using var viewModel = new ExportViewModel([new RecordingSearchProvider()], downloader);
+
+        viewModel.SelectResultCommand.Execute(Video);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.Qualities.Where(quality => !quality.IsAvailable).Select(quality => quality.MaxHeight),
+                Is.EqualTo(new int?[] { 2160, 1440, 1080 }));
+            Assert.That(viewModel.SelectedQuality.MaxHeight, Is.EqualTo(720));
+        });
+    }
+
+    [Test]
+    public void Media_shorter_than_every_preset_falls_back_to_best_available()
+    {
+        var downloader = new FakeDownloader { Inspection = new MediaInspection(true, null, true, 240) };
+        using var viewModel = new ExportViewModel([new RecordingSearchProvider()], downloader);
+
+        viewModel.SelectResultCommand.Execute(Video);
+
+        Assert.That(viewModel.SelectedQuality, Is.SameAs(viewModel.Qualities[0]));
     }
 
     [Test]
@@ -99,16 +145,119 @@ public sealed class ExportViewModelTests
         using var viewModel = new ExportViewModel([new RecordingSearchProvider()], downloader);
         viewModel.SelectResultCommand.Execute(Video);
         viewModel.SelectedQuality = viewModel.Qualities[4];
+        viewModel.TrimStart = "0:30";
+        viewModel.DownloadSubtitles = true;
+        viewModel.SubtitleLanguages = "en, fr";
 
         await viewModel.ExportCommand.ExecuteAsync(null);
 
         Assert.Multiple(() =>
         {
-            Assert.That(downloader.Options, Is.EqualTo(new ExportOptions(MediaKind.Video, "mp4", 720, viewModel.OutputFolder)));
+            Assert.That(downloader.Options, Is.EqualTo(new ExportOptions(MediaKind.Video, "mp4", 720, viewModel.OutputFolder)
+            {
+                TrimStart = TimeSpan.FromSeconds(30),
+                SubtitleLanguages = "en,fr"
+            }));
             Assert.That(viewModel.SelectedJob?.IsCompleted, Is.True);
             Assert.That(viewModel.SelectedJob?.OutputPath, Is.EqualTo(FakeDownloader.OutputPath));
             Assert.That(viewModel.ActiveExportCount, Is.Zero);
         });
+    }
+
+    [Test]
+    public void An_invalid_trim_blocks_the_export()
+    {
+        using var viewModel = new ExportViewModel([new RecordingSearchProvider()], new FakeDownloader());
+        viewModel.SelectResultCommand.Execute(Video);
+
+        viewModel.TrimStart = "1:30";
+        viewModel.TrimEnd = "0:45";
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.TrimError, Is.Not.Null);
+            Assert.That(viewModel.ExportCommand.CanExecute(null), Is.False);
+        });
+    }
+
+    [Test]
+    public void Picked_results_come_back_as_recent_suggestions_that_match_the_search()
+    {
+        using var viewModel = new ExportViewModel([new RecordingSearchProvider()], new FakeDownloader());
+        viewModel.SelectResultCommand.Execute(Video);
+        viewModel.SelectResultCommand.Execute(Track with { Title = "Another" });
+        viewModel.SearchText = string.Empty;
+
+        viewModel.ShowSuggestions();
+        SearchSuggestion[] onFocus = viewModel.Suggestions.ToArray();
+        viewModel.SearchText = "anoth";
+        viewModel.SearchCommand.Execute(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(onFocus.Select(suggestion => suggestion.Media.Title), Is.EqualTo(new[] { "Another", "Result" }));
+            Assert.That(onFocus.All(suggestion => suggestion.IsRecent), Is.True);
+            Assert.That(viewModel.Suggestions.Select(suggestion => suggestion.Media.Title), Is.EqualTo(new[] { "Another" }));
+        });
+    }
+
+    [Test]
+    public async Task A_finished_export_turns_the_button_into_its_result_until_the_options_change()
+    {
+        using var viewModel = new ExportViewModel([new RecordingSearchProvider()], new FakeDownloader());
+        viewModel.SelectResultCommand.Execute(Video);
+
+        await viewModel.ExportCommand.ExecuteAsync(null);
+        bool doneAfterExport = viewModel.IsExportDone;
+        viewModel.SelectedVideoFormat = viewModel.VideoFormats[1];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(doneAfterExport, Is.True);
+            Assert.That(viewModel.IsExportDone, Is.False);
+            Assert.That(viewModel.ExportCommand.CanExecute(null), Is.True);
+        });
+    }
+
+    [Test]
+    public async Task A_failed_export_offers_to_try_again_and_explains_why()
+    {
+        var downloader = new FakeDownloader { Failure = new InvalidOperationException("No formats found") };
+        using var viewModel = new ExportViewModel([new RecordingSearchProvider()], downloader);
+        viewModel.SelectResultCommand.Execute(Video);
+
+        await viewModel.ExportCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.ExportLabel, Is.EqualTo("Try again"));
+            Assert.That(viewModel.HintKind, Is.EqualTo(ExportHintKind.Error));
+            Assert.That(viewModel.Hint, Is.EqualTo("No formats found"));
+        });
+    }
+
+    [Test]
+    public void Export_choices_are_remembered_for_next_time()
+    {
+        var settings = new SettingsStore(null);
+        using (var viewModel = new ExportViewModel([new RecordingSearchProvider()], new FakeDownloader(), settings))
+            viewModel.SelectedAudioFormat = viewModel.AudioFormats[2];
+
+        using var next = new ExportViewModel([new RecordingSearchProvider()], new FakeDownloader(), settings);
+
+        Assert.That(next.SelectedAudioFormat.Extension, Is.EqualTo("opus"));
+    }
+
+    [Test]
+    public void ClearFinished_keeps_running_exports()
+    {
+        using var viewModel = new ExportViewModel([new RecordingSearchProvider()], new FakeDownloader());
+        var running = new ExportJob(Video, new ExportOptions(MediaKind.Video, "mp4", null, "out"));
+        viewModel.Jobs.Add(running);
+
+        viewModel.ClearFinishedCommand.Execute(null);
+
+        Assert.That(viewModel.Jobs, Is.EqualTo(new[] { running }));
     }
 
     [Test]
@@ -129,14 +278,14 @@ public sealed class ExportViewModelTests
 
     private sealed class FakeDownloader : IMediaDownloader
     {
-        public static readonly Uri Stream = new("https://example.test/stream.mp3");
         public const string OutputPath = @"C:\Exports\Result.mp4";
 
         public ExportOptions? Options { get; private set; }
         public Exception? Failure { get; init; }
+        public MediaInspection Inspection { get; init; } = new(true, null, true, 2160);
 
-        public Task<Uri?> GetAudioStreamAsync(string sourceUrl, CancellationToken cancellationToken = default) =>
-            Task.FromResult<Uri?>(Stream);
+        public Task<MediaInspection> InspectAsync(string sourceUrl, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Inspection);
 
         public Task<string> DownloadAsync(string sourceUrl, ExportOptions options, IProgress<ExportProgress>? progress = null, CancellationToken cancellationToken = default)
         {

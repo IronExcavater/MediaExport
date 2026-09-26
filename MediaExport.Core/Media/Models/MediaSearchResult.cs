@@ -18,4 +18,8 @@ public sealed record MediaSearchResult(
     TimeSpan? Duration,
     MediaKind Kind = MediaKind.Video,
     string? CreatorUrl = null,
-    Uri? EmbedUri = null);
+    Uri? EmbedUri = null)
+{
+    // List items are announced by screen readers using ToString.
+    public override string ToString() => Creator is null ? Title : $"{Title}, {Creator}";
+}
