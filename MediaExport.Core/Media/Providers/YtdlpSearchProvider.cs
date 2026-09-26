@@ -42,7 +42,7 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
         if (string.IsNullOrWhiteSpace(sourceUrl))
             return null;
 
-        var media = new MediaSearchResult(
+        return new MediaSearchResult(
             result.Identity,
             sourceUrl,
             result.ThumbnailUri,
@@ -50,12 +50,10 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
             result.Creator,
             result.Duration,
             Kind,
-            result.CreatorUrl);
-
-        return media with { EmbedUri = GetEmbedUri(media) };
+            result.CreatorUrl,
+            EmbedLinks.For(Id, result.Identity, sourceUrl),
+            Id);
     }
 
     protected virtual string? GetSourceUrl(YtdlpSearchResult result) => result.SourceUrl;
-
-    protected virtual Uri? GetEmbedUri(MediaSearchResult media) => null;
 }

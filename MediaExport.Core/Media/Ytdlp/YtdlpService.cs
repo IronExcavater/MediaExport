@@ -4,30 +4,32 @@
 using ManuHub.Ytdlp.NET;
 using MediaExport.Core.Exporting;
 using MediaExport.Core.Media.Models;
+using MediaExport.Core.Media.Providers;
+using MediaExport.Core.Tooling;
+using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using SubtitleTrack = MediaExport.Core.Media.Models.SubtitleTrack;
 using YtdlpClient = ManuHub.Ytdlp.NET.Ytdlp;
 
 namespace MediaExport.Core.Media.Ytdlp;
 
-public sealed class YtdlpService : IMediaDownloader
+public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloader
 {
-    private const string Executable = "yt-dlp.exe";
     private const string OutputMarker = "__MEDIA_EXPORT_FILE__:";
     private const string DrmProblem = "It's protected by DRM, so it can't be exported.";
+    private const string SponsorCategories = "sponsor,selfpromo,interaction";
 
-    public async Task<IReadOnlyList<YtdlpSearchResult>> SearchAsync(
-        string searchTarget,
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<YtdlpSearchResult>> SearchAsync(string searchTarget, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(searchTarget))
             return [];
 
         cancellationToken.ThrowIfCancellationRequested();
-
         var errors = new ErrorLog();
-        string? json = await new YtdlpClient(Executable, errors).GetMetadataRawAsync(searchTarget, cancellationToken);
+        string? json = await CreateClient(errors).GetMetadataRawAsync(searchTarget, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(json))
@@ -36,25 +38,52 @@ public sealed class YtdlpService : IMediaDownloader
         return ReadSearchResults(json);
     }
 
-    public async Task<MediaInspection> InspectAsync(string sourceUrl, CancellationToken cancellationToken = default)
+    /// <summary>Reads a link someone pasted: what it is, and what can be exported from it.</summary>
+    public async Task<(MediaSearchResult Media, MediaDetails Details)> OpenLinkAsync(string url, CancellationToken cancellationToken = default)
     {
         var errors = new ErrorLog();
-        Metadata? metadata = await new YtdlpClient(Executable, errors).GetMetadataAsync(sourceUrl, cancellationToken);
-        if (metadata is null)
-            return MediaInspection.Unavailable(errors.Last ?? "This media couldn't be read.");
+        string? json = await CreateClient(errors).GetMetadataRawAsync(url, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        FormatMetadata[] formats = (metadata.Formats ?? []).Where(format => format.HasDrm != true).ToArray();
-        if (formats.Length == 0)
-            return MediaInspection.Unavailable(DrmProblem);
+        if (string.IsNullOrWhiteSpace(json))
+            throw new InvalidOperationException(errors.Last ?? "That link couldn't be opened.");
 
-        return new MediaInspection(
-            true,
-            null,
-            formats.Any(format => format.Vcodec is not null and not "none"),
-            formats.Max(format => format.Height));
+        using JsonDocument document = JsonDocument.Parse(json);
+        JsonElement root = document.RootElement;
+        if (GetString(root, "_type") == "playlist")
+            throw new InvalidOperationException("That's a playlist. Open one of its videos or tracks instead.");
+
+        MediaDetails details = ReadDetails(root);
+        string identity = GetString(root, "id") ?? url;
+        string sourceUrl = GetSourceUrl(root) ?? url;
+        string providerId = (GetString(root, "extractor_key") ?? "web").ToLowerInvariant();
+        var media = new MediaSearchResult(
+            identity,
+            sourceUrl,
+            GetThumbnailUri(root),
+            GetString(root, "title") ?? sourceUrl,
+            GetString(root, "uploader") ?? GetString(root, "channel"),
+            GetDuration(root),
+            details.HasVideo || !details.IsExportable ? MediaKind.Video : MediaKind.Audio,
+            GetString(root, "channel_url") ?? GetString(root, "uploader_url"),
+            EmbedLinks.For(providerId, identity, sourceUrl),
+            providerId);
+
+        return (media, details);
     }
 
-    public async Task<string> DownloadAsync(
+    public async Task<MediaDetails> InspectAsync(string sourceUrl, CancellationToken cancellationToken = default)
+    {
+        var errors = new ErrorLog();
+        string? json = await CreateClient(errors).GetMetadataRawAsync(sourceUrl, cancellationToken);
+        if (string.IsNullOrWhiteSpace(json))
+            return MediaDetails.Unavailable(errors.Last ?? "This media couldn't be read.");
+
+        using JsonDocument document = JsonDocument.Parse(json);
+        return ReadDetails(document.RootElement);
+    }
+
+    public async Task<IReadOnlyList<string>> DownloadAsync(
         string sourceUrl,
         ExportOptions options,
         IProgress<ExportProgress>? progress = null,
@@ -63,15 +92,16 @@ public sealed class YtdlpService : IMediaDownloader
         Directory.CreateDirectory(options.OutputFolder);
 
         var errors = new ErrorLog();
-        YtdlpClient download = new YtdlpClient(Executable, errors)
+        YtdlpClient download = CreateClient(errors)
             .WithOutputFolder(options.OutputFolder)
-            .WithOutputTemplate($"{options.FileNameTemplate}.%(ext)s")
+            .WithOutputTemplate(GetOutputTemplate(options))
             .WithWindowsFilenames();
 
         foreach ((string name, string? value) in GetExportArguments(options))
             download = value is null ? download.AddFlag(name) : download.AddOption(name, value);
 
-        string? outputPath = null;
+        var outputs = new List<string>();
+        DateTime started = DateTime.Now;
 
         void OnProgress(object? sender, DownloadProgressEventArgs args) =>
             progress?.Report(new ExportProgress(
@@ -87,7 +117,7 @@ public sealed class YtdlpService : IMediaDownloader
         {
             int marker = line.IndexOf(OutputMarker, StringComparison.Ordinal);
             if (marker >= 0)
-                outputPath = line[(marker + OutputMarker.Length)..].Trim();
+                outputs.Add(line[(marker + OutputMarker.Length)..].Trim());
         }
 
         download.ProgressDownload += OnProgress;
@@ -106,11 +136,24 @@ public sealed class YtdlpService : IMediaDownloader
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (string.IsNullOrWhiteSpace(outputPath) || !File.Exists(outputPath))
+        string[] files = outputs.Where(File.Exists).Select(Path.GetFullPath).Distinct().ToArray();
+        if (files.Length == 0)
             throw new InvalidOperationException(errors.Last ?? "The export finished without producing a file.");
 
-        return Path.GetFullPath(outputPath);
+        if (options.Clips.Count > 1 && options.JoinClips)
+        {
+            progress?.Report(new ExportProgress(100, null, null, true));
+            return [await JoinAsync(files, cancellationToken)];
+        }
+
+        if (options.SplitChapters)
+            return FindChapterFiles(files[0], started) is { Length: > 0 } chapters ? chapters : files;
+
+        return files;
     }
+
+    internal static string GetOutputTemplate(ExportOptions options) =>
+        options.Clips.Count > 1 ? $"{options.FileNameTemplate} (part %(section_number)s).%(ext)s" : $"{options.FileNameTemplate}.%(ext)s";
 
     internal static IReadOnlyList<(string Name, string? Value)> GetExportArguments(ExportOptions options)
     {
@@ -119,18 +162,28 @@ public sealed class YtdlpService : IMediaDownloader
             ("--no-playlist", null),
             ("--encoding", "utf-8"), // Otherwise non-ANSI characters are dropped from the printed file path.
             ("--progress", null), // --print implies --quiet, which would hide progress.
-            ("--print", $"after_move:{OutputMarker}%(filepath)s")
+            ("--print", $"after_move:{OutputMarker}%(filepath)s"),
+            ("--concurrent-fragments", "4")
         };
 
         if (options.EmbedMetadata)
             arguments.Add(("--embed-metadata", null));
 
-        if (options.TrimStart is not null || options.TrimEnd is not null)
-        {
-            string start = (options.TrimStart ?? TimeSpan.Zero).TotalSeconds.ToString(CultureInfo.InvariantCulture);
-            string end = options.TrimEnd?.TotalSeconds.ToString(CultureInfo.InvariantCulture) ?? "inf";
-            arguments.Add(("--download-sections", $"*{start}-{end}"));
+        if (options.CookiesFromBrowser is { Length: > 0 } browser)
+            arguments.Add(("--cookies-from-browser", browser));
+
+        if (options.RemoveSponsors)
+            arguments.Add(("--sponsorblock-remove", SponsorCategories));
+
+        foreach (Clip clip in options.Clips)
+            arguments.Add(("--download-sections", $"*{Seconds(clip.Start)}-{Seconds(clip.End)}"));
+        if (options.Clips.Count > 0)
             arguments.Add(("--force-keyframes-at-cuts", null)); // Exact cuts rather than the nearest keyframe.
+
+        if (options.SplitChapters)
+        {
+            arguments.Add(("--split-chapters", null));
+            arguments.Add(("-o", $"chapter:{options.FileNameTemplate} - %(section_number)02d %(section_title)s.%(ext)s"));
         }
 
         if (options.Kind == MediaKind.Audio)
@@ -139,17 +192,17 @@ public sealed class YtdlpService : IMediaDownloader
             arguments.Add(("-x", null));
             arguments.Add(("--audio-format", options.Format));
             arguments.Add(("--audio-quality", options.AudioBitrate is int bitrate ? $"{bitrate}K" : "0"));
-            if (options.EmbedThumbnail && options.Format is "mp3" or "m4a" or "opus")
+            if (options.EmbedThumbnail && options.Format is "mp3" or "m4a" or "opus" or "flac")
                 arguments.Add(("--embed-thumbnail", null));
             return arguments;
         }
 
-        if (options.SubtitleLanguages is { Length: > 0 } languages)
+        if (options.SubtitleLanguages.Count > 0)
         {
             arguments.Add(("--write-subs", null));
-            if (options.IncludeAutomaticSubtitles)
+            if (options.SubtitleLanguages.Any(language => language.EndsWith("-orig", StringComparison.Ordinal)))
                 arguments.Add(("--write-auto-subs", null));
-            arguments.Add(("--sub-langs", languages));
+            arguments.Add(("--sub-langs", string.Join(',', options.SubtitleLanguages)));
             arguments.Add(("--embed-subs", null));
         }
 
@@ -178,9 +231,141 @@ public sealed class YtdlpService : IMediaDownloader
     /// <summary>Turns <c>ERROR: [soundcloud] 123: This video is DRM protected</c> into a sentence for people.</summary>
     internal static string DescribeError(string message)
     {
-        string text = Regex.Replace(message.Trim(), @"^ERROR:\s*(\[[^\]]+\]\s*)?([\w-]+:\s)?", string.Empty);
-        return text.Contains("DRM", StringComparison.OrdinalIgnoreCase) ? DrmProblem : text;
+        string text = ErrorPrefix().Replace(message.Trim(), string.Empty);
+        if (text.Contains("DRM", StringComparison.OrdinalIgnoreCase))
+            return DrmProblem;
+        if (text.Contains("Sign in to confirm", StringComparison.OrdinalIgnoreCase))
+            return "The site wants you signed in for this one. Choose a browser you're signed in with under Settings, then try again.";
+        return text;
     }
+
+    [GeneratedRegex(@"^ERROR:\s*(\[[^\]]+\]\s*)?([\w-]+:\s)?")]
+    private static partial Regex ErrorPrefix();
+
+    internal static MediaDetails ReadDetails(JsonElement root)
+    {
+        JsonElement[] formats = root.TryGetProperty("formats", out JsonElement list) && list.ValueKind == JsonValueKind.Array
+            ? list.EnumerateArray().ToArray()
+            : [];
+
+        // Some sites list no formats, only a direct URL; there's nothing to choose from, but it still exports.
+        JsonElement[] usable = formats.Where(format => format.TryGetProperty("has_drm", out JsonElement drm) is false || drm.ValueKind != JsonValueKind.True).ToArray();
+        if (formats.Length > 0 && usable.Length == 0)
+            return MediaDetails.Unavailable(DrmProblem);
+
+        JsonElement[] audio = usable.Where(format => IsCodec(format, "acodec") && !IsCodec(format, "vcodec")).ToArray();
+        long? audioBytes = audio.Select(GetSize).Where(size => size is not null).DefaultIfEmpty().Max();
+
+        VideoQuality[] qualities = usable
+            .Where(format => IsCodec(format, "vcodec") && GetInt(format, "height") is > 0)
+            .GroupBy(format => GetInt(format, "height")!.Value)
+            .OrderByDescending(group => group.Key)
+            .Select(group =>
+            {
+                // MP4 exports prefer H.264, so that's the size worth estimating.
+                JsonElement best = group.FirstOrDefault(format => (GetString(format, "vcodec") ?? string.Empty).StartsWith("avc1", StringComparison.Ordinal));
+                long? video = best.ValueKind == JsonValueKind.Object ? GetSize(best) : group.Select(GetSize).Max();
+                return new VideoQuality(group.Key, video + (audioBytes ?? 0));
+            })
+            .ToArray();
+
+        return new MediaDetails(
+            null,
+            qualities,
+            audioBytes,
+            ReadSubtitles(root),
+            ReadChapters(root),
+            GetString(root, "extractor_key") == "Youtube");
+    }
+
+    private static SubtitleTrack[] ReadSubtitles(JsonElement root)
+    {
+        var tracks = new List<SubtitleTrack>();
+        if (root.TryGetProperty("subtitles", out JsonElement written) && written.ValueKind == JsonValueKind.Object)
+        {
+            foreach (JsonProperty language in written.EnumerateObject().Where(language => language.Name != "live_chat"))
+                tracks.Add(new SubtitleTrack(language.Name, GetTrackName(language) ?? language.Name, false));
+        }
+
+        // Automatic captions come in every language by translation; only the original is worth offering.
+        if (root.TryGetProperty("automatic_captions", out JsonElement automatic) && automatic.ValueKind == JsonValueKind.Object)
+        {
+            foreach (JsonProperty language in automatic.EnumerateObject().Where(language => language.Name.EndsWith("-orig", StringComparison.Ordinal)))
+            {
+                string name = (GetTrackName(language) ?? language.Name).Replace(" (Original)", string.Empty);
+                tracks.Add(new SubtitleTrack(language.Name, $"{name} (automatic)", true));
+            }
+        }
+
+        return tracks.OrderBy(track => track.IsAutomatic).ThenBy(track => track.Name, StringComparer.CurrentCulture).ToArray();
+    }
+
+    private static Chapter[] ReadChapters(JsonElement root)
+    {
+        if (!root.TryGetProperty("chapters", out JsonElement chapters) || chapters.ValueKind != JsonValueKind.Array)
+            return [];
+
+        return chapters.EnumerateArray()
+            .Where(chapter => chapter.TryGetProperty("start_time", out _) && chapter.TryGetProperty("end_time", out _))
+            .Select(chapter => new Chapter(
+                TimeSpan.FromSeconds(chapter.GetProperty("start_time").GetDouble()),
+                TimeSpan.FromSeconds(chapter.GetProperty("end_time").GetDouble()),
+                GetString(chapter, "title") ?? string.Empty))
+            .ToArray();
+    }
+
+    private async Task<string> JoinAsync(IReadOnlyList<string> parts, CancellationToken cancellationToken)
+    {
+        string ffmpeg = tools.Locate("ffmpeg") ?? throw new InvalidOperationException("FFmpeg is needed to join clips.");
+        string joined = PartSuffix().Replace(parts[0], string.Empty);
+        string list = Path.Combine(Path.GetTempPath(), $"MediaExport-join-{Guid.NewGuid():N}.txt");
+        await File.WriteAllLinesAsync(list, parts.Select(part => $"file '{part.Replace("'", @"'\''")}'"), new UTF8Encoding(false), cancellationToken);
+        try
+        {
+            var startInfo = new ProcessStartInfo(ffmpeg) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
+            foreach (string argument in new[] { "-y", "-hide_banner", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", joined })
+                startInfo.ArgumentList.Add(argument);
+
+            using Process process = Process.Start(startInfo)!;
+            string error = await process.StandardError.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken);
+            if (process.ExitCode != 0)
+                throw new InvalidOperationException($"The clips couldn't be joined: {error.Trim().Split('\n').LastOrDefault()}");
+
+            foreach (string part in parts)
+                File.Delete(part);
+            return joined;
+        }
+        finally
+        {
+            File.Delete(list);
+        }
+    }
+
+    [GeneratedRegex(@" \(part \d+\)(?=\.[^.\\]+$)")]
+    private static partial Regex PartSuffix();
+
+    // yt-dlp doesn't print the chapter files it splits off, so they're found by name.
+    private static string[] FindChapterFiles(string file, DateTime since)
+    {
+        string prefix = Path.GetFileNameWithoutExtension(file) + " - ";
+        return Directory.EnumerateFiles(Path.GetDirectoryName(file)!, prefix + "*")
+            .Where(path => File.GetLastWriteTime(path) >= since.AddSeconds(-2))
+            .Order(StringComparer.CurrentCulture)
+            .ToArray();
+    }
+
+    private YtdlpClient CreateClient(ILogger errors)
+    {
+        YtdlpClient client = new(tools.Locate("yt-dlp") ?? "yt-dlp.exe", errors);
+        if (tools.Locate("ffmpeg") is { } ffmpeg)
+            client = client.WithFFmpegLocation(ffmpeg);
+        if (tools.Locate("deno") is { } deno)
+            client = client.AddOption("--js-runtimes", $"deno:{deno}");
+        return client;
+    }
+
+    private static string Seconds(TimeSpan time) => time.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture);
 
     // Ytdlp.NET reports yt-dlp failures only through its logger, so each call gets its own.
     private sealed class ErrorLog : ILogger
@@ -226,6 +411,22 @@ public sealed class YtdlpService : IMediaDownloader
         return results;
     }
 
+    private static bool IsCodec(JsonElement format, string property) =>
+        GetString(format, property) is { } codec && codec != "none";
+
+    private static long? GetSize(JsonElement format) =>
+        format.TryGetProperty("filesize", out JsonElement size) && size.TryGetInt64(out long exact) ? exact
+        : format.TryGetProperty("filesize_approx", out JsonElement approx) && approx.TryGetDouble(out double estimate) ? (long)estimate
+        : null;
+
+    private static int? GetInt(JsonElement entry, string propertyName) =>
+        entry.TryGetProperty(propertyName, out JsonElement value) && value.TryGetInt32(out int number) ? number : null;
+
+    private static string? GetTrackName(JsonProperty language) =>
+        language.Value.ValueKind == JsonValueKind.Array && language.Value.GetArrayLength() > 0
+            ? GetString(language.Value[0], "name")
+            : null;
+
     private static string? GetString(JsonElement entry, string propertyName) =>
         entry.TryGetProperty(propertyName, out JsonElement value)
         && value.ValueKind == JsonValueKind.String
@@ -238,27 +439,23 @@ public sealed class YtdlpService : IMediaDownloader
 
     private static Uri? GetThumbnailUri(JsonElement entry)
     {
-        if (!entry.TryGetProperty("thumbnails", out JsonElement thumbnails)
-            || thumbnails.ValueKind != JsonValueKind.Array)
-        {
+        if (GetString(entry, "thumbnail") is { } single && Uri.TryCreate(single, UriKind.Absolute, out Uri? direct))
+            return direct;
+
+        if (!entry.TryGetProperty("thumbnails", out JsonElement thumbnails) || thumbnails.ValueKind != JsonValueKind.Array)
             return null;
-        }
 
         foreach (JsonElement thumbnail in thumbnails.EnumerateArray().Reverse())
         {
-            string? url = GetString(thumbnail, "url");
-            if (Uri.TryCreate(url, UriKind.Absolute, out Uri? uri))
+            if (Uri.TryCreate(GetString(thumbnail, "url"), UriKind.Absolute, out Uri? uri))
                 return uri;
         }
 
         return null;
     }
 
-    private static TimeSpan? GetDuration(JsonElement entry)
-    {
-        if (!entry.TryGetProperty("duration", out JsonElement value) || !value.TryGetDouble(out double seconds))
-            return null;
-
-        return TimeSpan.FromSeconds(seconds);
-    }
+    private static TimeSpan? GetDuration(JsonElement entry) =>
+        entry.TryGetProperty("duration", out JsonElement value) && value.TryGetDouble(out double seconds)
+            ? TimeSpan.FromSeconds(seconds)
+            : null;
 }
