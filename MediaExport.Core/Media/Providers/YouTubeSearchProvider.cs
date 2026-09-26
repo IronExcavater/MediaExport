@@ -10,13 +10,13 @@ public sealed class YouTubeSearchProvider(YtdlpService ytdlp) : YtdlpSearchProvi
 {
     public override string Id => "youtube";
     public override string DisplayName => "YouTube";
-    public override MediaProviderIcon Icon => MediaProviderIcon.YouTube;
 
     protected override string SearchPrefix => "ytsearch";
 
     protected override string GetSourceUrl(YtdlpSearchResult result) =>
         result.SourceUrl ?? $"https://www.youtube.com/watch?v={Uri.EscapeDataString(result.Identity)}";
 
+    // Minimal chrome: no fullscreen button (fs=0), annotations or unrelated suggestions.
     protected override Uri GetEmbedUri(MediaSearchResult media) =>
-        new($"https://www.youtube.com/embed/{Uri.EscapeDataString(media.Identity)}?autoplay=1&rel=0");
+        new($"https://www.youtube.com/embed/{Uri.EscapeDataString(media.Identity)}?rel=0&fs=0&iv_load_policy=3&playsinline=1");
 }

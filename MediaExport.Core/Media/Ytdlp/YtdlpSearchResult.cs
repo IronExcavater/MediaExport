@@ -9,4 +9,5 @@ public sealed record YtdlpSearchResult(
     Uri? ThumbnailUri,
     string Title,
     string? Creator,
-    TimeSpan? Duration);
+    TimeSpan? Duration,
+    string? CreatorUrl = null);

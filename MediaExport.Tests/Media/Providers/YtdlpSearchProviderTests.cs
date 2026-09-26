@@ -13,7 +13,7 @@ public sealed class YtdlpSearchProviderTests
     public void YouTube_provider_creates_its_watch_and_embed_urls()
     {
         var provider = new YouTubeSearchProvider(new YtdlpService());
-        var result = new YtdlpSearchResult("abc123", null, null, "Result", null, null);
+        var result = new YtdlpSearchResult("abc123", null, null, "Result", null, null, "https://www.youtube.com/@channel");
 
         MediaSearchResult? media = provider.MapSearchResult(result);
 
@@ -21,12 +21,14 @@ public sealed class YtdlpSearchProviderTests
         Assert.Multiple(() =>
         {
             Assert.That(media!.SourceUrl, Is.EqualTo("https://www.youtube.com/watch?v=abc123"));
-            Assert.That(media.EmbedUri, Is.EqualTo(new Uri("https://www.youtube.com/embed/abc123?autoplay=1&rel=0")));
+            Assert.That(media.EmbedUri, Is.EqualTo(new Uri("https://www.youtube.com/embed/abc123?rel=0&fs=0&iv_load_policy=3&playsinline=1")));
+            Assert.That(media.CreatorUrl, Is.EqualTo("https://www.youtube.com/@channel"));
+            Assert.That(media.Kind, Is.EqualTo(MediaKind.Video));
         });
     }
 
     [Test]
-    public void SoundCloud_provider_creates_its_embed_url()
+    public void SoundCloud_provider_returns_audio_without_an_embed()
     {
         var provider = new SoundCloudSearchProvider(new YtdlpService());
         var result = new YtdlpSearchResult("track-id", "https://soundcloud.com/artist/track", null, "Track", null, null);
@@ -34,6 +36,10 @@ public sealed class YtdlpSearchProviderTests
         MediaSearchResult? media = provider.MapSearchResult(result);
 
         Assert.That(media, Is.Not.Null);
-        Assert.That(media!.EmbedUri, Is.EqualTo(new Uri("https://w.soundcloud.com/player/?url=https%3A%2F%2Fsoundcloud.com%2Fartist%2Ftrack&auto_play=true")));
+        Assert.Multiple(() =>
+        {
+            Assert.That(media!.Kind, Is.EqualTo(MediaKind.Audio));
+            Assert.That(media.EmbedUri, Is.Null);
+        });
     }
 }

@@ -4,130 +4,204 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:MediaExport.Export"
     xmlns:media="using:MediaExport.Media.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:viewModels="using:MediaExport.Export"
     Background="Transparent"
-    d:DataContext="{d:DesignInstance Type=viewModels:ExportViewModel, IsDesignTimeCreatable=False}"
+    NavigationCacheMode="Required"
+    d:DataContext="{d:DesignInstance Type=local:ExportViewModel, IsDesignTimeCreatable=False}"
     mc:Ignorable="d">
 
-    <Grid Padding="32,24,32,32" RowSpacing="24">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+    <Grid>
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup>
+                <VisualState x:Name="Wide">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="1100" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="workspace.ColumnSpacing" Value="24" />
+                        <Setter Target="exportPanel.(Grid.Row)" Value="0" />
+                        <Setter Target="exportPanel.(Grid.Column)" Value="1" />
+                        <Setter Target="exportPanel.Width" Value="320" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Narrow" />
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
 
-        <Grid ColumnSpacing="12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="210" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="24" />
-            </Grid.ColumnDefinitions>
-            <ComboBox
-                MinWidth="210"
-                MinHeight="40"
-                PlaceholderText="Provider"
-                ItemsSource="{Binding Providers}"
-                SelectedItem="{Binding SelectedProvider, Mode=TwoWay}">
-                <ComboBox.ItemContainerStyle>
-                    <Style TargetType="ComboBoxItem">
-                        <Setter Property="VerticalContentAlignment" Value="Stretch" />
-                    </Style>
-                </ComboBox.ItemContainerStyle>
-                <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="48" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <media:ProviderIconView Icon="{Binding Icon}" />
-                            <TextBlock
-                                Grid.Column="1"
-                                VerticalAlignment="Center"
-                                Text="{Binding DisplayName}" />
-                        </Grid>
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
-
-            <AutoSuggestBox
-                x:Name="searchBox"
-                Grid.Column="1"
-                MinWidth="520"
-                Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                ItemsSource="{Binding Suggestions}"
-                IsSuggestionListOpen="{Binding IsSuggestionListOpen, Mode=TwoWay}"
-                TextMemberPath="Title"
-                PlaceholderText="Search media"
-                QueryIcon="Find"
-                GotFocus="SearchBox_GotFocus"
-                TextChanged="SearchBox_TextChanged"
-                QuerySubmitted="SearchBox_QuerySubmitted"
-                SuggestionChosen="SearchBox_SuggestionChosen">
-                <AutoSuggestBox.ItemTemplate>
-                    <DataTemplate>
-                        <media:CompactMediaView Media="{Binding}" />
-                    </DataTemplate>
-                </AutoSuggestBox.ItemTemplate>
-            </AutoSuggestBox>
-
-            <ProgressRing
-                Grid.Column="2"
-                Width="20"
-                Height="20"
+        <StackPanel
+            MaxWidth="360"
+            Margin="24,0,24,48"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Spacing="8"
+            Visibility="{Binding HasSelectedResult, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=True}">
+            <FontIcon
+                Margin="0,0,0,12"
+                FontSize="40"
+                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                Glyph="&#xE721;" />
+            <TextBlock
                 HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                IsActive="{Binding IsSearching}"
-                Visibility="{Binding IsSearching, Converter={StaticResource BooleanToVisibilityConverter}}" />
-        </Grid>
+                Style="{StaticResource SubtitleTextBlockStyle}"
+                Text="Search to get started" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="Find a video or track with the search box above, then choose how to save it."
+                TextAlignment="Center"
+                TextWrapping="Wrap" />
+        </StackPanel>
 
         <ScrollViewer
-            Grid.Row="1"
             HorizontalScrollBarVisibility="Disabled"
-            VerticalScrollBarVisibility="Auto">
-            <Grid MinHeight="300">
-                <TextBlock
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Opacity="0.68"
-                    Text="Search for media to begin."
-                    Visibility="{Binding HasSelectedResult, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=True}">
-                </TextBlock>
+            VerticalScrollBarVisibility="Auto"
+            Visibility="{Binding HasSelectedResult, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid
+                x:Name="workspace"
+                MaxWidth="1240"
+                Padding="24"
+                RowSpacing="24">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-                <Grid
-                    ColumnSpacing="28"
-                    Visibility="{Binding HasSelectedResult, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition MinWidth="320" Width="2*" />
-                        <ColumnDefinition MinWidth="420" Width="3*" />
-                    </Grid.ColumnDefinitions>
+                <media:HeroMediaView
+                    AudioSource="{Binding AudioPreviewUri}"
+                    IsAudioLoading="{Binding IsPreviewLoading}"
+                    Media="{Binding SelectedResult}" />
 
-                    <media:HeroMediaView
-                        Media="{Binding SelectedResult}"
-                        PreviewRequested="HeroMediaView_PreviewRequested" />
+                <Border
+                    x:Name="exportPanel"
+                    Grid.Row="1"
+                    Padding="16"
+                    VerticalAlignment="Top"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                    <StackPanel Spacing="16">
+                        <SelectorBar Margin="-8,-8,-8,0">
+                            <SelectorBarItem IsSelected="{Binding IsVideoExport, Mode=TwoWay}" Text="Video">
+                                <SelectorBarItem.Icon>
+                                    <FontIcon Glyph="&#xE714;" />
+                                </SelectorBarItem.Icon>
+                            </SelectorBarItem>
+                            <SelectorBarItem IsSelected="{Binding IsAudioExport, Mode=TwoWay}" Text="Audio">
+                                <SelectorBarItem.Icon>
+                                    <FontIcon Glyph="&#xE8D6;" />
+                                </SelectorBarItem.Icon>
+                            </SelectorBarItem>
+                        </SelectorBar>
 
-                    <Grid Grid.Column="1">
-                        <TextBlock
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Opacity="0.68"
-                            Text="Select the thumbnail to preview."
-                            Visibility="{Binding IsPreviewOpen, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=True}" />
-                        <WebView2
-                            Source="{Binding SelectedResult.EmbedUri}"
-                            Visibility="{Binding IsPreviewOpen, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    </Grid>
-                </Grid>
+                        <StackPanel Spacing="12" Visibility="{Binding IsVideoExport, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <ComboBox
+                                HorizontalAlignment="Stretch"
+                                DisplayMemberPath="Label"
+                                Header="Format"
+                                ItemsSource="{Binding VideoFormats}"
+                                SelectedItem="{Binding SelectedVideoFormat, Mode=TwoWay}" />
+                            <ComboBox
+                                HorizontalAlignment="Stretch"
+                                DisplayMemberPath="Label"
+                                Header="Quality"
+                                ItemsSource="{Binding Qualities}"
+                                SelectedItem="{Binding SelectedQuality, Mode=TwoWay}" />
+                        </StackPanel>
+
+                        <ComboBox
+                            HorizontalAlignment="Stretch"
+                            DisplayMemberPath="Label"
+                            Header="Format"
+                            ItemsSource="{Binding AudioFormats}"
+                            SelectedItem="{Binding SelectedAudioFormat, Mode=TwoWay}"
+                            Visibility="{Binding IsAudioExport, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Save to" />
+                            <Button
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                AutomationProperties.Name="Change folder"
+                                Click="ChangeFolder_Click"
+                                ToolTipService.ToolTip="{Binding OutputFolder}">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon FontSize="16" Glyph="&#xE8B7;" />
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        Text="{Binding OutputFolder}"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <FontIcon
+                                        Grid.Column="2"
+                                        FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Glyph="&#xE70F;" />
+                                </Grid>
+                            </Button>
+                        </StackPanel>
+
+                        <Button
+                            HorizontalAlignment="Stretch"
+                            Command="{Binding ExportCommand}"
+                            Style="{StaticResource AccentButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontSize="16" Glyph="&#xE896;" />
+                                <TextBlock Text="Export" />
+                            </StackPanel>
+                        </Button>
+
+                        <!-- The latest export of the selected media; one container so closed bars add no spacing. -->
+                        <Grid Visibility="{Binding HasSelectedJob, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel
+                                Spacing="8"
+                                Visibility="{Binding SelectedJob.IsRunning, Converter={StaticResource BooleanToVisibilityConverter}, FallbackValue=Collapsed}">
+                                <Grid>
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="{Binding SelectedJob.Status}" />
+                                    <HyperlinkButton
+                                        Padding="4,0"
+                                        HorizontalAlignment="Right"
+                                        Command="{Binding SelectedJob.CancelCommand}"
+                                        Content="Cancel"
+                                        FontSize="12" />
+                                </Grid>
+                                <ProgressBar IsIndeterminate="{Binding SelectedJob.IsIndeterminate}" Value="{Binding SelectedJob.Progress}" />
+                            </StackPanel>
+
+                            <InfoBar
+                                Title="Exported"
+                                IsClosable="False"
+                                IsOpen="{Binding SelectedJob.IsCompleted, FallbackValue=False}"
+                                Message="{Binding SelectedJob.Status}"
+                                Severity="Success">
+                                <InfoBar.ActionButton>
+                                    <Button Command="{Binding SelectedJob.ShowInFolderCommand}" Content="Show in folder" />
+                                </InfoBar.ActionButton>
+                            </InfoBar>
+
+                            <InfoBar
+                                Title="Export stopped"
+                                IsClosable="False"
+                                IsOpen="{Binding SelectedJob.IsFailed, FallbackValue=False}"
+                                Message="{Binding SelectedJob.Status}"
+                                Severity="Error" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
             </Grid>
         </ScrollViewer>
-
-        <TeachingTip
-            x:Name="errorTip"
-            Target="{x:Bind searchBox}"
-            Title="Search"
-            Subtitle="{Binding ErrorMessage}"
-            IsOpen="{Binding HasError, Mode=OneWay}"
-            CloseButtonClick="ErrorTip_CloseButtonClick" />
     </Grid>
 </Page>

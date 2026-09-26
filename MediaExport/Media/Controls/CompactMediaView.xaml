@@ -5,41 +5,45 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:MediaExport.Media.Controls">
 
-    <Grid MinHeight="72" ColumnSpacing="10">
+    <Grid Padding="0,6" ColumnSpacing="12">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="112" />
+            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <Image
-            Width="112"
-            Height="63"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Center"
-            Source="{x:Bind ThumbnailSource, Mode=OneTime}"
-            Stretch="UniformToFill" />
-
-        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
-            <TextBlock Text="{x:Bind TitleText, Mode=OneTime}" TextWrapping="Wrap" MaxLines="2" />
-            <Grid ColumnSpacing="8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+        <Grid
+            Width="{x:Bind ThumbnailWidth, Mode=OneTime}"
+            Height="56"
+            Background="{ThemeResource ControlFillColorSecondaryBrush}"
+            CornerRadius="4">
+            <Image Source="{x:Bind ThumbnailSource, Mode=OneTime}" Stretch="UniformToFill" />
+            <Border
+                Margin="4"
+                Padding="4,3"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Background="#CC000000"
+                CornerRadius="2"
+                Visibility="{x:Bind DurationVisibility, Mode=OneTime}">
                 <TextBlock
-                    VerticalAlignment="Center"
-                    Opacity="0.72"
-                    Text="{x:Bind CreatorText, Mode=OneTime}"
-                    TextTrimming="CharacterEllipsis" />
-                <Border
-                    Grid.Column="1"
-                    Padding="5,1"
-                    Background="#1AFFFFFF"
-                    CornerRadius="3"
-                    Visibility="{x:Bind DurationVisibility, Mode=OneTime}">
-                    <TextBlock FontSize="12" Text="{x:Bind DurationText, Mode=OneTime}" />
-                </Border>
-            </Grid>
+                    FontSize="11"
+                    Foreground="White"
+                    Text="{x:Bind DurationText, Mode=OneTime}"
+                    TextLineBounds="Tight" />
+            </Border>
+        </Grid>
+
+        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+            <TextBlock
+                MaxLines="2"
+                Text="{x:Bind TitleText, Mode=OneTime}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="Wrap" />
+            <TextBlock
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="{x:Bind CreatorText, Mode=OneTime}"
+                TextTrimming="CharacterEllipsis" />
         </StackPanel>
     </Grid>
 </local:MediaViewBase>
