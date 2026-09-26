@@ -2,7 +2,304 @@
 <Page
     x:Class="MediaExport.Settings.SettingsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:tooling="using:MediaExport.Core.Tooling"
+    Background="Transparent"
+    NavigationCacheMode="Required">
 
-    <Grid />
+    <Page.Resources>
+        <!-- A row in the style of Windows Settings: icon, text, and the control on the right. -->
+        <Style x:Key="SettingsCardStyle" TargetType="Border">
+            <Setter Property="MinHeight" Value="68" />
+            <Setter Property="Padding" Value="16,12" />
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+        </Style>
+        <Style x:Key="SettingsSectionStyle" BasedOn="{StaticResource BodyStrongTextBlockStyle}" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,24,0,4" />
+        </Style>
+        <Style x:Key="SettingsDescriptionStyle" BasedOn="{StaticResource CaptionTextBlockStyle}" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="SettingsIconStyle" TargetType="FontIcon">
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="KeyCapStyle" TargetType="Border">
+            <Setter Property="Padding" Value="8,2,8,3" />
+            <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+    </Page.Resources>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <!-- Left-aligned cards that fill up to a readable width, like Windows Settings. -->
+        <Grid Padding="24,0,24,32">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="1000" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="4">
+
+                <TextBlock Style="{StaticResource SettingsSectionStyle}" Text="Appearance" />
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE790;" Style="{StaticResource SettingsIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="App theme" />
+                            <TextBlock Style="{StaticResource SettingsDescriptionStyle}" Text="Choose whether MediaExport is light or dark" />
+                        </StackPanel>
+                        <ComboBox
+                            Grid.Column="2"
+                            MinWidth="200"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="App theme"
+                            DisplayMemberPath="Label"
+                            ItemsSource="{Binding Themes}"
+                            SelectedItem="{Binding SelectedTheme, Mode=TwoWay}" />
+                    </Grid>
+                </Border>
+
+                <TextBlock Style="{StaticResource SettingsSectionStyle}" Text="Exports" />
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE8B7;" Style="{StaticResource SettingsIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Save location" />
+                            <TextBlock Style="{StaticResource SettingsDescriptionStyle}" Text="{Binding Export.OutputFolder}" />
+                        </StackPanel>
+                        <Button
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Click="ChangeFolder_Click"
+                            Content="Change folder" />
+                    </Grid>
+                </Border>
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE8AC;" Style="{StaticResource SettingsIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="File name" />
+                            <TextBlock Style="{StaticResource SettingsDescriptionStyle}" Text="How exported files are named" />
+                        </StackPanel>
+                        <ComboBox
+                            Grid.Column="2"
+                            MinWidth="200"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="File name"
+                            DisplayMemberPath="Label"
+                            ItemsSource="{Binding Export.FileNames}"
+                            SelectedItem="{Binding Export.SelectedFileName, Mode=TwoWay}" />
+                    </Grid>
+                </Border>
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xED1E;" Style="{StaticResource SettingsIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Subtitle languages" />
+                            <TextBlock Style="{StaticResource SettingsDescriptionStyle}" Text="Used when an export includes subtitles, for example en, fr" />
+                        </StackPanel>
+                        <TextBox
+                            Grid.Column="2"
+                            Width="200"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="Subtitle languages"
+                            Text="{Binding Export.SubtitleLanguages, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </Grid>
+                </Border>
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE8EC;" Style="{StaticResource SettingsIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Metadata" />
+                            <TextBlock Style="{StaticResource SettingsDescriptionStyle}" Text="{Binding Export.MetadataSummary}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                            <CheckBox Content="Title, creator and date" IsChecked="{Binding Export.EmbedMetadata, Mode=TwoWay}" />
+                            <CheckBox Content="Cover art" IsChecked="{Binding Export.EmbedThumbnail, Mode=TwoWay}" />
+                            <CheckBox Content="Chapters" IsChecked="{Binding Export.EmbedChapters, Mode=TwoWay}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <TextBlock Style="{StaticResource SettingsSectionStyle}" Text="Search" />
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE81C;" Style="{StaticResource SettingsIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Recent results" />
+                            <TextBlock Style="{StaticResource SettingsDescriptionStyle}" Text="Results you've opened show in the search box, and match what you type" />
+                        </StackPanel>
+                        <Button
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Command="{Binding ClearRecentResultsCommand}"
+                            Content="Clear"
+                            IsEnabled="{Binding Export.HasRecentResults}" />
+                    </Grid>
+                </Border>
+
+                <Grid Margin="0,24,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Bottom">
+                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Tools" />
+                        <TextBlock Style="{StaticResource SettingsDescriptionStyle}" Text="{Binding ToolStatusText}" />
+                    </StackPanel>
+                    <Button
+                        Grid.Column="1"
+                        VerticalAlignment="Bottom"
+                        Command="{Binding CheckToolsCommand}"
+                        Content="Check for updates" />
+                </Grid>
+                <ProgressBar IsIndeterminate="True" Visibility="{Binding IsWorking, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <!-- Collapsed when closed: a closed InfoBar still measures its full message and widens the page. -->
+                <InfoBar
+                    Title="WinGet isn't available"
+                    IsClosable="False"
+                    IsOpen="{Binding IsWingetMissing}"
+                    Message="Tools already on PATH still work, but installing and updating them from here needs the Windows Package Manager."
+                    Severity="Informational"
+                    Visibility="{Binding IsWingetMissing, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <InfoBar
+                    Title="That didn't work"
+                    IsClosable="False"
+                    IsOpen="{Binding HasToolError}"
+                    Message="{Binding ToolError}"
+                    Severity="Error"
+                    Visibility="{Binding HasToolError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <ItemsControl ItemsSource="{Binding Tools}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="tooling:ToolStatus">
+                            <Border Margin="0,0,0,4" Style="{StaticResource SettingsCardStyle}">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid>
+                                        <FontIcon
+                                            Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                            Glyph="&#xE73E;"
+                                            Style="{StaticResource SettingsIconStyle}"
+                                            Visibility="{x:Bind IsInstalled}" />
+                                        <FontIcon
+                                            Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                            Glyph="&#xE7BA;"
+                                            Style="{StaticResource SettingsIconStyle}"
+                                            Visibility="{x:Bind IsInstalled, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=True}" />
+                                    </Grid>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind Tool.Name}" />
+                                        <TextBlock Style="{StaticResource SettingsDescriptionStyle}">
+                                            <Run Text="{x:Bind Tool.Description}" />
+                                            <Run Text="  ·  " />
+                                            <Run Text="{x:Bind StatusText}" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="2"
+                                        VerticalAlignment="Center"
+                                        Click="Install_Click"
+                                        Content="Install"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        Tag="{x:Bind}"
+                                        Visibility="{x:Bind CanInstall}" />
+                                    <Button
+                                        Grid.Column="2"
+                                        VerticalAlignment="Center"
+                                        Click="Update_Click"
+                                        Content="Update"
+                                        Tag="{x:Bind}"
+                                        Visibility="{x:Bind CanUpdate}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock Style="{StaticResource SettingsSectionStyle}" Text="Keyboard shortcuts" />
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnSpacing="24" RowSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Border Style="{StaticResource KeyCapStyle}"><TextBlock Text="Ctrl + K" /></Border>
+                        <TextBlock Grid.Column="1" Text="Search" />
+                        <Border Grid.Row="1" Style="{StaticResource KeyCapStyle}"><TextBlock Text="Ctrl + E" /></Border>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="Export the selected media" />
+                        <Border Grid.Row="2" Style="{StaticResource KeyCapStyle}"><TextBlock Text="Ctrl + 1" /></Border>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="Go to Export" />
+                        <Border Grid.Row="3" Style="{StaticResource KeyCapStyle}"><TextBlock Text="Ctrl + 2" /></Border>
+                        <TextBlock Grid.Row="3" Grid.Column="1" Text="Go to Activity" />
+                        <Border Grid.Row="4" Style="{StaticResource KeyCapStyle}"><TextBlock Text="Ctrl + ," /></Border>
+                        <TextBlock Grid.Row="4" Grid.Column="1" Text="Go to Settings" />
+                    </Grid>
+                </Border>
+
+                <TextBlock Style="{StaticResource SettingsSectionStyle}" Text="About" />
+                <Border Style="{StaticResource SettingsCardStyle}">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE946;" Style="{StaticResource SettingsIconStyle}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock>
+                                <Run Text="MediaExport" />
+                                <Run Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding Version}" />
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource SettingsDescriptionStyle}" Text="Only export media you have the right to download. Protected media can't be exported." />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
 </Page>
