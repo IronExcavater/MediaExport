@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -19,8 +19,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MediaExport.Core\MediaExport.Core.csproj" />
-    <Compile Include="..\MediaExport\Export\ExportViewModel.cs" Link="Export\ExportViewModel.cs" />
-    <Compile Include="..\MediaExport\Export\ExportJob.cs" Link="Export\ExportJob.cs" />
+    <!-- View models are plain C#, so they're tested without the WinUI app. -->
+    <Compile Include="..\MediaExport\Search\SearchViewModel.cs" Link="Linked\SearchViewModel.cs" />
+    <Compile Include="..\MediaExport\Export\ExportViewModel.cs" Link="Linked\ExportViewModel.cs" />
+    <Compile Include="..\MediaExport\Export\Choice.cs" Link="Linked\Choice.cs" />
+    <Compile Include="..\MediaExport\Activity\ExportJob.cs" Link="Linked\ExportJob.cs" />
+    <Compile Include="..\MediaExport\Activity\ActivityViewModel.cs" Link="Linked\ActivityViewModel.cs" />
+    <Compile Include="..\MediaExport\Settings\ToolViewModel.cs" Link="Linked\ToolViewModel.cs" />
   </ItemGroup>
 
   <ItemGroup>

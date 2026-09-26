@@ -21,8 +21,10 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        // The app starts and seeks playback itself (from the timeline), which Chromium otherwise blocks until a click.
+        Environment.SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--autoplay-policy=no-user-gesture-required");
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddMediaExport(Path.Combine(GetDataFolder(), "settings.json"));
+        serviceCollection.AddMediaExport(GetDataFolder());
         Services = serviceCollection.BuildServiceProvider();
     }
 
