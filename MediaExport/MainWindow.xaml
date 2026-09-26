@@ -53,26 +53,29 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <!-- The icon fills the button's height, so it reads at a glance without a taller title bar. -->
-                <DropDownButton
+                <ComboBox
+                    x:Name="providerBox"
                     Height="32"
-                    Padding="6,0,4,0"
+                    VerticalAlignment="Center"
                     AutomationProperties.Name="Search source"
                     Background="Transparent"
                     BorderBrush="Transparent"
-                    ToolTipService.ToolTip="{Binding SelectedProvider.DisplayName}">
-                    <Image
-                        Width="26"
-                        Height="24"
-                        Source="{Binding SelectedProvider.Id, Converter={StaticResource IconImageConverter}}" />
-                    <DropDownButton.Flyout>
-                        <MenuFlyout
-                            x:Name="providerMenu"
-                            Closed="ProviderMenu_Closed"
-                            Opening="ProviderMenu_Opening"
-                            Placement="BottomEdgeAlignedLeft" />
-                    </DropDownButton.Flyout>
-                </DropDownButton>
+                    DropDownClosed="ProviderBox_DropDownClosed"
+                    DropDownOpened="ProviderBox_DropDownOpened"
+                    ItemsSource="{Binding Providers}"
+                    SelectedItem="{Binding SelectedProvider, Mode=TwoWay}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <Image
+                                    Width="20"
+                                    Height="20"
+                                    Source="{Binding Id, Converter={StaticResource IconImageConverter}}" />
+                                <TextBlock VerticalAlignment="Center" Text="{Binding DisplayName}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
 
                 <Grid Grid.Column="1">
                     <AutoSuggestBox
@@ -125,13 +128,13 @@
             </Grid>
         </TitleBar>
 
-        <!-- LeftCompact: the pane opens over the content rather than beside it, so pages never reflow when it's toggled. -->
         <NavigationView
             x:Name="navView"
             Grid.Row="1"
             IsBackButtonVisible="Collapsed"
             IsPaneToggleButtonVisible="False"
-            PaneDisplayMode="LeftCompact"
+            OpenPaneLength="240"
+            PaneDisplayMode="Auto"
             Loaded="NavView_Loaded"
             SelectionChanged="NavView_SelectionChanged">
             <NavigationView.MenuItems>
@@ -153,6 +156,13 @@
             </NavigationView.MenuItems>
 
             <Grid>
+                <!-- NavigationView snaps its content to the new size while the pane animates, and Microsoft won't fix it
+                     (microsoft-ui-xaml#9370, #5561). Sliding the content's position with the pane hides most of the jump. -->
+                <Grid.Transitions>
+                    <TransitionCollection>
+                        <RepositionThemeTransition IsStaggeringEnabled="False" />
+                    </TransitionCollection>
+                </Grid.Transitions>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
