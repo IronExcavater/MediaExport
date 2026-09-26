@@ -3,38 +3,59 @@
 
 using MediaExport.Core.Tooling;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using System.Linq;
 
 namespace MediaExport.Settings;
 
 public sealed partial class SettingsPage : Page
 {
-    private readonly SettingsViewModel _viewModel = App.Current.Services.GetRequiredService<SettingsViewModel>();
+    private bool _checked;
 
     public SettingsPage()
     {
         InitializeComponent();
-        DataContext = _viewModel;
     }
 
-    // The WinGet check is slow, so it runs the first time Settings is opened rather than at startup.
-    protected override void OnNavigatedTo(NavigationEventArgs e)
+    public SettingsViewModel ViewModel { get; } = App.Current.Services.GetRequiredService<SettingsViewModel>();
+
+    protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
-        if (_viewModel.Tools.Count == 0 && _viewModel.CheckToolsCommand.CanExecute(null))
-            _viewModel.CheckToolsCommand.Execute(null);
+        ViewModel.RefreshHistory();
+        if (_checked)
+            return;
+
+        _checked = true;
+        await ViewModel.RefreshToolsAsync();
     }
 
-    private async void ChangeFolder_Click(object sender, RoutedEventArgs args)
+    // MenuFlyout has no ItemsSource, so the versions are listed as it opens.
+    private void Versions_Opening(object? sender, object args)
     {
-        if (await App.PickFolderAsync() is { } folder)
-            _viewModel.Export.OutputFolder = folder;
+        var menu = (MenuFlyout)sender!;
+        var tool = (ToolViewModel)menu.Target.DataContext;
+        menu.Items.Clear();
+
+        if (tool.Releases.Count == 0)
+        {
+            menu.Items.Add(new MenuFlyoutItem { Text = tool.HasError ? "Couldn't list versions" : "Looking for versions…", IsEnabled = false });
+            return;
+        }
+
+        foreach (ToolRelease release in tool.Releases.Take(15))
+        {
+            bool isCurrent = tool.IsManaged && tool.Status?.Version == release.Version;
+            var item = new ToggleMenuFlyoutItem
+            {
+                Text = release == tool.Latest ? $"{release.Version} (newest)" : release.Version,
+                IsChecked = isCurrent,
+                IsEnabled = !isCurrent,
+                Command = tool.InstallVersionCommand,
+                CommandParameter = release
+            };
+            ToolTipService.SetToolTip(item, $"Released {release.Published:d}");
+            menu.Items.Add(item);
+        }
     }
-
-    private void Install_Click(object sender, RoutedEventArgs args) =>
-        _viewModel.InstallCommand.Execute((ToolStatus)((Button)sender).Tag);
-
-    private void Update_Click(object sender, RoutedEventArgs args) =>
-        _viewModel.UpdateCommand.Execute((ToolStatus)((Button)sender).Tag);
 }

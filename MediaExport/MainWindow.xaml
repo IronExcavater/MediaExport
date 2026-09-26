@@ -3,42 +3,28 @@
     x:Class="MediaExport.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:converters="using:MediaExport.Converters"
     xmlns:media="using:MediaExport.Media.Controls"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d"
+    xmlns:providers="using:MediaExport.Core.Media.Providers"
+    xmlns:search="using:MediaExport.Search"
     Title="MediaExport">
 
     <Window.SystemBackdrop>
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid x:Name="root">
+    <Grid x:Name="root" Loaded="Root_Loaded">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <!-- Shortcuts that work on every page; Ctrl+, is added in code (it has no named key). Settings lists them all. -->
-        <Grid.KeyboardAccelerators>
-            <KeyboardAccelerator
-                Key="K"
-                Invoked="FocusSearch_Invoked"
-                Modifiers="Control" />
-            <KeyboardAccelerator
-                Key="Number1"
-                Invoked="GoTo_Invoked"
-                Modifiers="Control" />
-            <KeyboardAccelerator
-                Key="Number2"
-                Invoked="GoTo_Invoked"
-                Modifiers="Control" />
-        </Grid.KeyboardAccelerators>
 
         <TitleBar
             x:Name="titleBar"
             Title="MediaExport"
             IsBackButtonVisible="False"
             IsPaneToggleButtonVisible="True"
+            Loaded="TitleBar_Loaded"
             PaneToggleRequested="TitleBar_PaneToggleRequested">
             <TitleBar.Resources>
                 <HorizontalAlignment x:Key="TitleBarContentHorizontalAlignment">Stretch</HorizontalAlignment>
@@ -47,31 +33,33 @@
                 <ImageIconSource ImageSource="ms-appx:///Assets/App/Square44x44Logo.targetsize-24_altform-unplated.png" />
             </TitleBar.IconSource>
 
-            <Grid MaxWidth="600" Margin="16,0" VerticalAlignment="Center" ColumnSpacing="4">
+            <Grid
+                MaxWidth="640"
+                Margin="16,0"
+                VerticalAlignment="Center"
+                ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
                 <ComboBox
-                    x:Name="providerBox"
-                    Height="32"
+                    MinWidth="150"
                     VerticalAlignment="Center"
                     AutomationProperties.Name="Search source"
-                    Background="Transparent"
-                    BorderBrush="Transparent"
                     DropDownClosed="ProviderBox_DropDownClosed"
                     DropDownOpened="ProviderBox_DropDownOpened"
-                    ItemsSource="{Binding Providers}"
-                    SelectedItem="{Binding SelectedProvider, Mode=TwoWay}">
+                    ItemsSource="{x:Bind Search.Providers}"
+                    SelectedItem="{x:Bind Search.SelectedProvider, Mode=OneWay}"
+                    SelectionChanged="ProviderBox_SelectionChanged">
                     <ComboBox.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Orientation="Horizontal" Spacing="12">
+                        <DataTemplate x:DataType="providers:IMediaSearchProvider">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
                                 <Image
                                     Width="20"
                                     Height="20"
-                                    Source="{Binding Id, Converter={StaticResource IconImageConverter}}" />
-                                <TextBlock VerticalAlignment="Center" Text="{Binding DisplayName}" />
+                                    Source="{x:Bind converters:IconImageConverter.GetIcon(Id)}" />
+                                <TextBlock VerticalAlignment="Center" Text="{x:Bind DisplayName}" />
                             </StackPanel>
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
@@ -81,117 +69,135 @@
                     <AutoSuggestBox
                         x:Name="searchBox"
                         AutomationProperties.Name="Search"
-                        Loaded="SearchBox_Loaded"
-                        Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                        ItemsSource="{Binding Suggestions}"
-                        IsSuggestionListOpen="{Binding IsSuggestionListOpen, Mode=TwoWay}"
-                        TextMemberPath="Media.Title"
-                        PlaceholderText="{Binding SearchPlaceholder}"
-                        QueryIcon="Find"
                         GotFocus="SearchBox_GotFocus"
+                        IsSuggestionListOpen="{x:Bind Search.IsSuggestionListOpen, Mode=TwoWay}"
+                        ItemsSource="{x:Bind Search.Suggestions}"
+                        Loaded="SearchBox_Loaded"
+                        PlaceholderText="{x:Bind Search.Placeholder, Mode=OneWay}"
+                        QueryIcon="Find"
+                        QuerySubmitted="SearchBox_QuerySubmitted"
+                        Text="{x:Bind Search.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                         TextChanged="SearchBox_TextChanged"
-                        QuerySubmitted="SearchBox_QuerySubmitted">
+                        TextMemberPath="Query">
+                        <AutoSuggestBox.KeyboardAccelerators>
+                            <KeyboardAccelerator
+                                Key="K"
+                                Invoked="FocusSearch_Invoked"
+                                Modifiers="Control" />
+                        </AutoSuggestBox.KeyboardAccelerators>
                         <AutoSuggestBox.TextBoxStyle>
                             <Style BasedOn="{StaticResource AutoSuggestBoxTextBoxStyle}" TargetType="TextBox">
                                 <Setter Property="IsSpellCheckEnabled" Value="False" />
                             </Style>
                         </AutoSuggestBox.TextBoxStyle>
                         <AutoSuggestBox.ItemTemplate>
-                            <DataTemplate>
+                            <DataTemplate x:DataType="search:SearchSuggestion">
                                 <Grid ColumnSpacing="12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <media:CompactMediaView Media="{Binding Media}" />
+                                    <media:CompactMediaView Media="{x:Bind Media}" Visibility="{x:Bind converters:Show.Unless(IsMessage)}" />
+                                    <TextBlock
+                                        Padding="0,8"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{x:Bind Message}"
+                                        TextWrapping="Wrap"
+                                        Visibility="{x:Bind IsMessage}" />
                                     <FontIcon
                                         Grid.Column="1"
                                         FontSize="14"
                                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                         Glyph="&#xE81C;"
-                                        ToolTipService.ToolTip="Recent"
-                                        Visibility="{Binding IsRecent, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                        ToolTipService.ToolTip="Picked recently"
+                                        Visibility="{x:Bind IsRecent}" />
                                 </Grid>
                             </DataTemplate>
                         </AutoSuggestBox.ItemTemplate>
                     </AutoSuggestBox>
 
-                    <!-- Replaces the box's bottom stroke while searching. -->
+                    <!-- Over the box's bottom stroke while searching, so nothing moves. -->
                     <ProgressBar
                         Margin="1,0"
                         VerticalAlignment="Bottom"
                         CornerRadius="0,0,4,4"
                         IsHitTestVisible="False"
-                        IsIndeterminate="{Binding IsSearching}"
-                        Visibility="{Binding IsSearching, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        IsIndeterminate="{x:Bind Search.IsSearching, Mode=OneWay}"
+                        Visibility="{x:Bind Search.IsSearching, Mode=OneWay}" />
                 </Grid>
             </Grid>
         </TitleBar>
 
+        <!-- The pane stays open in code and its width is animated, so pages resize smoothly with it. -->
         <NavigationView
             x:Name="navView"
             Grid.Row="1"
             IsBackButtonVisible="Collapsed"
+            IsPaneOpen="True"
             IsPaneToggleButtonVisible="False"
-            OpenPaneLength="240"
-            PaneDisplayMode="Auto"
+            IsSettingsVisible="True"
             Loaded="NavView_Loaded"
+            PaneDisplayMode="Left"
             SelectionChanged="NavView_SelectionChanged">
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="Export" Tag="Export">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE896;" />
                     </NavigationViewItem.Icon>
+                    <NavigationViewItem.KeyboardAccelerators>
+                        <KeyboardAccelerator
+                            Key="Number1"
+                            Invoked="GoTo_Invoked"
+                            Modifiers="Control" />
+                    </NavigationViewItem.KeyboardAccelerators>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Activity" Tag="Activity">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE81C;" />
                     </NavigationViewItem.Icon>
                     <NavigationViewItem.InfoBadge>
-                        <InfoBadge
-                            Value="{Binding ActiveExportCount}"
-                            Visibility="{Binding HasActiveExports, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <InfoBadge Visibility="{x:Bind Activity.HasRunning, Mode=OneWay}" Value="{x:Bind Activity.RunningCount, Mode=OneWay}" />
                     </NavigationViewItem.InfoBadge>
+                    <NavigationViewItem.KeyboardAccelerators>
+                        <KeyboardAccelerator
+                            Key="Number2"
+                            Invoked="GoTo_Invoked"
+                            Modifiers="Control" />
+                    </NavigationViewItem.KeyboardAccelerators>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
 
             <Grid>
-                <!-- NavigationView snaps its content to the new size while the pane animates, and Microsoft won't fix it
-                     (microsoft-ui-xaml#9370, #5561). Sliding the content's position with the pane hides most of the jump. -->
-                <Grid.Transitions>
-                    <TransitionCollection>
-                        <RepositionThemeTransition IsStaggeringEnabled="False" />
-                    </TransitionCollection>
-                </Grid.Transitions>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
                 <InfoBar
-                    x:Name="toolsBanner"
-                    Title="Some tools are missing"
-                    Margin="24,16,24,0"
+                    Title="Almost ready"
+                    Margin="24,12,24,0"
                     IsClosable="False"
-                    IsOpen="{Binding HasMissingTools}"
-                    Message="{Binding MissingTools}"
-                    Severity="Warning"
-                    Visibility="{Binding HasMissingTools, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    IsOpen="{x:Bind Settings.HasMissingTools, Mode=OneWay}"
+                    Message="{x:Bind Settings.MissingTools, Mode=OneWay}"
+                    Severity="Informational"
+                    Visibility="{x:Bind Settings.HasMissingTools, Mode=OneWay}">
                     <InfoBar.ActionButton>
-                        <Button Click="SetUpTools_Click" Content="Set up" />
+                        <Button Command="{x:Bind Settings.InstallMissingToolsCommand}" Style="{StaticResource AccentButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <ProgressRing
+                                    Width="16"
+                                    Height="16"
+                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                    IsActive="{x:Bind Settings.IsInstallingMissing, Mode=OneWay}"
+                                    Visibility="{x:Bind Settings.IsInstallingMissing, Mode=OneWay}" />
+                                <TextBlock Text="Install them" />
+                            </StackPanel>
+                        </Button>
                     </InfoBar.ActionButton>
                 </InfoBar>
 
                 <Frame x:Name="navFrame" Grid.Row="1" />
             </Grid>
         </NavigationView>
-
-        <TeachingTip
-            x:Name="errorTip"
-            Title="Search didn't work"
-            Target="{x:Bind searchBox}"
-            Subtitle="{Binding ErrorMessage}"
-            IsOpen="{Binding HasError, Mode=OneWay}"
-            CloseButtonClick="ErrorTip_CloseButtonClick" />
     </Grid>
 </Window>
