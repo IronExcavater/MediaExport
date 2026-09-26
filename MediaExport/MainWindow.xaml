@@ -18,10 +18,19 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
+        <!-- Shortcuts that work on every page; Ctrl+, is added in code (it has no named key). Settings lists them all. -->
         <Grid.KeyboardAccelerators>
             <KeyboardAccelerator
-                Key="F"
+                Key="K"
                 Invoked="FocusSearch_Invoked"
+                Modifiers="Control" />
+            <KeyboardAccelerator
+                Key="Number1"
+                Invoked="GoTo_Invoked"
+                Modifiers="Control" />
+            <KeyboardAccelerator
+                Key="Number2"
+                Invoked="GoTo_Invoked"
                 Modifiers="Control" />
         </Grid.KeyboardAccelerators>
 
@@ -44,19 +53,24 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
+                <!-- The icon fills the button's height, so it reads at a glance without a taller title bar. -->
                 <DropDownButton
                     Height="32"
-                    Padding="8,0,6,0"
+                    Padding="6,0,4,0"
                     AutomationProperties.Name="Search source"
                     Background="Transparent"
                     BorderBrush="Transparent"
                     ToolTipService.ToolTip="{Binding SelectedProvider.DisplayName}">
                     <Image
-                        Width="16"
-                        Height="16"
+                        Width="26"
+                        Height="24"
                         Source="{Binding SelectedProvider.Id, Converter={StaticResource IconImageConverter}}" />
                     <DropDownButton.Flyout>
-                        <MenuFlyout x:Name="providerMenu" Placement="BottomEdgeAlignedLeft" />
+                        <MenuFlyout
+                            x:Name="providerMenu"
+                            Closed="ProviderMenu_Closed"
+                            Opening="ProviderMenu_Opening"
+                            Placement="BottomEdgeAlignedLeft" />
                     </DropDownButton.Flyout>
                 </DropDownButton>
 
@@ -64,10 +78,11 @@
                     <AutoSuggestBox
                         x:Name="searchBox"
                         AutomationProperties.Name="Search"
+                        Loaded="SearchBox_Loaded"
                         Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                         ItemsSource="{Binding Suggestions}"
                         IsSuggestionListOpen="{Binding IsSuggestionListOpen, Mode=TwoWay}"
-                        TextMemberPath="Title"
+                        TextMemberPath="Media.Title"
                         PlaceholderText="{Binding SearchPlaceholder}"
                         QueryIcon="Find"
                         GotFocus="SearchBox_GotFocus"
@@ -80,7 +95,20 @@
                         </AutoSuggestBox.TextBoxStyle>
                         <AutoSuggestBox.ItemTemplate>
                             <DataTemplate>
-                                <media:CompactMediaView Media="{Binding}" />
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <media:CompactMediaView Media="{Binding Media}" />
+                                    <FontIcon
+                                        Grid.Column="1"
+                                        FontSize="14"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        Glyph="&#xE81C;"
+                                        ToolTipService.ToolTip="Recent"
+                                        Visibility="{Binding IsRecent, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                </Grid>
                             </DataTemplate>
                         </AutoSuggestBox.ItemTemplate>
                     </AutoSuggestBox>
@@ -97,12 +125,13 @@
             </Grid>
         </TitleBar>
 
+        <!-- LeftCompact: the pane opens over the content rather than beside it, so pages never reflow when it's toggled. -->
         <NavigationView
             x:Name="navView"
             Grid.Row="1"
             IsBackButtonVisible="Collapsed"
             IsPaneToggleButtonVisible="False"
-            PaneDisplayMode="Auto"
+            PaneDisplayMode="LeftCompact"
             Loaded="NavView_Loaded"
             SelectionChanged="NavView_SelectionChanged">
             <NavigationView.MenuItems>
@@ -123,7 +152,28 @@
                 </NavigationViewItem>
             </NavigationView.MenuItems>
 
-            <Frame x:Name="navFrame" />
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <InfoBar
+                    x:Name="toolsBanner"
+                    Title="Some tools are missing"
+                    Margin="24,16,24,0"
+                    IsClosable="False"
+                    IsOpen="{Binding HasMissingTools}"
+                    Message="{Binding MissingTools}"
+                    Severity="Warning"
+                    Visibility="{Binding HasMissingTools, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <InfoBar.ActionButton>
+                        <Button Click="SetUpTools_Click" Content="Set up" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+
+                <Frame x:Name="navFrame" Grid.Row="1" />
+            </Grid>
         </NavigationView>
 
         <TeachingTip
