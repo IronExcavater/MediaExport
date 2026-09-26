@@ -3,9 +3,9 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MediaExport.Activity;
 using MediaExport.Core.Exporting;
 using MediaExport.Core.Media.Models;
-using MediaExport.Core.Media.Providers;
 using MediaExport.Core.Settings;
 using System;
 using System.Collections.Generic;
@@ -19,650 +19,489 @@ using System.Threading.Tasks;
 
 namespace MediaExport.Export;
 
-public sealed record FormatChoice(string Label, string Extension);
-
-public sealed record BitrateChoice(string Label, int? Kbps);
-
-public sealed record FileNameChoice(string Label, string Template);
-
-/// <summary>A search result, or a result picked before (<see cref="IsRecent"/>).</summary>
-public sealed record SearchSuggestion(MediaSearchResult Media, bool IsRecent)
+public enum ExportState
 {
-    // Suggestions are announced by screen readers using ToString.
-    public override string ToString() => IsRecent ? $"Recent: {Media}" : Media.ToString();
-}
-
-public sealed partial class QualityChoice(string label, int? maxHeight) : ObservableObject
-{
-    public string Label { get; } = label;
-    public int? MaxHeight { get; } = maxHeight;
-
-    /// <summary>False when the media has no stream this tall.</summary>
-    [ObservableProperty]
-    public partial bool IsAvailable { get; set; } = true;
-}
-
-/// <summary>The one line of status beside the export button.</summary>
-public enum ExportHintKind
-{
-    None,
+    /// <summary>Nothing chosen yet.</summary>
+    Empty,
     Checking,
-    Warning,
-    Error,
-    Success
+    Ready,
+    /// <summary>It can't be exported; <see cref="ExportViewModel.StatusText"/> says why.</summary>
+    Blocked,
+    Running,
+    Done,
+    Failed
 }
 
-public partial class ExportViewModel : ObservableObject, IDisposable
+public sealed partial class SubtitleChoice(SubtitleTrack track) : ObservableObject
 {
-    private const int RecentLimit = 12;
-    private static readonly TimeSpan SearchDebounceDelay = TimeSpan.FromMilliseconds(250);
-    private static readonly string[] TimeFormats = [@"%s", @"m\:ss", @"mm\:ss", @"h\:mm\:ss", @"hh\:mm\:ss"];
+    public SubtitleTrack Track { get; } = track;
 
-    // Raising these re-evaluates the export button, so they must not trigger another round.
-    private static readonly HashSet<string> ExportStatusProperties =
-    [
-        nameof(CurrentJob), nameof(IsExporting), nameof(IsExportDone), nameof(IsExportFailed), nameof(CanStartExport),
-        nameof(ExportLabel), nameof(ExportGlyph), nameof(HintKind), nameof(Hint), nameof(HasHint),
-        nameof(IsHintChecking), nameof(IsHintWarning), nameof(IsHintError), nameof(IsHintSuccess)
-    ];
+    [ObservableProperty]
+    public partial bool IsSelected { get; set; }
+
+    public override string ToString() => Track.Name;
+}
+
+/// <summary>The media being exported and every choice about how.</summary>
+public sealed partial class ExportViewModel : ObservableObject
+{
+    private const string Best = "best";
 
     private readonly IMediaDownloader _downloader;
+    private readonly ActivityViewModel _activity;
     private readonly SettingsStore _settings;
-    private readonly Dictionary<string, MediaInspection> _inspections = [];
-    private CancellationTokenSource? _searchCancellation;
-    private CancellationTokenSource? _inspectionCancellation;
-    private bool _isApplyingSettings;
+    private readonly Dictionary<string, MediaDetails> _details = [];
+    private CancellationTokenSource? _inspection;
+    private bool _isRestoring;
 
-    public ExportViewModel(IEnumerable<IMediaSearchProvider> searchProviders, IMediaDownloader downloader, SettingsStore? settings = null)
+    // The options a finished job was made with count as "done" only until something changes.
+    private int _optionsVersion;
+    private int _jobOptionsVersion;
+
+    public ExportViewModel(IMediaDownloader downloader, ActivityViewModel activity, SettingsStore settings)
     {
         _downloader = downloader;
-        _settings = settings ?? new SettingsStore(null);
-        Providers = searchProviders.ToArray();
-        ApplySettings();
-        Jobs.CollectionChanged += (_, _) =>
+        _activity = activity;
+        _settings = settings;
+        AppSettings saved = settings.Current;
+        _isRestoring = true; // Otherwise each choice restored here would save the rest before they're restored.
+
+        Kind = new ChoiceGroup(
+            [new Choice("video", "Video", "Picture and sound"), new Choice("audio", "Audio only", "Just the sound")],
+            saved.IsAudioExport ? "audio" : "video");
+        VideoFormat = new ChoiceGroup(
+            [new Choice("mp4", "MP4", "Plays almost everywhere"), new Choice("mkv", "MKV", "Keeps every subtitle and track"), new Choice("webm", "WebM", "Open format, often smaller")],
+            saved.VideoFormat);
+        AudioFormat = new ChoiceGroup(
+            [new Choice("mp3", "MP3", "Plays almost everywhere"), new Choice("m4a", "M4A", "Apple devices and iTunes"), new Choice("opus", "Opus", "Smallest at the same quality"),
+             new Choice("flac", "FLAC", "Lossless copy of what's there"), new Choice("wav", "WAV", "Uncompressed, for editing")],
+            saved.AudioFormat);
+        VideoQuality = new ChoiceGroup(VideoQualities(null), saved.VideoQuality?.ToString(CultureInfo.InvariantCulture) ?? Best);
+        AudioQuality = new ChoiceGroup(
+            [new Choice(Best, "Best"), new Choice("320", "320 kbps"), new Choice("256", "256 kbps"), new Choice("192", "192 kbps"), new Choice("128", "128 kbps")],
+            saved.AudioBitrate?.ToString(CultureInfo.InvariantCulture) ?? Best);
+        FileName = new ChoiceGroup(
+            [new Choice("%(title)s", "Title"), new Choice("%(uploader)s - %(title)s", "Creator - Title"), new Choice("%(title)s [%(id)s]", "Title [ID]")],
+            saved.FileNameTemplate);
+
+        OutputFolder = saved.OutputFolder ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+        EmbedDetails = saved.EmbedMetadata && saved.EmbedThumbnail;
+        EmbedChapters = saved.EmbedChapters;
+        RemoveSponsors = saved.RemoveSponsors;
+        _isRestoring = false;
+
+        foreach (ChoiceGroup group in new[] { Kind, VideoFormat, AudioFormat, VideoQuality, AudioQuality, FileName })
+            group.Changed += (_, _) => OnOptionChanged();
+        Clips.CollectionChanged += (_, _) => OnOptionChanged();
+        activity.PropertyChanged += (_, args) =>
         {
-            OnPropertyChanged(nameof(HasJobs));
-            OnPropertyChanged(nameof(ActivitySummary));
+            if (args.PropertyName == nameof(ActivityViewModel.RunningCount))
+                RefreshState();
         };
     }
 
-    public void Dispose()
-    {
-        CancelSearch();
-        _inspectionCancellation?.Cancel();
-    }
+    public ChoiceGroup Kind { get; }
+    public ChoiceGroup VideoFormat { get; }
+    public ChoiceGroup AudioFormat { get; }
+    public ChoiceGroup VideoQuality { get; }
+    public ChoiceGroup AudioQuality { get; }
+    public ChoiceGroup FileName { get; }
 
-    public IReadOnlyList<IMediaSearchProvider> Providers { get; }
-    public ObservableCollection<SearchSuggestion> Suggestions { get; } = [];
+    public ObservableCollection<SubtitleChoice> Subtitles { get; } = [];
 
-    public IReadOnlyList<FormatChoice> VideoFormats { get; } =
-        [new("MP4", "mp4"), new("MKV", "mkv"), new("WebM", "webm")];
-
-    public IReadOnlyList<FormatChoice> AudioFormats { get; } =
-        [new("MP3", "mp3"), new("M4A", "m4a"), new("Opus", "opus"), new("WAV", "wav")];
-
-    public IReadOnlyList<QualityChoice> Qualities { get; } =
-        [new("Best available", null), new("2160p (4K)", 2160), new("1440p", 1440), new("1080p", 1080), new("720p", 720), new("480p", 480)];
-
-    public IReadOnlyList<BitrateChoice> AudioBitrates { get; } =
-        [new("Best available", null), new("320 kbps", 320), new("256 kbps", 256), new("192 kbps", 192), new("128 kbps", 128)];
-
-    public IReadOnlyList<FileNameChoice> FileNames { get; } =
-        [new("Title", "%(title)s"), new("Creator - Title", "%(uploader)s - %(title)s"), new("Title [ID]", "%(title)s [%(id)s]")];
-
-    /// <summary>Every export started this session, newest first.</summary>
-    public ObservableCollection<ExportJob> Jobs { get; } = [];
+    /// <summary>Parts to keep, in order; empty keeps all of it.</summary>
+    public ObservableCollection<Clip> Clips { get; } = [];
 
     [ObservableProperty]
-    public partial string SearchText { get; set; } = string.Empty;
+    [NotifyPropertyChangedFor(nameof(HasMedia), nameof(Duration))]
+    public partial MediaSearchResult? Media { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SearchPlaceholder))]
-    public partial IMediaSearchProvider? SelectedProvider { get; set; }
+    [NotifyPropertyChangedFor(nameof(Chapters), nameof(HasChapters), nameof(HasSubtitles), nameof(CanRemoveSponsors))]
+    public partial MediaDetails? Details { get; private set; }
 
     [ObservableProperty]
-    public partial bool IsSearching { get; set; }
+    public partial string OutputFolder { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsPlayerObscured))]
-    public partial bool IsSuggestionListOpen { get; set; }
+    public partial bool EmbedDetails { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsPlayerObscured))]
-    public partial bool IsSourceMenuOpen { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasError))]
-    public partial string? ErrorMessage { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSelectedResult), nameof(FileNamePreview), nameof(TrimEndPlaceholder))]
-    public partial MediaSearchResult? SelectedResult { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsUnavailable), nameof(UnavailableReason), nameof(CanExportVideo))]
-    public partial MediaInspection? Inspection { get; set; }
-
-    [ObservableProperty]
-    public partial bool IsInspecting { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsVideoExport), nameof(FileNamePreview), nameof(TrimSummary))]
-    public partial bool IsAudioExport { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FileNamePreview))]
-    public partial FormatChoice SelectedVideoFormat { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FileNamePreview))]
-    public partial FormatChoice SelectedAudioFormat { get; set; }
-
-    [ObservableProperty]
-    public partial QualityChoice SelectedQuality { get; set; }
-
-    [ObservableProperty]
-    public partial BitrateChoice SelectedAudioBitrate { get; set; }
-
-    [ObservableProperty]
-    public partial string OutputFolder { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MetadataSummary))]
-    public partial bool EmbedMetadata { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MetadataSummary))]
-    public partial bool EmbedThumbnail { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MetadataSummary))]
     public partial bool EmbedChapters { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SubtitlesSummary))]
-    public partial bool DownloadSubtitles { get; set; }
+    public partial bool RemoveSponsors { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SubtitlesSummary))]
-    public partial string SubtitleLanguages { get; set; } = string.Empty;
+    public partial bool SplitChapters { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SubtitlesSummary))]
-    public partial bool IncludeAutomaticSubtitles { get; set; }
+    public partial bool JoinClips { get; set; } = true;
+
+    /// <summary>The export shown on the button: running, or finished with the current options.</summary>
+    [ObservableProperty]
+    public partial ExportJob? Job { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TrimSummary), nameof(TrimError))]
-    public partial string TrimStart { get; set; } = string.Empty;
+    [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsDone), nameof(IsFailed), nameof(IsBlocked), nameof(CanStart), nameof(IsBusy), nameof(ExportGlyph))]
+    public partial ExportState State { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(TrimSummary), nameof(TrimError))]
-    public partial string TrimEnd { get; set; } = string.Empty;
+    public partial string? StatusText { get; private set; }
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FileNamePreview))]
-    public partial FileNameChoice SelectedFileName { get; set; }
+    public bool HasMedia => Media is not null;
+    public bool IsAudio => Kind.SelectedKey == "audio";
+    public bool IsVideo => !IsAudio;
+    public bool CanExportVideo => Details?.HasVideo ?? Media?.Kind != MediaKind.Audio;
+    public bool HasChapters => Chapters.Count > 0;
+    public bool HasSubtitles => Subtitles.Count > 0;
+    public bool CanRemoveSponsors => Details?.SupportsSponsorBlock == true;
+    public bool HasClips => Clips.Count > 0;
+    public bool HasSeveralClips => Clips.Count > 1;
+    public TimeSpan Duration => Media?.Duration ?? TimeSpan.Zero;
+    public IReadOnlyList<Chapter> Chapters => Details?.Chapters ?? [];
 
-    /// <summary>The latest export of the selected media.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSelectedJob))]
-    public partial ExportJob? SelectedJob { get; set; }
+    public bool IsRunning => State == ExportState.Running;
+    public bool IsDone => State == ExportState.Done;
+    public bool IsFailed => State == ExportState.Failed;
+    public bool IsBlocked => State == ExportState.Blocked;
+    public bool IsBusy => State is ExportState.Checking;
+    public bool CanStart => State is ExportState.Ready or ExportState.Failed;
+    public bool IsIndeterminate => IsRunning && Job?.IsIndeterminate == true;
+    public string ExportGlyph => IsFailed ? "" : "";
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasActiveExports), nameof(ActivitySummary))]
-    public partial int ActiveExportCount { get; set; }
-
-    public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
-    public bool HasSelectedResult => SelectedResult is not null;
-    public bool HasSelectedJob => SelectedJob is not null;
-    public bool HasActiveExports => ActiveExportCount > 0;
-    public bool HasJobs => Jobs.Count > 0;
-    public bool HasRecentResults => _settings.Current.RecentResults.Count > 0;
-    public string SearchPlaceholder => $"Search {SelectedProvider?.DisplayName}";
-
-    public string ActivitySummary =>
-        $"{Jobs.Count} {(Jobs.Count == 1 ? "export" : "exports")}"
-        + (ActiveExportCount > 0 ? $" · {ActiveExportCount} running" : string.Empty);
-
-    /// <summary>Web players swallow input meant for popups drawn over them, so they step aside.</summary>
-    public bool IsPlayerObscured => IsSuggestionListOpen || IsSourceMenuOpen;
-
-    public bool IsUnavailable => Inspection is { IsExportable: false };
-    public string? UnavailableReason => IsUnavailable ? Inspection!.Problem : null;
-    public bool CanExportVideo => Inspection?.HasVideo ?? SelectedResult?.Kind != MediaKind.Audio;
-
-    public bool IsVideoExport
+    public string ExportLabel => State switch
     {
-        get => !IsAudioExport;
-        set => IsAudioExport = !value;
-    }
-
-    // The export button: Export, then progress (click to cancel), then the file, or back to Export on failure.
-
-    /// <summary>The selected media's export while it runs, or while its result still matches the chosen options.</summary>
-    public ExportJob? CurrentJob =>
-        SelectedJob is { } job && (job.IsRunning || job.Options == CreateOptions()) ? job : null;
-
-    public bool IsExporting => CurrentJob?.IsRunning == true;
-    public bool IsExportDone => CurrentJob?.IsCompleted == true;
-    public bool IsExportFailed => CurrentJob?.IsFailed == true;
-    public bool CanStartExport => !IsExporting && !IsExportDone;
-    public string ExportLabel => IsExportFailed ? "Try again" : "Export";
-    public string ExportGlyph => IsExportFailed ? "" : "";
-
-    public ExportHintKind HintKind => this switch
-    {
-        { IsUnavailable: true } or { TrimError: not null } => ExportHintKind.Warning,
-        { IsExportFailed: true } => ExportHintKind.Error,
-        { IsExportDone: true } => ExportHintKind.Success,
-        { IsInspecting: true, IsExporting: false } => ExportHintKind.Checking,
-        _ => ExportHintKind.None
+        ExportState.Failed => "Try again",
+        _ when Clips.Count == 1 => "Export clip",
+        _ when Clips.Count > 1 => JoinClips ? $"Export {Clips.Count} clips as one" : $"Export {Clips.Count} clips",
+        _ => IsAudio ? "Export audio" : "Export video"
     };
 
-    public string? Hint => HintKind switch
+    public double ProgressFraction => Job is { } job && (IsRunning || IsFailed) ? job.DisplayProgress / 100 : 0;
+    public string? JobStatus => Job?.Status;
+
+    public string ClipsSummary => Clips.Count switch
     {
-        ExportHintKind.Warning => UnavailableReason ?? TrimError,
-        ExportHintKind.Error => CurrentJob!.Status,
-        ExportHintKind.Success => $"{CurrentJob!.Status} as {Path.GetFileName(CurrentJob.OutputPath)}",
-        ExportHintKind.Checking => "Checking what's available",
-        _ => null
+        0 => "The whole thing",
+        1 => $"{Format(Clips[0].Start)} to {Format(Clips[0].End)}",
+        var count => $"{count} clips, {Format(TimeSpan.FromTicks(Clips.Sum(clip => clip.Length.Ticks)))} in all"
     };
-
-    public bool HasHint => HintKind != ExportHintKind.None;
-    public bool IsHintChecking => HintKind == ExportHintKind.Checking;
-    public bool IsHintWarning => HintKind == ExportHintKind.Warning;
-    public bool IsHintError => HintKind == ExportHintKind.Error;
-    public bool IsHintSuccess => HintKind == ExportHintKind.Success;
-
-    public string MetadataSummary =>
-        new[] { EmbedMetadata ? "Details" : null, EmbedThumbnail ? "cover art" : null, EmbedChapters ? "chapters" : null }
-            .OfType<string>().ToArray() is { Length: > 0 } parts
-            ? Capitalize(string.Join(", ", parts)) + " embedded"
-            : "Nothing embedded";
-
-    public string SubtitlesSummary => DownloadSubtitles
-        ? $"{SubtitleLanguages.Trim()}{(IncludeAutomaticSubtitles ? ", including automatic" : string.Empty)}, embedded"
-        : "Off";
-
-    public string TrimSummary => (ParseTime(TrimStart), ParseTime(TrimEnd)) switch
-    {
-        _ when TrimError is not null => TrimError,
-        (null, null) => "Full length",
-        (var start, var end) => $"{Format(start ?? TimeSpan.Zero)} – {(end is { } value ? Format(value) : "end")}"
-    };
-
-    public string TrimEndPlaceholder => SelectedResult?.Duration is { } duration ? Format(duration) : "End";
-
-    public string? TrimError
-    {
-        get
-        {
-            if (TrimStart.Length > 0 && ParseTime(TrimStart) is null || TrimEnd.Length > 0 && ParseTime(TrimEnd) is null)
-                return "Use times like 1:30";
-
-            return ParseTime(TrimStart) is { } start && ParseTime(TrimEnd) is { } end && end <= start
-                ? "The end must come after the start"
-                : null;
-        }
-    }
 
     public string FileNamePreview
     {
         get
         {
-            string name = SelectedFileName.Template
-                .Replace("%(title)s", SelectedResult?.Title ?? "Title")
-                .Replace("%(uploader)s", SelectedResult?.Creator ?? "Creator")
-                .Replace("%(id)s", SelectedResult?.Identity ?? "id");
-            return $"{name}.{(IsAudioExport ? SelectedAudioFormat : SelectedVideoFormat).Extension}";
+            string name = (FileName.SelectedKey ?? "%(title)s")
+                .Replace("%(title)s", Media?.Title ?? "Title")
+                .Replace("%(uploader)s", Media?.Creator ?? "Creator")
+                .Replace("%(id)s", Media?.Identity ?? "id");
+            string extension = (IsAudio ? AudioFormat : VideoFormat).SelectedKey ?? "mp4";
+            return Clips.Count > 1 && !JoinClips ? $"{name} (part 1).{extension}, …" : $"{name}.{extension}";
         }
     }
 
-    /// <summary>Opens the suggestions on focus: recent results when there's no text yet.</summary>
-    public void ShowSuggestions()
+    /// <summary>Shows <paramref name="media"/>, with its details if they're already known.</summary>
+    public void Open(MediaSearchResult media, MediaDetails? details = null)
     {
-        if (IsSearching)
-            return;
+        if (details is not null)
+            _details[media.SourceUrl] = details;
 
-        if (SearchText.Trim().Length == 0)
-            ShowSuggestions([], string.Empty);
+        _isRestoring = true;
+        Media = media;
+        Clips.Clear();
+        SplitChapters = false;
+        Details = null;
+        Subtitles.Clear();
+        if (media.Kind == MediaKind.Audio)
+            Kind.Select("audio");
+        _isRestoring = false;
 
-        IsSuggestionListOpen = Suggestions.Count > 0;
+        Job = _activity.FindRunning(media);
+        _ = InspectAsync(media);
+        RefreshAll();
     }
 
-    public void ClearRecentResults()
+    public void Close()
     {
-        _settings.Current.RecentResults.Clear();
-        _settings.Save();
-        foreach (SearchSuggestion recent in Suggestions.Where(suggestion => suggestion.IsRecent).ToArray())
-            Suggestions.Remove(recent);
-        OnPropertyChanged(nameof(HasRecentResults));
+        _inspection?.Cancel();
+        Media = null;
+        Details = null;
+        Job = null;
+        Clips.Clear();
+        RefreshAll();
     }
 
-    /// <summary>Removes finished exports, and cancels then removes running ones.</summary>
-    public void Remove(IEnumerable<ExportJob> jobs)
+    /// <summary>Opens a finished export's media with the same choices, ready to go again.</summary>
+    public void OpenAgain(ExportJob job)
     {
-        foreach (ExportJob job in jobs.ToArray())
-        {
-            job.CancelCommand.Execute(null);
-            Jobs.Remove(job);
-            if (SelectedJob == job)
-                SelectedJob = null;
-        }
+        Open(job.Media);
+        ExportOptions options = job.Options;
+        Kind.Select(options.Kind == MediaKind.Audio ? "audio" : "video");
+        (options.Kind == MediaKind.Audio ? AudioFormat : VideoFormat).Select(options.Format);
+        VideoQuality.Select(options.MaxHeight?.ToString(CultureInfo.InvariantCulture) ?? Best);
+        AudioQuality.Select(options.AudioBitrate?.ToString(CultureInfo.InvariantCulture) ?? Best);
+        foreach (Clip clip in options.Clips)
+            Clips.Add(clip);
+        JoinClips = options.JoinClips;
+        RemoveSponsors = options.RemoveSponsors;
     }
 
     [RelayCommand]
-    private void ClearFinished() => Remove(Jobs.Where(job => !job.IsRunning));
-
-    [RelayCommand]
-    private void CancelExport() => CurrentJob?.CancelCommand.Execute(null);
-
-    // Leaves the list open: choosing a suggestion changes the text, and closing would drop the choice.
-    partial void OnSearchTextChanged(string value)
+    private void Export()
     {
-        if (!string.IsNullOrWhiteSpace(value))
+        if (!CanStart || Media is null)
             return;
 
-        CancelSearch();
-        Suggestions.Clear();
-        ErrorMessage = null;
-        SelectedResult = null;
-        IsSearching = false;
-    }
-
-    partial void OnSelectedProviderChanged(IMediaSearchProvider? value)
-    {
-        Suggestions.Clear();
-        if (!_isApplyingSettings && !string.IsNullOrWhiteSpace(SearchText))
-            SearchCommand.Execute(null);
-    }
-
-    partial void OnSelectedResultChanged(MediaSearchResult? value)
-    {
-        SelectedJob = value is null ? null : Jobs.FirstOrDefault(job => job.Media.SourceUrl == value.SourceUrl);
-        if (value is not null)
-            IsAudioExport = value.Kind == MediaKind.Audio;
-
-        _ = InspectAsync(value);
-    }
-
-    partial void OnSelectedJobChanged(ExportJob? oldValue, ExportJob? newValue)
-    {
-        if (oldValue is not null)
-            oldValue.PropertyChanged -= OnSelectedJobPropertyChanged;
-        if (newValue is not null)
-            newValue.PropertyChanged += OnSelectedJobPropertyChanged;
-    }
-
-    private void OnSelectedJobPropertyChanged(object? sender, PropertyChangedEventArgs args) => RaiseExportStatus();
-
-    [RelayCommand(AllowConcurrentExecutions = true)]
-    private async Task SearchAsync()
-    {
-        if (SelectedProvider is null)
-            return;
-
-        string query = SearchText.Trim();
-        if (query.Length == 0)
-        {
-            ShowSuggestions();
-            return;
-        }
-
-        CancellationTokenSource searchCancellation = StartSearch();
-        CancellationToken token = searchCancellation.Token;
-
-        IsSearching = true;
-        ErrorMessage = null;
-
-        // Recent results that match show straight away; the search fills in below them.
-        ShowSuggestions([], query);
-        IsSuggestionListOpen = Suggestions.Count > 0;
-
-        try
-        {
-            await Task.Delay(SearchDebounceDelay, token);
-            IReadOnlyList<MediaSearchResult> results = await SelectedProvider.SearchAsync(query, token);
-
-            if (token.IsCancellationRequested)
-                return;
-
-            ShowSuggestions(results, query);
-            IsSuggestionListOpen = Suggestions.Count > 0;
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception exception) when (!token.IsCancellationRequested)
-        {
-            ErrorMessage = exception.Message;
-            IsSuggestionListOpen = false;
-        }
-        finally
-        {
-            if (ReferenceEquals(_searchCancellation, searchCancellation))
-                IsSearching = false;
-        }
+        _jobOptionsVersion = _optionsVersion;
+        Job = _activity.Start(Media, CreateOptions());
     }
 
     [RelayCommand]
-    private void SelectResult(MediaSearchResult result)
-    {
-        CancelSearch();
-        IsSearching = false;
-        SelectedResult = result;
-        IsSuggestionListOpen = false;
+    private void Cancel() => Job?.CancelCommand.Execute(null);
 
-        List<MediaSearchResult> recents = _settings.Current.RecentResults;
-        recents.RemoveAll(recent => recent.SourceUrl == result.SourceUrl);
-        recents.Insert(0, result);
-        if (recents.Count > RecentLimit)
-            recents.RemoveRange(RecentLimit, recents.Count - RecentLimit);
-        _settings.Save();
-        OnPropertyChanged(nameof(HasRecentResults));
+    [RelayCommand]
+    private void ExportAgain()
+    {
+        _optionsVersion++;
+        RefreshState();
+        Export();
     }
 
-    private bool CanExport() => HasSelectedResult && !IsUnavailable && TrimError is null && CanStartExport;
+    [RelayCommand]
+    private void ClearClips() => Clips.Clear();
 
-    [RelayCommand(AllowConcurrentExecutions = true, CanExecute = nameof(CanExport))]
-    private Task ExportAsync() => RunExportAsync();
+    [RelayCommand]
+    private void OpenFolder() =>
+        System.Diagnostics.Process.Start("explorer.exe", $"\"{OutputFolder}\"");
 
-    [RelayCommand(AllowConcurrentExecutions = true)]
-    private Task ExportAgainAsync() => RunExportAsync();
-
-    // ponytail: exports run side by side with no queue; add one if people start many at once.
-    private async Task RunExportAsync()
+    internal ExportOptions CreateOptions()
     {
-        if (SelectedResult is not { } media)
-            return;
-
-        var job = new ExportJob(media, CreateOptions());
-        Jobs.Insert(0, job);
-        SelectedJob = job;
-        ActiveExportCount++;
-        try
-        {
-            await job.RunAsync(_downloader);
-        }
-        finally
-        {
-            ActiveExportCount--;
-        }
-    }
-
-    private ExportOptions CreateOptions() =>
-        new(
-            IsAudioExport ? MediaKind.Audio : MediaKind.Video,
-            IsAudioExport ? SelectedAudioFormat.Extension : SelectedVideoFormat.Extension,
-            IsAudioExport ? null : SelectedQuality.MaxHeight,
+        bool audio = IsAudio;
+        return new ExportOptions(
+            audio ? MediaKind.Audio : MediaKind.Video,
+            (audio ? AudioFormat : VideoFormat).SelectedKey ?? (audio ? "mp3" : "mp4"),
+            audio ? null : ParseNumber(VideoQuality.SelectedKey),
             OutputFolder)
         {
-            AudioBitrate = IsAudioExport ? SelectedAudioBitrate.Kbps : null,
-            EmbedMetadata = EmbedMetadata,
-            EmbedThumbnail = EmbedThumbnail,
-            EmbedChapters = EmbedChapters,
-            SubtitleLanguages = !IsAudioExport && DownloadSubtitles && SubtitleLanguages.Trim().Length > 0
-                ? SubtitleLanguages.Replace(" ", string.Empty)
-                : null,
-            IncludeAutomaticSubtitles = IncludeAutomaticSubtitles,
-            TrimStart = ParseTime(TrimStart),
-            TrimEnd = ParseTime(TrimEnd),
-            FileNameTemplate = SelectedFileName.Template
+            AudioBitrate = audio ? ParseNumber(AudioQuality.SelectedKey) : null,
+            EmbedMetadata = EmbedDetails,
+            EmbedThumbnail = EmbedDetails,
+            EmbedChapters = EmbedChapters && Clips.Count == 0,
+            SubtitleLanguages = audio ? [] : Subtitles.Where(choice => choice.IsSelected).Select(choice => choice.Track.Language).ToArray(),
+            Clips = Clips.ToArray(),
+            JoinClips = JoinClips,
+            SplitChapters = SplitChapters && HasChapters && Clips.Count == 0,
+            RemoveSponsors = RemoveSponsors && CanRemoveSponsors,
+            CookiesFromBrowser = _settings.Current.CookiesFromBrowser,
+            FileNameTemplate = FileName.SelectedKey ?? "%(title)s"
         };
-
-    /// <summary>Recent results matching the query (all of them when it's empty), then the search results.</summary>
-    private void ShowSuggestions(IReadOnlyList<MediaSearchResult> results, string query)
-    {
-        string[] words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        SearchSuggestion[] recents = _settings.Current.RecentResults
-            .Where(recent => words.All(word => $"{recent.Title} {recent.Creator}".Contains(word, StringComparison.OrdinalIgnoreCase)))
-            .Take(words.Length == 0 ? RecentLimit : 3)
-            .Select(recent => new SearchSuggestion(recent, true))
-            .ToArray();
-
-        Suggestions.Clear();
-        foreach (SearchSuggestion recent in recents)
-            Suggestions.Add(recent);
-        foreach (MediaSearchResult result in results.Where(result => recents.All(recent => recent.Media.SourceUrl != result.SourceUrl)))
-            Suggestions.Add(new SearchSuggestion(result, false));
     }
 
-    private async Task InspectAsync(MediaSearchResult? media)
+    partial void OnJobChanged(ExportJob? oldValue, ExportJob? newValue)
     {
-        _inspectionCancellation?.Cancel();
-        Inspection = null;
-        IsInspecting = false;
-        foreach (QualityChoice quality in Qualities)
-            quality.IsAvailable = true;
-
-        if (media is null)
-            return;
-
-        if (_inspections.TryGetValue(media.SourceUrl, out MediaInspection? known))
-        {
-            ApplyInspection(known);
-            return;
-        }
-
-        var inspectionCancellation = new CancellationTokenSource();
-        _inspectionCancellation = inspectionCancellation;
-        IsInspecting = true;
-        try
-        {
-            MediaInspection inspection = await _downloader.InspectAsync(media.SourceUrl, inspectionCancellation.Token);
-            _inspections[media.SourceUrl] = inspection;
-            if (!inspectionCancellation.IsCancellationRequested)
-                ApplyInspection(inspection);
-        }
-        catch (Exception)
-        {
-            // Inspection only refines the options; an export still reports its own errors.
-        }
-        finally
-        {
-            if (ReferenceEquals(_inspectionCancellation, inspectionCancellation))
-                IsInspecting = false;
-        }
+        if (oldValue is not null)
+            oldValue.PropertyChanged -= OnJobPropertyChanged;
+        if (newValue is not null)
+            newValue.PropertyChanged += OnJobPropertyChanged;
+        RefreshState();
     }
 
-    private void ApplyInspection(MediaInspection inspection)
-    {
-        Inspection = inspection;
-        if (!inspection.HasVideo)
-            IsAudioExport = true;
+    private void OnJobPropertyChanged(object? sender, PropertyChangedEventArgs args) => RefreshState();
 
-        foreach (QualityChoice quality in Qualities)
-            quality.IsAvailable = quality.MaxHeight is null || inspection.MaxHeight is null || quality.MaxHeight <= inspection.MaxHeight;
-
-        // The tallest height it does have, or "Best available" when it's shorter than every preset.
-        if (!SelectedQuality.IsAvailable)
-            SelectedQuality = Qualities.FirstOrDefault(quality => quality.IsAvailable && quality.MaxHeight is not null) ?? Qualities[0];
-    }
-
-    private void ApplySettings()
-    {
-        AppSettings settings = _settings.Current;
-        _isApplyingSettings = true;
-        SelectedProvider = Providers.FirstOrDefault(provider => provider.Id == settings.ProviderId) ?? Providers.FirstOrDefault();
-        SelectedVideoFormat = VideoFormats.FirstOrDefault(format => format.Extension == settings.VideoFormat) ?? VideoFormats[0];
-        SelectedAudioFormat = AudioFormats.FirstOrDefault(format => format.Extension == settings.AudioFormat) ?? AudioFormats[0];
-        SelectedQuality = Qualities.FirstOrDefault(quality => quality.MaxHeight == settings.VideoQuality) ?? Qualities[0];
-        SelectedAudioBitrate = AudioBitrates.FirstOrDefault(bitrate => bitrate.Kbps == settings.AudioBitrate) ?? AudioBitrates[0];
-        SelectedFileName = FileNames.FirstOrDefault(name => name.Template == settings.FileNameTemplate) ?? FileNames[0];
-        OutputFolder = settings.OutputFolder ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-        EmbedMetadata = settings.EmbedMetadata;
-        EmbedThumbnail = settings.EmbedThumbnail;
-        EmbedChapters = settings.EmbedChapters;
-        SubtitleLanguages = settings.SubtitleLanguages;
-        _isApplyingSettings = false;
-    }
-
-    // Choices people rarely change per export are remembered; everything else re-evaluates the export button.
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (e.PropertyName is null || ExportStatusProperties.Contains(e.PropertyName))
-            return;
-
-        if (!_isApplyingSettings && Remember(e.PropertyName))
-            _settings.Save();
-
-        RaiseExportStatus();
+        if (e.PropertyName is nameof(OutputFolder) or nameof(EmbedDetails) or nameof(EmbedChapters)
+            or nameof(RemoveSponsors) or nameof(SplitChapters) or nameof(JoinClips))
+        {
+            OnOptionChanged();
+        }
     }
 
-    private bool Remember(string propertyName)
+    private void OnOptionChanged()
     {
-        AppSettings settings = _settings.Current;
-        switch (propertyName)
+        if (_isRestoring)
+            return;
+
+        _optionsVersion++;
+        Remember();
+        RefreshAll();
+    }
+
+    private void Remember()
+    {
+        AppSettings saved = _settings.Current;
+        saved.IsAudioExport = IsAudio;
+        saved.VideoFormat = VideoFormat.SelectedKey ?? saved.VideoFormat;
+        saved.AudioFormat = AudioFormat.SelectedKey ?? saved.AudioFormat;
+        saved.VideoQuality = ParseNumber(VideoQuality.SelectedKey);
+        saved.AudioBitrate = ParseNumber(AudioQuality.SelectedKey);
+        saved.FileNameTemplate = FileName.SelectedKey ?? saved.FileNameTemplate;
+        saved.OutputFolder = OutputFolder;
+        saved.EmbedMetadata = saved.EmbedThumbnail = EmbedDetails;
+        saved.EmbedChapters = EmbedChapters;
+        saved.RemoveSponsors = RemoveSponsors;
+        if (HasSubtitles)
+            saved.SubtitleLanguageCodes = Subtitles.Where(choice => choice.IsSelected).Select(choice => choice.Track.Language).ToList();
+        _settings.Save();
+    }
+
+    private async Task InspectAsync(MediaSearchResult media)
+    {
+        _inspection?.Cancel();
+        if (_details.TryGetValue(media.SourceUrl, out MediaDetails? known))
         {
-            case nameof(SelectedProvider): settings.ProviderId = SelectedProvider?.Id; break;
-            case nameof(SelectedVideoFormat): settings.VideoFormat = SelectedVideoFormat.Extension; break;
-            case nameof(SelectedAudioFormat): settings.AudioFormat = SelectedAudioFormat.Extension; break;
-            case nameof(SelectedQuality): settings.VideoQuality = SelectedQuality.MaxHeight; break;
-            case nameof(SelectedAudioBitrate): settings.AudioBitrate = SelectedAudioBitrate.Kbps; break;
-            case nameof(SelectedFileName): settings.FileNameTemplate = SelectedFileName.Template; break;
-            case nameof(OutputFolder): settings.OutputFolder = OutputFolder; break;
-            case nameof(EmbedMetadata): settings.EmbedMetadata = EmbedMetadata; break;
-            case nameof(EmbedThumbnail): settings.EmbedThumbnail = EmbedThumbnail; break;
-            case nameof(EmbedChapters): settings.EmbedChapters = EmbedChapters; break;
-            case nameof(SubtitleLanguages): settings.SubtitleLanguages = SubtitleLanguages; break;
-            default: return false;
+            ApplyDetails(known);
+            return;
         }
 
-        return true;
+        var inspection = new CancellationTokenSource();
+        _inspection = inspection;
+        RefreshState();
+        try
+        {
+            MediaDetails details = await _downloader.InspectAsync(media.SourceUrl, inspection.Token);
+            _details[media.SourceUrl] = details;
+            if (!inspection.IsCancellationRequested && Media == media)
+                ApplyDetails(details);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // Details only refine the choices; the export still reports its own errors.
+            if (Media == media)
+                ApplyDetails(new MediaDetails(null, [], null, [], [], false));
+        }
+        catch (OperationCanceledException) { }
     }
 
-    private void RaiseExportStatus()
+    private void ApplyDetails(MediaDetails details)
     {
-        foreach (string property in ExportStatusProperties)
-            OnPropertyChanged(property);
-        ExportCommand.NotifyCanExecuteChanged();
+        _isRestoring = true;
+        Details = details;
+
+        Kind.Items[0].IsEnabled = CanExportVideo;
+        if (!CanExportVideo)
+            Kind.Select("audio");
+
+        VideoQuality.Reset(VideoQualities(details), VideoQuality.SelectedKey ?? _settings.Current.VideoQuality?.ToString(CultureInfo.InvariantCulture));
+        // Remembered heights the media doesn't have fall back to the tallest it does, not to "Best".
+        if (_settings.Current.VideoQuality is int height && VideoQuality.SelectedKey == Best && details.VideoQualities.Count > 0)
+            VideoQuality.Select(details.VideoQualities.FirstOrDefault(quality => quality.Height <= height)?.Height.ToString(CultureInfo.InvariantCulture) ?? Best);
+
+        Subtitles.Clear();
+        foreach (SubtitleTrack track in details.Subtitles)
+            Subtitles.Add(new SubtitleChoice(track) { IsSelected = _settings.Current.SubtitleLanguageCodes.Contains(track.Language) });
+        foreach (SubtitleChoice choice in Subtitles)
+            choice.PropertyChanged += (_, _) => OnOptionChanged();
+
+        _isRestoring = false;
+        RefreshAll();
     }
 
-    internal static TimeSpan? ParseTime(string text) =>
-        TimeSpan.TryParseExact(text.Trim(), TimeFormats, CultureInfo.InvariantCulture, out TimeSpan time) ? time : null;
+    private static IEnumerable<Choice> VideoQualities(MediaDetails? details)
+    {
+        yield return new Choice(Best, "Best");
+        IEnumerable<(int Height, long? Bytes)> heights = details is { VideoQualities.Count: > 0 }
+            ? details.VideoQualities.Select(quality => (quality.Height, quality.ApproximateBytes))
+            : new[] { 2160, 1440, 1080, 720, 480 }.Select(height => (height, (long?)null));
 
-    private static string Format(TimeSpan time) =>
+        foreach ((int height, long? bytes) in heights)
+            yield return new Choice(height.ToString(CultureInfo.InvariantCulture), Label(height)) { Detail = bytes is long size ? FormatSize(size) : null };
+
+        static string Label(int height) => height switch
+        {
+            >= 2160 => $"4K",
+            >= 1440 => "1440p",
+            _ => $"{height}p"
+        };
+    }
+
+    private void RefreshAll()
+    {
+        OnPropertyChanged(nameof(IsAudio));
+        OnPropertyChanged(nameof(IsVideo));
+        OnPropertyChanged(nameof(CanExportVideo));
+        OnPropertyChanged(nameof(HasClips));
+        OnPropertyChanged(nameof(HasSeveralClips));
+        OnPropertyChanged(nameof(ClipsSummary));
+        OnPropertyChanged(nameof(FileNamePreview));
+        OnPropertyChanged(nameof(HasSubtitles));
+        UpdateKindDetails();
+        RefreshState();
+    }
+
+    private void UpdateKindDetails()
+    {
+        string videoQuality = VideoQuality.Selected?.Label ?? "Best";
+        Kind.Items[0].Detail = CanExportVideo ? $"{VideoFormat.Selected?.Label} · {videoQuality}" : "Not available for this one";
+        Kind.Items[1].Detail = $"{AudioFormat.Selected?.Label} · {AudioQuality.Selected?.Label}";
+    }
+
+    private void RefreshState()
+    {
+        (State, StatusText) = Evaluate();
+        OnPropertyChanged(nameof(ExportLabel));
+        OnPropertyChanged(nameof(ProgressFraction));
+        OnPropertyChanged(nameof(IsIndeterminate));
+        OnPropertyChanged(nameof(JobStatus));
+    }
+
+    private (ExportState, string?) Evaluate()
+    {
+        if (Media is null)
+            return (ExportState.Empty, null);
+
+        // The button shows the progress; the line under it says where it's going.
+        string destination = $"Saves to {FolderName(OutputFolder)}";
+        if (Job is { IsRunning: true })
+            return (ExportState.Running, destination.Replace("Saves", "Saving"));
+
+        if (Details is { IsExportable: false } unavailable)
+            return (ExportState.Blocked, unavailable.Problem);
+
+        if (Job is { } finished && _jobOptionsVersion == _optionsVersion)
+        {
+            if (finished.IsCompleted)
+                return (ExportState.Done, finished.Files.Count > 1 ? finished.Status : $"Saved as {Path.GetFileName(finished.OutputPath)}");
+            if (finished.IsFailed)
+                return (ExportState.Failed, finished.Status);
+        }
+
+        if (Details is null)
+            return (ExportState.Checking, "Checking what's available");
+
+        return (ExportState.Ready, EstimateSize() is long bytes ? $"About {FormatSize(bytes)} · saves to {FolderName(OutputFolder)}" : destination);
+    }
+
+    private static string FolderName(string folder) =>
+        Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar)) is { Length: > 0 } name ? name : folder;
+
+    private long? EstimateSize()
+    {
+        long? full;
+        if (IsAudio)
+            full = ParseNumber(AudioQuality.SelectedKey) is int kbps && Duration > TimeSpan.Zero ? (long)(kbps * 125 * Duration.TotalSeconds) : Details?.AudioBytes;
+        else
+            full = (Details?.VideoQualities.FirstOrDefault(quality => quality.Height.ToString(CultureInfo.InvariantCulture) == VideoQuality.SelectedKey)
+                ?? Details?.VideoQualities.FirstOrDefault())?.ApproximateBytes;
+
+        if (full is not long size || Clips.Count == 0 || Duration <= TimeSpan.Zero)
+            return full;
+
+        return (long)(size * Clips.Sum(clip => clip.Length.TotalSeconds) / Duration.TotalSeconds);
+    }
+
+    private static int? ParseNumber(string? text) =>
+        int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number) ? number : null;
+
+    internal static string Format(TimeSpan time) =>
         time.ToString(time.TotalHours >= 1 ? @"h\:mm\:ss" : @"m\:ss", CultureInfo.InvariantCulture);
 
-    private static string Capitalize(string text) => char.ToUpperInvariant(text[0]) + text[1..];
-
-    private CancellationTokenSource StartSearch()
+    internal static string FormatSize(long bytes) => bytes switch
     {
-        CancelSearch();
-
-        var searchCancellation = new CancellationTokenSource();
-        _searchCancellation = searchCancellation;
-        return searchCancellation;
-    }
-
-    private void CancelSearch()
-    {
-        CancellationTokenSource? searchCancellation = _searchCancellation;
-        _searchCancellation = null;
-
-        if (searchCancellation is null)
-            return;
-
-        searchCancellation.Cancel();
-        searchCancellation.Dispose();
-    }
+        >= 1L << 30 => $"{bytes / (double)(1L << 30):0.0} GB",
+        >= 1L << 20 => $"{bytes / (double)(1L << 20):0} MB",
+        _ => $"{Math.Max(1, bytes / 1024)} KB"
+    };
 }

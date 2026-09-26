@@ -3,119 +3,147 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MediaExport.Activity;
 using MediaExport.Core.Settings;
 using MediaExport.Core.Tooling;
-using MediaExport.Export;
-using System;
+using MediaExport.Search;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using Windows.ApplicationModel;
 
 namespace MediaExport.Settings;
 
-public sealed record ThemeChoice(string Label, string Value);
+public sealed record BrowserChoice(string Label, string? Value);
 
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly ToolchainService _toolchain;
     private readonly SettingsStore _settings;
+    private readonly SearchViewModel _search;
+    private readonly ActivityViewModel _activity;
 
-    public SettingsViewModel(ToolchainService toolchain, SettingsStore settings, ExportViewModel export)
+    public SettingsViewModel(ToolchainService toolchain, SettingsStore settings, SearchViewModel search, ActivityViewModel activity)
     {
         _toolchain = toolchain;
         _settings = settings;
-        Export = export;
-        SelectedTheme = Themes.FirstOrDefault(theme => theme.Value == settings.Current.Theme) ?? Themes[0];
-        MissingTools = Describe(toolchain.FindMissingRequiredTools());
+        _search = search;
+        _activity = activity;
+        Tools = ToolchainService.Tools.Select(tool => new ToolViewModel(tool, toolchain, UpdateMissingTools)).ToArray();
+        SelectedBrowser = Browsers.FirstOrDefault(browser => browser.Value == settings.Current.CookiesFromBrowser) ?? Browsers[0];
+        Theme = settings.Current.Theme;
+        UpdateMissingTools();
     }
 
-    /// <summary>Export defaults are the export page's own choices, which are remembered.</summary>
-    public ExportViewModel Export { get; }
+    public IReadOnlyList<ToolViewModel> Tools { get; }
 
-    public IReadOnlyList<ThemeChoice> Themes { get; } =
-        [new("Use system setting", "System"), new("Light", "Light"), new("Dark", "Dark")];
+    public IReadOnlyList<BrowserChoice> Browsers { get; } =
+    [
+        new("Don't sign in", null), new("Microsoft Edge", "edge"), new("Google Chrome", "chrome"), new("Firefox", "firefox"),
+        new("Brave", "brave"), new("Opera", "opera"), new("Vivaldi", "vivaldi")
+    ];
 
-    public ObservableCollection<ToolStatus> Tools { get; } = [];
+    /// <summary><c>System</c>, <c>Light</c> or <c>Dark</c>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSystemTheme), nameof(IsLightTheme), nameof(IsDarkTheme))]
+    public partial string Theme { get; set; }
 
     [ObservableProperty]
-    public partial ThemeChoice SelectedTheme { get; set; }
-
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(CheckToolsCommand), nameof(InstallCommand), nameof(UpdateCommand))]
-    public partial bool IsWorking { get; set; }
-
-    [ObservableProperty]
-    public partial string ToolStatusText { get; set; } = "Not checked yet";
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasToolError))]
-    public partial string? ToolError { get; set; }
+    public partial BrowserChoice SelectedBrowser { get; set; }
 
     /// <summary>Required tools that are missing, as a sentence; <c>null</c> when everything's there.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasMissingTools))]
-    public partial string? MissingTools { get; set; }
+    public partial string? MissingTools { get; private set; }
 
-    public bool HasToolError => ToolError is not null;
+    [ObservableProperty]
+    public partial bool IsInstallingMissing { get; private set; }
+
     public bool HasMissingTools => MissingTools is not null;
-    public bool IsWingetMissing => Tools.Count > 0 && !Tools[0].IsWingetAvailable;
-    public string Version => typeof(SettingsViewModel).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
 
-    partial void OnSelectedThemeChanged(ThemeChoice value)
+    // Radio buttons bind one of these each.
+    public bool IsSystemTheme { get => Theme == "System"; set { if (value) Theme = "System"; } }
+    public bool IsLightTheme { get => Theme == "Light"; set { if (value) Theme = "Light"; } }
+    public bool IsDarkTheme { get => Theme == "Dark"; set { if (value) Theme = "Dark"; } }
+
+    public string Version
     {
-        _settings.Current.Theme = value.Value;
+        get
+        {
+            try
+            {
+                PackageVersion version = Package.Current.Id.Version;
+                return $"{version.Major}.{version.Minor}.{version.Build}";
+            }
+            catch (System.InvalidOperationException)
+            {
+                return typeof(SettingsViewModel).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+            }
+        }
+    }
+
+    public bool HasSearchHistory => _search.Recents.Count > 0;
+    public bool HasExportHistory => _activity.Jobs.Any(job => job.IsFinished);
+
+    partial void OnThemeChanged(string value)
+    {
+        _settings.Current.Theme = value;
         _settings.Save();
     }
 
-    [RelayCommand]
-    private void ClearRecentResults() => Export.ClearRecentResults();
-
-    private bool CanRunToolAction() => !IsWorking;
-
-    [RelayCommand(CanExecute = nameof(CanRunToolAction))]
-    private Task CheckToolsAsync() => RunToolActionAsync(null);
-
-    [RelayCommand(CanExecute = nameof(CanRunToolAction))]
-    private Task InstallAsync(ToolStatus status) => RunToolActionAsync(() => _toolchain.InstallAsync(status.Tool));
-
-    [RelayCommand(CanExecute = nameof(CanRunToolAction))]
-    private Task UpdateAsync(ToolStatus status) => RunToolActionAsync(() => _toolchain.UpdateAsync(status.Tool));
-
-    private async Task RunToolActionAsync(Func<Task>? action)
+    partial void OnSelectedBrowserChanged(BrowserChoice value)
     {
-        IsWorking = true;
-        ToolError = null;
-        ToolStatusText = action is null ? "Checking your tools…" : "Working with WinGet…";
+        _settings.Current.CookiesFromBrowser = value.Value;
+        _settings.Save();
+    }
+
+    public Task RefreshToolsAsync() => Task.WhenAll(Tools.Select(tool => tool.RefreshAsync()));
+
+    /// <summary>Installs every missing required tool, for the banner's one-click setup.</summary>
+    [RelayCommand]
+    private async Task InstallMissingToolsAsync()
+    {
+        IsInstallingMissing = true;
         try
         {
-            if (action is not null)
-                await action();
-
-            IReadOnlyList<ToolStatus> statuses = await _toolchain.CheckAsync();
-            Tools.Clear();
-            foreach (ToolStatus status in statuses)
-                Tools.Add(status);
-
-            MissingTools = Describe(statuses.Where(status => status.Tool.IsRequired && !status.IsInstalled).Select(status => status.Tool).ToArray());
-            ToolStatusText = $"Checked {DateTime.Now:t}";
-            OnPropertyChanged(nameof(IsWingetMissing));
-        }
-        catch (Exception exception)
-        {
-            ToolError = exception.Message;
-            ToolStatusText = "Something went wrong";
+            foreach (ToolViewModel tool in Tools.Where(tool => tool.Tool.IsRequired && _toolchain.FindMissingRequiredTools().Contains(tool.Tool)))
+                await tool.InstallCommand.ExecuteAsync(null);
         }
         finally
         {
-            IsWorking = false;
+            IsInstallingMissing = false;
+            UpdateMissingTools();
         }
     }
 
-    private static string? Describe(IReadOnlyList<Tool> missing) => missing.Count switch
+    [RelayCommand]
+    private void ClearSearchHistory()
     {
-        0 => null,
-        1 => $"{missing[0].Name} is needed to search and export.",
-        _ => $"{string.Join(" and ", missing.Select(tool => tool.Name))} are needed to search and export."
-    };
+        _search.ClearRecents();
+        OnPropertyChanged(nameof(HasSearchHistory));
+    }
+
+    [RelayCommand]
+    private void ClearExportHistory()
+    {
+        _activity.Remove(_activity.Jobs.Where(job => job.IsFinished));
+        OnPropertyChanged(nameof(HasExportHistory));
+    }
+
+    public void RefreshHistory()
+    {
+        OnPropertyChanged(nameof(HasSearchHistory));
+        OnPropertyChanged(nameof(HasExportHistory));
+    }
+
+    private void UpdateMissingTools()
+    {
+        IReadOnlyList<Tool> missing = _toolchain.FindMissingRequiredTools();
+        MissingTools = missing.Count switch
+        {
+            0 => null,
+            1 => $"{missing[0].Name} is needed to search and export.",
+            _ => $"{string.Join(" and ", missing.Select(tool => tool.Name))} are needed to search and export."
+        };
+    }
 }
