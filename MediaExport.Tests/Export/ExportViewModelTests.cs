@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
+using MediaExport.Core.Exporting;
 using MediaExport.Core.Media.Models;
 using MediaExport.Core.Media.Providers;
 using MediaExport.Export;
@@ -12,11 +13,14 @@ namespace MediaExport.Tests.Export;
 
 public sealed class ExportViewModelTests
 {
+    private static readonly MediaSearchResult Video = new("id", "https://example.test/media", null, "Result", null, null);
+    private static readonly MediaSearchResult Track = Video with { SourceUrl = "https://example.test/track", Kind = MediaKind.Audio };
+
     [Test]
     public void ShowSuggestions_reopens_cached_results_when_searching_is_idle()
     {
-        using var viewModel = new ExportViewModel([new RecordingSearchProvider()]);
-        viewModel.Suggestions.Add(new MediaSearchResult("id", "https://example.test/media", null, "Result", null, null));
+        using var viewModel = new ExportViewModel([new RecordingSearchProvider()], new FakeDownloader());
+        viewModel.Suggestions.Add(Video);
 
         viewModel.ShowSuggestions();
 
@@ -26,13 +30,12 @@ public sealed class ExportViewModelTests
     [Test]
     public void ClearingSearchText_clears_the_selected_result()
     {
-        using var viewModel = new ExportViewModel([new RecordingSearchProvider()])
+        using var viewModel = new ExportViewModel([new RecordingSearchProvider()], new FakeDownloader())
         {
             SearchText = "query"
         };
-        var result = new MediaSearchResult("id", "https://example.test/media", null, "Result", null, null);
 
-        viewModel.SelectResultCommand.Execute(result);
+        viewModel.SelectResultCommand.Execute(Video);
         viewModel.SearchText = string.Empty;
 
         Assert.That(viewModel.SelectedResult, Is.Null);
@@ -42,7 +45,7 @@ public sealed class ExportViewModelTests
     public async Task SearchCommand_sets_loading_state_while_searching()
     {
         var provider = new WaitingSearchProvider();
-        using var viewModel = new ExportViewModel([provider])
+        using var viewModel = new ExportViewModel([provider], new FakeDownloader())
         {
             SearchText = "query"
         };
@@ -62,7 +65,7 @@ public sealed class ExportViewModelTests
     public async Task SearchCommand_only_searches_the_most_recent_query()
     {
         var provider = new RecordingSearchProvider();
-        using var viewModel = new ExportViewModel([provider]);
+        using var viewModel = new ExportViewModel([provider], new FakeDownloader());
 
         viewModel.SearchText = "first";
         Task firstSearch = viewModel.SearchCommand.ExecuteAsync(null);
@@ -74,11 +77,78 @@ public sealed class ExportViewModelTests
         Assert.That(provider.Queries, Is.EqualTo(new[] { "second" }));
     }
 
+    [Test]
+    public void Selecting_audio_defaults_to_an_audio_export_and_loads_its_preview()
+    {
+        var downloader = new FakeDownloader();
+        using var viewModel = new ExportViewModel([new RecordingSearchProvider()], downloader);
+
+        viewModel.SelectResultCommand.Execute(Track);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.IsAudioExport, Is.True);
+            Assert.That(viewModel.AudioPreviewUri, Is.EqualTo(FakeDownloader.Stream));
+        });
+    }
+
+    [Test]
+    public async Task ExportCommand_exports_the_selected_media_with_the_chosen_options()
+    {
+        var downloader = new FakeDownloader();
+        using var viewModel = new ExportViewModel([new RecordingSearchProvider()], downloader);
+        viewModel.SelectResultCommand.Execute(Video);
+        viewModel.SelectedQuality = viewModel.Qualities[4];
+
+        await viewModel.ExportCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(downloader.Options, Is.EqualTo(new ExportOptions(MediaKind.Video, "mp4", 720, viewModel.OutputFolder)));
+            Assert.That(viewModel.SelectedJob?.IsCompleted, Is.True);
+            Assert.That(viewModel.SelectedJob?.OutputPath, Is.EqualTo(FakeDownloader.OutputPath));
+            Assert.That(viewModel.ActiveExportCount, Is.Zero);
+        });
+    }
+
+    [Test]
+    public async Task A_failed_export_keeps_the_error_on_the_job()
+    {
+        var downloader = new FakeDownloader { Failure = new InvalidOperationException("No formats found") };
+        using var viewModel = new ExportViewModel([new RecordingSearchProvider()], downloader);
+        viewModel.SelectResultCommand.Execute(Video);
+
+        await viewModel.ExportCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.SelectedJob?.IsFailed, Is.True);
+            Assert.That(viewModel.SelectedJob?.Status, Is.EqualTo("No formats found"));
+        });
+    }
+
+    private sealed class FakeDownloader : IMediaDownloader
+    {
+        public static readonly Uri Stream = new("https://example.test/stream.mp3");
+        public const string OutputPath = @"C:\Exports\Result.mp4";
+
+        public ExportOptions? Options { get; private set; }
+        public Exception? Failure { get; init; }
+
+        public Task<Uri?> GetAudioStreamAsync(string sourceUrl, CancellationToken cancellationToken = default) =>
+            Task.FromResult<Uri?>(Stream);
+
+        public Task<string> DownloadAsync(string sourceUrl, ExportOptions options, IProgress<ExportProgress>? progress = null, CancellationToken cancellationToken = default)
+        {
+            Options = options;
+            return Failure is null ? Task.FromResult(OutputPath) : Task.FromException<string>(Failure);
+        }
+    }
+
     private sealed class RecordingSearchProvider : IMediaSearchProvider
     {
         public string Id => "test";
         public string DisplayName => "Test";
-        public MediaProviderIcon Icon => MediaProviderIcon.None;
         public List<string> Queries { get; } = [];
 
         public Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, CancellationToken cancellationToken = default)
@@ -94,7 +164,6 @@ public sealed class ExportViewModelTests
 
         public string Id => "test";
         public string DisplayName => "Test";
-        public MediaProviderIcon Icon => MediaProviderIcon.None;
         public TaskCompletionSource SearchStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, CancellationToken cancellationToken = default)

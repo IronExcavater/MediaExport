@@ -23,8 +23,8 @@
     <Content Include="Assets\App\Square44x44Logo.targetsize-24_altform-unplated.png" />
     <Content Include="Assets\App\StoreLogo.png" />
     <Content Include="Assets\App\Wide310x150Logo.scale-200.png" />
-    <Content Include="Assets\Providers\SoundCloudOrange.svg" />
-    <Content Include="Assets\Providers\YoutubeIconRed.svg" />
+    <Content Include="Assets\Icons\*.svg" />
+    <Content Include="Assets\Player\player.html" />
   </ItemGroup>
 
   <ItemGroup>
@@ -51,9 +51,6 @@
   </ItemGroup>
   <ItemGroup>
     <Page Update="Media\Controls\HeroMediaView.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Update="Media\Controls\ProviderIconView.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Update="Settings\SettingsPage.xaml">

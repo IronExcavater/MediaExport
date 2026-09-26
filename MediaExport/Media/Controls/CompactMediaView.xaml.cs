@@ -10,5 +10,8 @@ public sealed partial class CompactMediaView : MediaViewBase
         InitializeComponent();
     }
 
+    // Audio artwork is square; video thumbnails are 16:9.
+    public double ThumbnailWidth => IsAudio ? 56 : 100;
+
     protected override void RefreshMediaBindings() => Bindings.Update();
 }

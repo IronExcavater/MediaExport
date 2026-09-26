@@ -9,10 +9,10 @@ namespace MediaExport.Core.Media.Providers;
 public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProvider
 {
     protected abstract string SearchPrefix { get; }
+    protected virtual MediaKind Kind => MediaKind.Video;
 
     public abstract string Id { get; }
     public abstract string DisplayName { get; }
-    public abstract MediaProviderIcon Icon { get; }
 
     public async Task<IReadOnlyList<MediaSearchResult>> SearchAsync(
         string query,
@@ -48,7 +48,9 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
             result.ThumbnailUri,
             result.Title,
             result.Creator,
-            result.Duration);
+            result.Duration,
+            Kind,
+            result.CreatorUrl);
 
         return media with { EmbedUri = GetEmbedUri(media) };
     }

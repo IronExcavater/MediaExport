@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\MediaExport.Core\MediaExport.Core.csproj" />
     <Compile Include="..\MediaExport\Export\ExportViewModel.cs" Link="Export\ExportViewModel.cs" />
+    <Compile Include="..\MediaExport\Export\ExportJob.cs" Link="Export\ExportJob.cs" />
   </ItemGroup>
 
   <ItemGroup>

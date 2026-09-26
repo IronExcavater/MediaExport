@@ -6,16 +6,12 @@ using MediaExport.Core.Media.Ytdlp;
 
 namespace MediaExport.Core.Media.Providers;
 
+// Previewed with a native audio player rather than the SoundCloud widget, so it has no embed.
 public sealed class SoundCloudSearchProvider(YtdlpService ytdlp) : YtdlpSearchProvider(ytdlp)
 {
     public override string Id => "soundcloud";
     public override string DisplayName => "SoundCloud";
-    public override MediaProviderIcon Icon => MediaProviderIcon.SoundCloud;
 
     protected override string SearchPrefix => "scsearch";
-
-    protected override Uri? GetEmbedUri(MediaSearchResult media) =>
-        Uri.TryCreate(media.SourceUrl, UriKind.Absolute, out _)
-            ? new Uri($"https://w.soundcloud.com/player/?url={Uri.EscapeDataString(media.SourceUrl)}&auto_play=true")
-            : null;
+    protected override MediaKind Kind => MediaKind.Audio;
 }

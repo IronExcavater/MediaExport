@@ -3,68 +3,127 @@
     x:Class="MediaExport.Media.Controls.HeroMediaView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:MediaExport.Media.Controls">
+    xmlns:local="using:MediaExport.Media.Controls"
+    Loaded="HeroMediaView_Loaded"
+    Unloaded="HeroMediaView_Unloaded">
 
-    <Grid RowSpacing="10">
+    <Grid RowSpacing="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Button
-            x:Name="thumbnailButton"
-            Padding="0"
-            HorizontalContentAlignment="Stretch"
-            VerticalContentAlignment="Stretch"
-            Background="Transparent"
-            BorderThickness="0"
-            Click="ThumbnailButton_Click">
-            <Grid Height="202">
-                <Image
-                    Source="{x:Bind ThumbnailSource, Mode=OneTime}"
-                    Stretch="UniformToFill" />
-                <Border
-                    Width="48"
-                    Height="48"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Background="#99000000"
-                    CornerRadius="24">
-                    <FontIcon
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Foreground="White"
-                        Glyph="&#xE768;" />
-                </Border>
-            </Grid>
-        </Button>
+        <!-- Video: the provider's player, loaded as soon as the media is selected. -->
+        <Grid
+            x:Name="videoStage"
+            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+            CornerRadius="8"
+            SizeChanged="VideoStage_SizeChanged">
+            <Image Source="{x:Bind ThumbnailSource, Mode=OneTime}" Stretch="UniformToFill" />
+            <WebView2 x:Name="videoPlayer" />
+        </Grid>
 
-        <StackPanel Grid.Row="1" Spacing="5">
-            <TextBlock
-                FontSize="20"
-                FontWeight="SemiBold"
-                MaxLines="2"
-                Text="{x:Bind TitleText, Mode=OneTime}"
-                TextWrapping="Wrap" />
-            <Grid ColumnSpacing="10">
+        <!-- Audio: artwork over its own blurred backdrop, with native transport controls. -->
+        <Grid
+            x:Name="audioStage"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            Visibility="Collapsed">
+            <!-- A brush, not an Image, so the square artwork doesn't dictate the card's height. -->
+            <Border>
+                <Border.Background>
+                    <ImageBrush ImageSource="{x:Bind ThumbnailSource, Mode=OneTime}" Stretch="UniformToFill" />
+                </Border.Background>
+            </Border>
+            <Border Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}" />
+
+            <Grid Padding="24" ColumnSpacing="24">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <TextBlock
-                    VerticalAlignment="Center"
-                    Opacity="0.72"
-                    Text="{x:Bind CreatorText, Mode=OneTime}"
-                    TextTrimming="CharacterEllipsis" />
+
                 <Border
-                    Grid.Column="1"
-                    Padding="6,2"
-                    Background="#1AFFFFFF"
-                    CornerRadius="4"
-                    Visibility="{x:Bind DurationVisibility, Mode=OneTime}">
-                    <TextBlock Text="{x:Bind DurationText, Mode=OneTime}" />
+                    Width="176"
+                    Height="176"
+                    VerticalAlignment="Top"
+                    Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                    CornerRadius="8">
+                    <Image Source="{x:Bind ThumbnailSource, Mode=OneTime}" Stretch="UniformToFill" />
                 </Border>
+
+                <Grid Grid.Column="1" RowSpacing="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid x:Name="audioDetailsHost" VerticalAlignment="Center" />
+
+                    <Grid Grid.Row="1" MinHeight="48">
+                        <!-- Audio has no natural height, so size it to the one-row controls. -->
+                        <MediaPlayerElement
+                            x:Name="audioPlayer"
+                            Height="64"
+                            AreTransportControlsEnabled="True">
+                            <MediaPlayerElement.Resources>
+                                <SolidColorBrush x:Key="MediaTransportControlsPanelBackground" Color="Transparent" />
+                            </MediaPlayerElement.Resources>
+                            <MediaPlayerElement.TransportControls>
+                                <local:AudioTransportControls
+                                    IsCompact="True"
+                                    IsZoomButtonVisible="False"
+                                    IsZoomEnabled="False"
+                                    ShowAndHideAutomatically="False" />
+                            </MediaPlayerElement.TransportControls>
+                        </MediaPlayerElement>
+
+                        <StackPanel
+                            x:Name="previewStatus"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="12">
+                            <ProgressRing
+                                x:Name="previewRing"
+                                Width="16"
+                                Height="16" />
+                            <TextBlock
+                                x:Name="previewStatusText"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Loading preview" />
+                        </StackPanel>
+                    </Grid>
+                </Grid>
             </Grid>
-        </StackPanel>
+        </Grid>
+
+        <Grid x:Name="videoDetailsHost" Grid.Row="1">
+            <!-- Moved into the audio card for audio; see ApplyPresentation. -->
+            <StackPanel x:Name="details" Spacing="4">
+                <TextBlock
+                    MaxLines="2"
+                    Style="{StaticResource SubtitleTextBlockStyle}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="Wrap"
+                    ToolTipService.ToolTip="Open in browser">
+                    <Hyperlink
+                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                        NavigateUri="{x:Bind SourceUri, Mode=OneTime}"
+                        UnderlineStyle="None">
+                        <Run Text="{x:Bind TitleText, Mode=OneTime}" />
+                    </Hyperlink>
+                </TextBlock>
+                <TextBlock TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="Open creator page">
+                    <Hyperlink
+                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                        NavigateUri="{x:Bind CreatorUri, Mode=OneTime}"
+                        UnderlineStyle="None">
+                        <Run Text="{x:Bind CreatorText, Mode=OneTime}" />
+                    </Hyperlink>
+                    <Run Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind DurationSuffix, Mode=OneTime}" />
+                </TextBlock>
+            </StackPanel>
+        </Grid>
     </Grid>
 </local:MediaViewBase>
