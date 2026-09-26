@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 using MediaExport.Activity;
-using MediaExport.Converters;
 using MediaExport.Core.Media.Models;
-using MediaExport.Core.Media.Providers;
 using MediaExport.Export;
 using MediaExport.Settings;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,7 +28,6 @@ public sealed partial class MainWindow : Window
         ConfigureTitleBar();
         root.DataContext = _viewModel;
         toolsBanner.DataContext = _settings;
-        BuildProviderMenu();
 
         AppWindow.SetIcon("Assets/App/Square44x44Logo.scale-200.ico");
 
@@ -70,32 +67,16 @@ public sealed partial class MainWindow : Window
 
     }
 
-    private void BuildProviderMenu()
-    {
-        foreach (IMediaSearchProvider provider in _viewModel.Providers)
-        {
-            var item = new RadioMenuFlyoutItem
-            {
-                Text = provider.DisplayName,
-                GroupName = "providers",
-                IsChecked = provider == _viewModel.SelectedProvider,
-                Icon = new ImageIcon { Source = IconImageConverter.GetIcon(provider.Id) }
-            };
-            item.Click += (_, _) =>
-            {
-                _viewModel.SelectedProvider = provider;
-                searchBox.Focus(FocusState.Programmatic);
-            };
-            providerMenu.Items.Add(item);
-        }
-    }
-
     private void TitleBar_PaneToggleRequested(TitleBar sender, object args) =>
         navView.IsPaneOpen = !navView.IsPaneOpen;
 
-    private void ProviderMenu_Opening(object? sender, object args) => _viewModel.IsSourceMenuOpen = true;
+    private void ProviderBox_DropDownOpened(object? sender, object args) => _viewModel.IsSourceMenuOpen = true;
 
-    private void ProviderMenu_Closed(object? sender, object args) => _viewModel.IsSourceMenuOpen = false;
+    private void ProviderBox_DropDownClosed(object? sender, object args)
+    {
+        _viewModel.IsSourceMenuOpen = false;
+        searchBox.Focus(FocusState.Programmatic);
+    }
 
     // The box only shows its clear button while focused; keep it whenever there's text to clear.
     private void SearchBox_Loaded(object sender, RoutedEventArgs args)
