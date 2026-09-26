@@ -9,6 +9,7 @@ public enum MediaKind
     Audio
 }
 
+/// <param name="ProviderId">The source it came from, e.g. <c>youtube</c>; recent results are kept per source.</param>
 public sealed record MediaSearchResult(
     string Identity,
     string SourceUrl,
@@ -18,7 +19,8 @@ public sealed record MediaSearchResult(
     TimeSpan? Duration,
     MediaKind Kind = MediaKind.Video,
     string? CreatorUrl = null,
-    Uri? EmbedUri = null)
+    Uri? EmbedUri = null,
+    string? ProviderId = null)
 {
     // List items are announced by screen readers using ToString.
     public override string ToString() => Creator is null ? Title : $"{Title}, {Creator}";

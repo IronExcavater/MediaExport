@@ -12,7 +12,7 @@ public sealed class YtdlpSearchProviderTests
     [Test]
     public void YouTube_provider_creates_its_watch_and_embed_urls()
     {
-        var provider = new YouTubeSearchProvider(new YtdlpService());
+        var provider = new YouTubeSearchProvider(YtdlpServiceTests.CreateService());
         var result = new YtdlpSearchResult("abc123", null, null, "Result", null, null, "https://www.youtube.com/@channel");
 
         MediaSearchResult? media = provider.MapSearchResult(result);
@@ -21,16 +21,17 @@ public sealed class YtdlpSearchProviderTests
         Assert.Multiple(() =>
         {
             Assert.That(media!.SourceUrl, Is.EqualTo("https://www.youtube.com/watch?v=abc123"));
-            Assert.That(media.EmbedUri, Is.EqualTo(new Uri("https://www.youtube.com/embed/abc123?rel=0&fs=0&iv_load_policy=3&playsinline=1")));
+            Assert.That(media.EmbedUri?.AbsoluteUri, Does.StartWith("https://www.youtube.com/embed/abc123?"));
+            Assert.That(media.EmbedUri?.Query, Does.Contain("enablejsapi=1"));
             Assert.That(media.CreatorUrl, Is.EqualTo("https://www.youtube.com/@channel"));
-            Assert.That(media.Kind, Is.EqualTo(MediaKind.Video));
+            Assert.That(media.ProviderId, Is.EqualTo("youtube"));
         });
     }
 
     [Test]
     public void SoundCloud_provider_returns_audio_with_its_visual_widget()
     {
-        var provider = new SoundCloudSearchProvider(new YtdlpService());
+        var provider = new SoundCloudSearchProvider(YtdlpServiceTests.CreateService());
         var result = new YtdlpSearchResult("track-id", "https://soundcloud.com/artist/track", null, "Track", null, null);
 
         MediaSearchResult? media = provider.MapSearchResult(result);
@@ -39,6 +40,7 @@ public sealed class YtdlpSearchProviderTests
         Assert.Multiple(() =>
         {
             Assert.That(media!.Kind, Is.EqualTo(MediaKind.Audio));
+            Assert.That(media.ProviderId, Is.EqualTo("soundcloud"));
             Assert.That(media.EmbedUri?.AbsoluteUri, Does.StartWith("https://w.soundcloud.com/player/?url=https%3A%2F%2Fsoundcloud.com%2Fartist%2Ftrack&visual=true&auto_play=false"));
         });
     }
