@@ -2,135 +2,233 @@
 // SPDX-License-Identifier: MPL-2.0
 
 using System.Diagnostics;
+using System.IO.Compression;
+using System.Net.Http.Json;
+using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 namespace MediaExport.Core.Tooling;
 
-public sealed record Tool(string Name, string Description, string PackageId, IReadOnlyList<string> Commands, bool IsRequired);
+/// <param name="Repository">The GitHub repository whose releases carry Windows builds.</param>
+/// <param name="AssetPattern">Matches the release asset to download (an .exe, or a .zip holding the executables).</param>
+public sealed record Tool(
+    string Id,
+    string Name,
+    string Purpose,
+    string Repository,
+    string AssetPattern,
+    IReadOnlyList<string> Executables,
+    bool IsRequired);
 
-public sealed record ToolStatus(Tool Tool, string? Path, string? Version, bool CanUpdate, bool IsWingetAvailable)
+public sealed record ToolRelease(string Version, string Tag, DateTimeOffset Published, string AssetUrl, long AssetSize);
+
+/// <param name="IsManaged">Installed by MediaExport, so it can be updated, switched or removed here.</param>
+public sealed record ToolStatus(Tool Tool, string? Path, string? Version, bool IsManaged)
 {
     public bool IsInstalled => Path is not null;
-    public bool CanInstall => !IsInstalled && IsWingetAvailable;
-
-    public string StatusText => (IsInstalled, CanUpdate) switch
-    {
-        (false, _) => IsWingetAvailable ? "Not installed" : "Not installed. Install it and add it to PATH.",
-        (true, true) => $"Version {Version} · update available",
-        _ => Version is null ? "Installed" : $"Version {Version}"
-    };
 }
 
 public sealed record ProcessResult(int ExitCode, string Output, string Error);
 
-/// <summary>Finds yt-dlp, FFmpeg and Deno on PATH, and installs or updates them with WinGet.</summary>
+/// <summary>
+/// Finds yt-dlp, FFmpeg and Deno, and installs, switches or removes copies MediaExport manages itself,
+/// straight from each project's GitHub releases. A managed copy wins over one on PATH.
+/// </summary>
 public sealed partial class ToolchainService
 {
-    private readonly Func<string, IReadOnlyList<string>, CancellationToken, Task<ProcessResult>> _run;
-    private readonly Func<string, string?> _resolve;
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private const string VersionFile = "version.txt";
 
-    public ToolchainService()
-        : this(RunProcessAsync, ResolveOnPath)
+    private readonly string _folder;
+    private readonly HttpClient _http;
+    private readonly Func<string, IReadOnlyList<string>, CancellationToken, Task<ProcessResult>> _run;
+    private readonly Func<string, string?> _resolveOnPath;
+    private readonly Dictionary<string, IReadOnlyList<ToolRelease>> _releases = [];
+
+    public ToolchainService(string folder)
+        : this(folder, CreateHttpClient(), RunProcessAsync, ResolveOnPath)
     {
     }
 
     internal ToolchainService(
+        string folder,
+        HttpClient http,
         Func<string, IReadOnlyList<string>, CancellationToken, Task<ProcessResult>> run,
-        Func<string, string?> resolve)
+        Func<string, string?> resolveOnPath)
     {
+        _folder = folder;
+        _http = http;
         _run = run;
-        _resolve = resolve;
+        _resolveOnPath = resolveOnPath;
     }
 
-    public static IReadOnlyList<Tool> Tools { get; } =
-    [
-        new("yt-dlp", "Searches for and downloads media", "yt-dlp.yt-dlp", ["yt-dlp"], true),
-        new("FFmpeg", "Merges video with audio and converts formats", "Gyan.FFmpeg", ["ffmpeg", "ffprobe"], true),
-        new("Deno", "Lets yt-dlp solve YouTube's playback challenges", "DenoLand.Deno", ["deno"], false)
-    ];
+    private static bool IsArm64 => RuntimeInformation.OSArchitecture == Architecture.Arm64;
 
-    /// <summary>Required tools that can't be found, from a quick PATH scan.</summary>
+    public static Tool YtDlp { get; } = new(
+        "yt-dlp", "yt-dlp", "Finds and downloads media", "yt-dlp/yt-dlp",
+        IsArm64 ? @"^yt-dlp_arm64\.exe$" : @"^yt-dlp\.exe$", ["yt-dlp"], true);
+
+    public static Tool FFmpeg { get; } = new(
+        "ffmpeg", "FFmpeg", "Joins, cuts and converts what's downloaded", "GyanD/codexffmpeg",
+        @"essentials_build\.zip$", ["ffmpeg", "ffprobe"], true);
+
+    public static Tool Deno { get; } = new(
+        "deno", "Deno", "Lets yt-dlp play YouTube's newer formats", "denoland/deno",
+        IsArm64 ? @"^deno-aarch64-pc-windows-msvc\.zip$" : @"^deno-x86_64-pc-windows-msvc\.zip$", ["deno"], false);
+
+    public static IReadOnlyList<Tool> Tools { get; } = [YtDlp, FFmpeg, Deno];
+
+    /// <summary>Where an executable runs from: the managed copy if there is one, otherwise PATH.</summary>
+    public string? Locate(string executable)
+    {
+        string managed = Path.Combine(_folder, OwnerOf(executable)?.Id ?? executable, executable + ".exe");
+        return File.Exists(managed) ? managed : _resolveOnPath(executable);
+    }
+
+    /// <summary>Required tools that can't be found anywhere.</summary>
     public IReadOnlyList<Tool> FindMissingRequiredTools()
     {
         RefreshProcessPath();
-        return Tools.Where(tool => tool.IsRequired && !tool.Commands.All(command => _resolve(command) is not null)).ToArray();
+        return Tools.Where(tool => tool.IsRequired && tool.Executables.Any(executable => Locate(executable) is null)).ToArray();
     }
 
     public async Task<IReadOnlyList<ToolStatus>> CheckAsync(CancellationToken cancellationToken = default)
     {
-        await _gate.WaitAsync(cancellationToken);
+        RefreshProcessPath();
+        var statuses = new List<ToolStatus>();
+        foreach (Tool tool in Tools)
+            statuses.Add(await CheckAsync(tool, cancellationToken));
+        return statuses;
+    }
+
+    public async Task<ToolStatus> CheckAsync(Tool tool, CancellationToken cancellationToken = default)
+    {
+        string? path = tool.Executables.All(executable => Locate(executable) is not null) ? Locate(tool.Executables[0]) : null;
+        if (path is null)
+            return new ToolStatus(tool, null, null, false);
+
+        bool isManaged = path.StartsWith(_folder, StringComparison.OrdinalIgnoreCase);
+        string? version = isManaged ? ReadManagedVersion(tool) : null;
+        version ??= await GetVersionAsync(path, tool, cancellationToken);
+        return new ToolStatus(tool, path, version, isManaged);
+    }
+
+    /// <summary>Recent releases with a Windows build, newest first. Cached for the session.</summary>
+    public async Task<IReadOnlyList<ToolRelease>> GetReleasesAsync(Tool tool, CancellationToken cancellationToken = default)
+    {
+        if (_releases.TryGetValue(tool.Id, out IReadOnlyList<ToolRelease>? known))
+            return known;
+
+        GitHubRelease[] releases = await _http.GetFromJsonAsync(
+            $"https://api.github.com/repos/{tool.Repository}/releases?per_page=30",
+            ToolchainJson.Default.GitHubReleaseArray,
+            cancellationToken) ?? [];
+
+        var pattern = new Regex(tool.AssetPattern, RegexOptions.IgnoreCase);
+        ToolRelease[] usable = releases
+            .Where(release => !release.Draft && !release.Prerelease)
+            .Select(release => (release, asset: release.Assets.FirstOrDefault(asset => pattern.IsMatch(asset.Name))))
+            .Where(pair => pair.asset is not null)
+            .Select(pair => new ToolRelease(
+                pair.release.Tag.TrimStart('v'), pair.release.Tag, pair.release.Published, pair.asset!.Url, pair.asset.Size))
+            .ToArray();
+
+        _releases[tool.Id] = usable;
+        return usable;
+    }
+
+    /// <summary>Installs <paramref name="release"/> (the newest when <c>null</c>) as the managed copy, replacing any other version.</summary>
+    public async Task InstallAsync(Tool tool, ToolRelease? release, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+    {
+        release ??= (await GetReleasesAsync(tool, cancellationToken)).FirstOrDefault()
+            ?? throw new InvalidOperationException($"{tool.Name} has no Windows release to install.");
+
+        string download = Path.Combine(Path.GetTempPath(), $"MediaExport-{tool.Id}-{Guid.NewGuid():N}{Path.GetExtension(release.AssetUrl)}");
+        string staging = Path.Combine(_folder, $".{tool.Id}-staging");
         try
         {
-            RefreshProcessPath();
-            // One listing is enough: a tool WinGet can upgrade is, by definition, one it manages. (WinGet is slow.)
-            string? winget = _resolve("winget");
-            string upgradable = winget is null
-                ? string.Empty
-                : (await _run(winget, ["list", "--upgrade-available", .. WingetFlags], cancellationToken)).Output;
+            await DownloadAsync(release, download, progress, cancellationToken);
 
-            var statuses = new List<ToolStatus>();
-            foreach (Tool tool in Tools)
-            {
-                string? path = tool.Commands.All(command => _resolve(command) is not null) ? _resolve(tool.Commands[0]) : null;
-                string? version = path is null ? null : await GetVersionAsync(path, tool, cancellationToken);
-                statuses.Add(new ToolStatus(
-                    tool,
-                    path,
-                    version,
-                    upgradable.Contains(tool.PackageId, StringComparison.OrdinalIgnoreCase),
-                    winget is not null));
-            }
+            if (Directory.Exists(staging))
+                Directory.Delete(staging, true);
+            Directory.CreateDirectory(staging);
 
-            return statuses;
+            if (download.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                ExtractExecutables(download, tool, staging);
+            else
+                File.Copy(download, Path.Combine(staging, tool.Executables[0] + ".exe"));
+
+            await File.WriteAllTextAsync(Path.Combine(staging, VersionFile), release.Version, cancellationToken);
+
+            // Swap in the new copy only once it's complete, so a failed install leaves the old one working.
+            string target = Path.Combine(_folder, tool.Id);
+            if (Directory.Exists(target))
+                Directory.Delete(target, true);
+            Directory.Move(staging, target);
         }
         finally
         {
-            _gate.Release();
+            File.Delete(download);
+            if (Directory.Exists(staging))
+                Directory.Delete(staging, true);
         }
     }
 
-    public Task InstallAsync(Tool tool, CancellationToken cancellationToken = default) =>
-        RunWingetAsync("install", tool, cancellationToken);
-
-    public Task UpdateAsync(Tool tool, CancellationToken cancellationToken = default) =>
-        RunWingetAsync("upgrade", tool, cancellationToken);
-
-    private static IReadOnlyList<string> WingetFlags { get; } =
-        ["--source", "winget", "--accept-source-agreements", "--disable-interactivity"];
-
-    private async Task RunWingetAsync(string verb, Tool tool, CancellationToken cancellationToken)
+    /// <summary>Removes the managed copy; one on PATH, if any, is used again.</summary>
+    public void Remove(Tool tool)
     {
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            string winget = _resolve("winget") ?? throw new InvalidOperationException("WinGet isn't available, so tools can't be installed from here.");
-            ProcessResult result = await _run(
-                winget,
-                [verb, "--id", tool.PackageId, "--exact", "--accept-package-agreements", .. WingetFlags],
-                cancellationToken);
+        string target = Path.Combine(_folder, tool.Id);
+        if (Directory.Exists(target))
+            Directory.Delete(target, true);
+    }
 
-            if (result.ExitCode != 0)
-            {
-                string detail = (result.Error.Trim() is { Length: > 0 } error ? error : result.Output.Trim())
-                    .Split('\n').LastOrDefault(line => line.Trim().Length > 0)?.Trim() ?? $"exit code {result.ExitCode}";
-                throw new InvalidOperationException($"Couldn't {verb} {tool.Name}: {detail}");
-            }
+    private async Task DownloadAsync(ToolRelease release, string path, IProgress<double>? progress, CancellationToken cancellationToken)
+    {
+        using HttpResponseMessage response = await _http.GetAsync(release.AssetUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        long total = response.Content.Headers.ContentLength ?? release.AssetSize;
 
-            RefreshProcessPath();
-        }
-        finally
+        await using Stream source = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using FileStream target = File.Create(path);
+        byte[] buffer = new byte[81920];
+        long received = 0;
+        int read;
+        while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
         {
-            _gate.Release();
+            await target.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            received += read;
+            if (total > 0)
+                progress?.Report(received * 100d / total);
         }
+    }
+
+    // Archives nest the executables in versioned folders; only the executables are kept, side by side.
+    private static void ExtractExecutables(string archive, Tool tool, string folder)
+    {
+        using ZipArchive zip = ZipFile.OpenRead(archive);
+        foreach (string executable in tool.Executables)
+        {
+            ZipArchiveEntry entry = zip.Entries.FirstOrDefault(entry => entry.Name.Equals(executable + ".exe", StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException($"The {tool.Name} download doesn't contain {executable}.exe.");
+            entry.ExtractToFile(Path.Combine(folder, entry.Name));
+        }
+    }
+
+    private string? ReadManagedVersion(Tool tool)
+    {
+        string path = Path.Combine(_folder, tool.Id, VersionFile);
+        return File.Exists(path) ? File.ReadAllText(path).Trim() : null;
     }
 
     private async Task<string?> GetVersionAsync(string path, Tool tool, CancellationToken cancellationToken)
     {
-        ProcessResult result = await _run(path, [tool.Commands[0] == "ffmpeg" ? "-version" : "--version"], cancellationToken);
+        ProcessResult result = await _run(path, [tool == FFmpeg ? "-version" : "--version"], cancellationToken);
         return result.ExitCode == 0 ? ParseVersion(result.Output) : null;
     }
+
+    private static Tool? OwnerOf(string executable) =>
+        Tools.FirstOrDefault(tool => tool.Executables.Contains(executable, StringComparer.OrdinalIgnoreCase));
 
     /// <summary>Picks the version out of lines like <c>ffmpeg version 7.1-full_build …</c> or <c>deno 2.4.1 (stable …)</c>.</summary>
     internal static string? ParseVersion(string output) =>
@@ -139,27 +237,34 @@ public sealed partial class ToolchainService
     [GeneratedRegex(@"\d+(\.\d+)+")]
     private static partial Regex VersionPattern();
 
-    // WinGet adds tools to the machine or user PATH, which this process only sees after a refresh.
+    private static HttpClient CreateHttpClient()
+    {
+        var http = new HttpClient();
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("MediaExport"); // GitHub's API refuses requests without one.
+        return http;
+    }
+
+    // Installers add tools to the machine or user PATH, which this process only sees after a refresh.
     private static void RefreshProcessPath()
     {
         string[] entries = new[] { EnvironmentVariableTarget.Process, EnvironmentVariableTarget.Machine, EnvironmentVariableTarget.User }
-            .SelectMany(target => (Environment.GetEnvironmentVariable("PATH", target) ?? string.Empty).Split(System.IO.Path.PathSeparator))
+            .SelectMany(target => (Environment.GetEnvironmentVariable("PATH", target) ?? string.Empty).Split(Path.PathSeparator))
             .Select(entry => entry.Trim().Trim('"'))
             .Where(entry => entry.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        Environment.SetEnvironmentVariable("PATH", string.Join(System.IO.Path.PathSeparator, entries));
+        Environment.SetEnvironmentVariable("PATH", string.Join(Path.PathSeparator, entries));
     }
 
     private static string? ResolveOnPath(string command)
     {
         string[] extensions = (Environment.GetEnvironmentVariable("PATHEXT") ?? ".EXE;.CMD;.BAT;.COM").Split(';');
-        foreach (string directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(System.IO.Path.PathSeparator))
+        foreach (string directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator))
         {
             foreach (string extension in extensions)
             {
-                string candidate = System.IO.Path.Combine(Environment.ExpandEnvironmentVariables(directory.Trim('"')), command + extension);
+                string candidate = Path.Combine(Environment.ExpandEnvironmentVariables(directory.Trim('"')), command + extension);
                 if (File.Exists(candidate))
                     return candidate;
             }
@@ -207,3 +312,18 @@ public sealed partial class ToolchainService
         return new ProcessResult(process.ExitCode, await output, await error);
     }
 }
+
+internal sealed record GitHubAsset(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("browser_download_url")] string Url,
+    [property: JsonPropertyName("size")] long Size);
+
+internal sealed record GitHubRelease(
+    [property: JsonPropertyName("tag_name")] string Tag,
+    [property: JsonPropertyName("draft")] bool Draft,
+    [property: JsonPropertyName("prerelease")] bool Prerelease,
+    [property: JsonPropertyName("published_at")] DateTimeOffset Published,
+    [property: JsonPropertyName("assets")] GitHubAsset[] Assets);
+
+[JsonSerializable(typeof(GitHubRelease[]))]
+internal sealed partial class ToolchainJson : JsonSerializerContext;
