@@ -22,12 +22,13 @@
                 Padding="4,3"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Bottom"
-                Background="#CC000000"
+                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                 CornerRadius="2"
+                Opacity="0.9"
                 Visibility="{x:Bind DurationVisibility, Mode=OneTime}">
                 <TextBlock
                     FontSize="11"
-                    Foreground="White"
+                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                     Text="{x:Bind DurationText, Mode=OneTime}"
                     TextLineBounds="Tight" />
             </Border>
