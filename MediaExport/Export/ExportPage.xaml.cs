@@ -34,12 +34,6 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
                 ShowSelectedClipTimes();
         };
         ViewModel.Clips.CollectionChanged += (_, _) => ShowSelectedClipTimes();
-        Search.Recents.CollectionChanged += (_, _) => Raise(nameof(HasRecents));
-        Search.PropertyChanged += (_, args) =>
-        {
-            if (args.PropertyName == nameof(SearchViewModel.IsPlayerObscured))
-                Raise(nameof(IsPlayerObscured));
-        };
         Loaded += (_, _) => CheckClipboard();
         App.Current.MainWindow.Activated += (_, _) => CheckClipboard();
     }
@@ -53,8 +47,6 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
     private static MainWindow Shell => (MainWindow)App.Current.MainWindow;
 
     public bool HasSelectedClip => ViewModel.SelectedClip >= 0 && ViewModel.SelectedClip < ViewModel.Clips.Count;
-    public bool HasRecents => Search.Recents.Count > 0;
-    public bool IsPlayerObscured => Search.IsPlayerObscured;
 
     /// <summary>A link on the clipboard that could be exported, offered on the home page.</summary>
     public string? ClipboardLink { get; private set; }
@@ -174,24 +166,14 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
 
     private void MarkStart_Click(object sender, RoutedEventArgs args)
     {
-        if (!HasSelectedClip)
-            return;
-
-        Clip clip = ViewModel.Clips[ViewModel.SelectedClip];
-        TimeSpan at = player.Position;
-        if (at < clip.End - TimeSpan.FromSeconds(1) && at >= Floor(ViewModel.SelectedClip))
-            ViewModel.Clips[ViewModel.SelectedClip] = clip with { Start = at };
+        if (HasSelectedClip)
+            ViewModel.TrySetSelectedClip(player.Position, ViewModel.Clips[ViewModel.SelectedClip].End);
     }
 
     private void MarkEnd_Click(object sender, RoutedEventArgs args)
     {
-        if (!HasSelectedClip)
-            return;
-
-        Clip clip = ViewModel.Clips[ViewModel.SelectedClip];
-        TimeSpan at = player.Position;
-        if (at > clip.Start + TimeSpan.FromSeconds(1) && at <= Ceiling(ViewModel.SelectedClip))
-            ViewModel.Clips[ViewModel.SelectedClip] = clip with { End = at };
+        if (HasSelectedClip)
+            ViewModel.TrySetSelectedClip(ViewModel.Clips[ViewModel.SelectedClip].Start, player.Position);
     }
 
     private void RemoveClip_Click(object sender, RoutedEventArgs args) => ViewModel.RemoveClipCommand.Execute(ViewModel.SelectedClip);
@@ -210,22 +192,11 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
     // Typed times replace the clip's when they make sense; otherwise the boxes go back to what it was.
     private void ApplyClipTimes()
     {
-        if (!HasSelectedClip)
-            return;
-
-        int index = ViewModel.SelectedClip;
-        if (ParseTime(clipStart.Text) is { } start && ParseTime(clipEnd.Text) is { } end
-            && end - start >= TimeSpan.FromSeconds(1) && start >= Floor(index) && end <= Ceiling(index))
-        {
-            ViewModel.Clips[index] = new Clip(start, end);
-        }
+        if (ParseTime(clipStart.Text) is { } start && ParseTime(clipEnd.Text) is { } end)
+            ViewModel.TrySetSelectedClip(start, end);
 
         ShowSelectedClipTimes();
     }
-
-    private TimeSpan Floor(int index) => index > 0 ? ViewModel.Clips[index - 1].End : TimeSpan.Zero;
-
-    private TimeSpan Ceiling(int index) => index < ViewModel.Clips.Count - 1 ? ViewModel.Clips[index + 1].Start : ViewModel.Duration;
 
     private void ShowSelectedClipTimes()
     {

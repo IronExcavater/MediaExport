@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using MediaExport.Activity;
 using MediaExport.Core.Exporting;
 using MediaExport.Core.Media.Models;
+using MediaExport.Core.Media.Providers;
 using MediaExport.Core.Settings;
 using System;
 using System.Collections.Generic;
@@ -59,6 +60,7 @@ public sealed partial class ExportViewModel : ObservableObject
     private readonly ActivityViewModel _activity;
     private readonly SettingsStore _settings;
     private readonly Dictionary<string, MediaDetails> _details = [];
+    private readonly Dictionary<string, string> _sourceNames;
     private CancellationTokenSource? _inspection;
     private bool _isRestoring;
 
@@ -66,9 +68,10 @@ public sealed partial class ExportViewModel : ObservableObject
     private int _optionsVersion;
     private int _jobOptionsVersion;
 
-    public ExportViewModel(IMediaDownloader downloader, ActivityViewModel activity, SettingsStore settings)
+    public ExportViewModel(IMediaDownloader downloader, ActivityViewModel activity, SettingsStore settings, IEnumerable<IMediaSearchProvider> providers)
     {
         _downloader = downloader;
+        _sourceNames = providers.ToDictionary(provider => provider.Id, provider => provider.DisplayName);
         _activity = activity;
         _settings = settings;
         AppSettings saved = settings.Current;
@@ -173,15 +176,8 @@ public sealed partial class ExportViewModel : ObservableObject
 
     public bool HasMedia => Media is not null;
 
-    /// <summary>The source's name, e.g. "YouTube", from its id.</summary>
-    public string? ProviderName => Media?.ProviderId switch
-    {
-        "youtube" => "YouTube",
-        "soundcloud" => "SoundCloud",
-        "dailymotion" => "Dailymotion",
-        "internetarchive" => "Internet Archive",
-        var other => other
-    };
+    /// <summary>The source's name, e.g. "YouTube"; for a pasted link from elsewhere, its site's id.</summary>
+    public string? ProviderName => Media?.ProviderId is { } id ? _sourceNames.GetValueOrDefault(id, id) : null;
     public bool HasCreatorLink => Media?.CreatorUrl is not null;
 
     /// <summary>Whether the media has pictures at all; sound-only media can't be exported as video.</summary>
@@ -303,6 +299,22 @@ public sealed partial class ExportViewModel : ObservableObject
         int index = Clips.TakeWhile(other => other.Start < clip.Start).Count();
         Clips.Insert(index, clip);
         SelectedClip = index;
+    }
+
+    /// <summary>Changes the selected clip's times, if it stays at least a second long and clear of the clips beside it.</summary>
+    public bool TrySetSelectedClip(TimeSpan start, TimeSpan end)
+    {
+        int index = SelectedClip;
+        if (index < 0 || index >= Clips.Count)
+            return false;
+
+        TimeSpan floor = index > 0 ? Clips[index - 1].End : TimeSpan.Zero;
+        TimeSpan ceiling = index < Clips.Count - 1 ? Clips[index + 1].Start : Duration;
+        if (end - start < TimeSpan.FromSeconds(1) || start < floor || end > ceiling)
+            return false;
+
+        Clips[index] = new Clip(start, end);
+        return true;
     }
 
     /// <summary>A clip from <paramref name="at"/>, up to 30 seconds long, in the free space there.</summary>
