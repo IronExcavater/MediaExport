@@ -25,12 +25,6 @@
                 HorizontalAlignment="Center"
                 Style="{StaticResource SubtitleTextBlockStyle}"
                 Text="Nothing exported yet" />
-            <TextBlock
-                HorizontalAlignment="Center"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Text="Everything you export is listed here, so you can find the files again."
-                TextAlignment="Center"
-                TextWrapping="Wrap" />
         </StackPanel>
 
         <Grid

@@ -253,7 +253,7 @@
                     <TextBlock
                         HorizontalAlignment="Center"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="Search YouTube or SoundCloud, or paste a link from almost any video or music site."
+                        Text="Search, or paste a link from almost any video or music site."
                         TextAlignment="Center"
                         TextWrapping="Wrap" />
                     <Button
@@ -442,11 +442,6 @@
                                 Position="{x:Bind player.Position, Mode=OneWay}"
                                 SeekRequested="Timeline_SeekRequested"
                                 SelectedIndex="{x:Bind ViewModel.SelectedClip, Mode=TwoWay}" />
-
-                            <TextBlock
-                                Style="{StaticResource SecondaryTextStyle}"
-                                Text="Drag across the timeline to keep only part of it, or click a chapter above it."
-                                Visibility="{x:Bind converters:Show.Unless(ViewModel.HasClips), Mode=OneWay}" />
 
                             <!-- Every clip, numbered as on the timeline; picking one selects it and plays from its start. -->
                             <ItemsControl
