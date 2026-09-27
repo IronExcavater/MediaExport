@@ -5,35 +5,19 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Linq;
 
 namespace MediaExport.Export;
 
-/// <summary>One option in a <see cref="ChoiceGroup"/>, shown as a pill or a tile.</summary>
-public sealed partial class Choice(string key, string label, string? description = null) : ObservableObject
+/// <summary>One option in a <see cref="ChoiceGroup"/>, shown as a combo box item.</summary>
+/// <param name="Detail">Shown beside the label, e.g. an estimated size or what the format is good for.</param>
+public sealed record Choice(string Key, string Label, string? Detail = null)
 {
-    public string Key { get; } = key;
-    public string Label { get; } = label;
-
-    /// <summary>What picking it means, e.g. "Plays everywhere".</summary>
-    public string? Description { get; } = description;
-
-    /// <summary>A live detail, e.g. an estimated size.</summary>
-    [ObservableProperty]
-    public partial string? Detail { get; set; }
-
-    [ObservableProperty]
-    public partial bool IsSelected { get; set; }
-
-    [ObservableProperty]
-    public partial bool IsEnabled { get; set; } = true;
-
-    // Announced by screen readers.
-    public override string ToString() => Detail is null ? Label : $"{Label}, {Detail}";
+    // Announced by screen readers, and shown by the closed combo box.
+    public override string ToString() => Label;
 }
 
-/// <summary>Options where exactly one is picked. The view binds each option's IsSelected; the group keeps it single.</summary>
+/// <summary>Options where exactly one is picked, e.g. a quality or a format.</summary>
 public sealed partial class ChoiceGroup : ObservableObject
 {
     public ChoiceGroup(IEnumerable<Choice> items, string? selectedKey = null)
@@ -43,8 +27,21 @@ public sealed partial class ChoiceGroup : ObservableObject
 
     public ObservableCollection<Choice> Items { get; } = [];
 
-    [ObservableProperty]
-    public partial Choice? Selected { get; private set; }
+    /// <summary>The picked option; the view binds it two-way. Setting it to <c>null</c> (a list being rebuilt) is ignored.</summary>
+    public Choice? Selected
+    {
+        get;
+        set
+        {
+            if (value is null || value == field || !Items.Contains(value))
+                return;
+
+            field = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedKey));
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     public string? SelectedKey => Selected?.Key;
 
@@ -53,39 +50,19 @@ public sealed partial class ChoiceGroup : ObservableObject
     /// <summary>Replaces the options, keeping <paramref name="selectedKey"/> picked if it's still there.</summary>
     public void Reset(IEnumerable<Choice> items, string? selectedKey)
     {
-        foreach (Choice item in Items)
-            item.PropertyChanged -= OnItemChanged;
-        Items.Clear();
-        foreach (Choice item in items)
+        Choice[] next = items.ToArray();
+        if (next.SequenceEqual(Items))
         {
-            item.PropertyChanged += OnItemChanged;
-            Items.Add(item);
+            Select(selectedKey);
+            return;
         }
 
-        Select(Items.FirstOrDefault(item => item.Key == selectedKey && item.IsEnabled)?.Key ?? Items.FirstOrDefault(item => item.IsEnabled)?.Key);
+        Items.Clear();
+        foreach (Choice item in next)
+            Items.Add(item);
+        Select(selectedKey ?? Items.FirstOrDefault()?.Key);
     }
 
-    public void Select(string? key)
-    {
-        Choice? next = Items.FirstOrDefault(item => item.Key == key);
-        foreach (Choice item in Items)
-            item.IsSelected = item == next;
-        SetSelected(next);
-    }
-
-    private void OnItemChanged(object? sender, PropertyChangedEventArgs args)
-    {
-        if (args.PropertyName == nameof(Choice.IsSelected) && sender is Choice { IsSelected: true } picked && picked != Selected)
-            Select(picked.Key);
-    }
-
-    private void SetSelected(Choice? value)
-    {
-        if (value == Selected)
-            return;
-
-        Selected = value;
-        OnPropertyChanged(nameof(SelectedKey));
-        Changed?.Invoke(this, EventArgs.Empty);
-    }
+    public void Select(string? key) =>
+        Selected = Items.FirstOrDefault(item => item.Key == key) ?? Items.FirstOrDefault(item => item.Key == Selected?.Key) ?? Items.FirstOrDefault();
 }

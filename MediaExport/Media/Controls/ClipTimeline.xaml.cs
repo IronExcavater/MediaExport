@@ -7,6 +7,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -19,35 +20,46 @@ using Windows.System;
 namespace MediaExport.Media.Controls;
 
 /// <summary>
-/// The media's length as a track: click to seek, drag across it to make a clip, drag a clip to move it,
-/// drag its ends to trim it, click a chapter to keep just that chapter. Delete removes the selected clip.
+/// The media's length, from left to right. Clips are the parts kept: drag across the track to add one,
+/// drag a clip to move it and its ends to trim it. Chapters sit above; click one to keep it.
+/// The ruler below moves the player. Delete removes the selected clip, Escape lets go of it.
 /// </summary>
 public sealed partial class ClipTimeline : UserControl
 {
-    private const double ChapterTop = 0, ChapterHeight = 20, ChapterBand = 26;
-    private const double TrackHeight = 44;
+    private const double ChapterHeight = 22, ChapterGap = 6;
+    private const double TrackHeight = 52;
     private const double RulerHeight = 22;
-    private const double HandleWidth = 10;
+    private const double EdgeReach = 8;
     private const double DragThreshold = 4;
     private static readonly TimeSpan MinimumClip = TimeSpan.FromSeconds(1);
 
     public static readonly DependencyProperty DurationProperty = Register(nameof(Duration), typeof(TimeSpan), TimeSpan.Zero);
     public static readonly DependencyProperty ClipsProperty = Register(nameof(Clips), typeof(ObservableCollection<Clip>), null);
     public static readonly DependencyProperty ChaptersProperty = Register(nameof(Chapters), typeof(IReadOnlyList<Chapter>), null);
-    public static readonly DependencyProperty PositionProperty = Register(nameof(Position), typeof(TimeSpan), TimeSpan.Zero);
     public static readonly DependencyProperty SelectedIndexProperty = Register(nameof(SelectedIndex), typeof(int), -1);
 
-    private enum DragMode { None, Create, Move, Start, End }
+    public static readonly DependencyProperty PositionProperty = DependencyProperty.Register(
+        nameof(Position), typeof(TimeSpan), typeof(ClipTimeline),
+        new PropertyMetadata(TimeSpan.Zero, (timeline, _) => ((ClipTimeline)timeline).PlacePlayhead()));
 
-    private DragMode _drag;
+    private enum Part { None, Chapter, Track, Clip, ClipStart, ClipEnd, Ruler }
+
+    private readonly Border _playhead;
+    private readonly Border _hoverLine;
+    private readonly ToolTip _tip = new() { Placement = Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Top };
+    private Part _drag;
     private Point _pressedAt;
     private Clip _original;
     private int _dragIndex = -1;
+    private int _hoveredChapter = -1;
     private bool _isDragging;
 
     public ClipTimeline()
     {
         InitializeComponent();
+        _playhead = new Border { Style = StyleOf("PlayheadStyle"), Width = 2, IsHitTestVisible = false };
+        _hoverLine = new Border { Style = StyleOf("HoverStyle"), Width = 1, IsHitTestVisible = false, Visibility = Visibility.Collapsed };
+        ToolTipService.SetToolTip(surface, _tip);
         KeyDown += OnKeyDown;
     }
 
@@ -61,7 +73,7 @@ public sealed partial class ClipTimeline : UserControl
     /// <summary>The clip being edited, or -1.</summary>
     public int SelectedIndex { get => (int)GetValue(SelectedIndexProperty); set => SetValue(SelectedIndexProperty, value); }
 
-    /// <summary>Someone clicked a point in time, e.g. to move the player there.</summary>
+    /// <summary>Someone picked a point in time, to move the player there.</summary>
     public event EventHandler<TimeSpan>? SeekRequested;
 
     private static DependencyProperty Register(string name, Type type, object? defaultValue) =>
@@ -83,20 +95,20 @@ public sealed partial class ClipTimeline : UserControl
 
     private void OnClipsChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
-        if (SelectedIndex >= (Clips?.Count ?? 0))
-            SelectedIndex = -1;
         if (!_isDragging)
             Render();
     }
 
-    private void Surface_SizeChanged(object sender, SizeChangedEventArgs args) => Render();
+    private void Surface_SizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        surface.Clip = new RectangleGeometry { Rect = new Rect(0, 0, args.NewSize.Width, args.NewSize.Height) };
+        Render();
+    }
 
     private double SurfaceWidth => Math.Max(1, surface.ActualWidth);
-
-    // The chapter band only takes room when there are chapters.
-    private double TrackTop => Chapters is { Count: > 0 } ? ChapterBand : 0;
-    private double RulerTop => TrackTop + TrackHeight + 4;
-
+    private bool HasChapters => Chapters is { Count: > 0 };
+    private double TrackTop => HasChapters ? ChapterHeight + ChapterGap : 0;
+    private double RulerTop => TrackTop + TrackHeight;
     private double ToX(TimeSpan time) => Duration <= TimeSpan.Zero ? 0 : Math.Clamp(time / Duration, 0, 1) * SurfaceWidth;
 
     private TimeSpan ToTime(double x) =>
@@ -107,52 +119,63 @@ public sealed partial class ClipTimeline : UserControl
         surface.Children.Clear();
         surface.Height = RulerTop + RulerHeight;
         double width = SurfaceWidth;
+        IReadOnlyList<Clip> clips = Clips ?? (IReadOnlyList<Clip>)[];
+
+        IReadOnlyList<Chapter> chapters = Chapters ?? [];
+        for (int index = 0; index < chapters.Count; index++)
+        {
+            double left = ToX(chapters[index].Start), right = ToX(chapters[index].End);
+            Add(new Border
+            {
+                Style = StyleOf(index == _hoveredChapter ? "HoveredChapterStyle" : "ChapterStyle"),
+                Width = Math.Max(2, right - left - 2),
+                Height = ChapterHeight,
+                Child = new TextBlock { Style = StyleOf("ChapterTextStyle"), Text = chapters[index].Title }
+            }, left + 1, 0);
+        }
 
         Add(new Border { Style = StyleOf("TrackStyle"), Width = width, Height = TrackHeight }, 0, TrackTop);
 
-        foreach (Chapter chapter in Chapters ?? [])
+        // With clips, the rest is dimmed: what's kept is what's bright.
+        if (clips.Count > 0)
         {
-            double left = ToX(chapter.Start), right = ToX(chapter.End);
-            var segment = new Border
+            double from = 0;
+            foreach (Clip clip in clips.Append(new Clip(Duration, Duration)))
             {
-                Style = StyleOf("ChapterStyle"),
-                Width = Math.Max(1, right - left),
-                Height = ChapterHeight,
-                Child = new TextBlock { Style = (Style)Resources["ChapterTextStyle"], Text = chapter.Title }
-            };
-            ToolTipService.SetToolTip(segment, $"{chapter.Title} · {Format(chapter.Start)}–{Format(chapter.End)}\nClick to keep just this chapter");
-            Add(segment, left, ChapterTop);
-        }
-
-        IReadOnlyList<Clip> clips = Clips ?? (IReadOnlyList<Clip>)[];
-        for (int index = 0; index < clips.Count; index++)
-        {
-            Clip clip = clips[index];
-            bool selected = index == SelectedIndex;
-            double left = ToX(clip.Start), right = ToX(clip.End);
-            var body = new Border
-            {
-                Style = StyleOf(selected ? "SelectedClipStyle" : "ClipStyle"),
-                Width = Math.Max(HandleWidth * 2, right - left),
-                Height = TrackHeight
-            };
-            ToolTipService.SetToolTip(body, $"{Format(clip.Start)}–{Format(clip.End)} ({Format(clip.Length)})");
-            Add(body, left, TrackTop);
-
-            if (selected)
-            {
-                Add(new Border { Style = StyleOf("HandleStyle"), Width = 3, Height = TrackHeight - 20 }, left + 4, TrackTop + 10);
-                Add(new Border { Style = StyleOf("HandleStyle"), Width = 3, Height = TrackHeight - 20 }, Math.Max(left + 8, right - 7), TrackTop + 10);
+                double to = ToX(clip.Start);
+                if (to - from > 1)
+                    Add(new Border { Style = StyleOf("DroppedStyle"), Width = to - from, Height = TrackHeight }, from, TrackTop);
+                from = ToX(clip.End);
             }
         }
 
+        for (int index = 0; index < clips.Count; index++)
+            DrawClip(clips[index], index, index == SelectedIndex);
+
         DrawRuler(width);
 
-        if (Duration > TimeSpan.Zero)
-            Add(new Border { Style = StyleOf("PlayheadStyle"), Width = 2, Height = TrackHeight + 8 }, ToX(Position) - 1, TrackTop - 4);
+        _hoverLine.Height = RulerTop + 6 - TrackTop;
+        Add(_hoverLine, 0, TrackTop, hitTest: false);
+        _playhead.Height = RulerTop + 6;
+        Add(_playhead, 0, 0, hitTest: false);
+        PlacePlayhead();
     }
 
-    // Labels every "nice" step that leaves roughly 80px between them.
+    private void DrawClip(Clip clip, int index, bool selected)
+    {
+        double left = ToX(clip.Start), right = ToX(clip.End), width = Math.Max(6, right - left);
+        var label = new TextBlock { Style = StyleOf("ClipTextStyle"), Text = width > 70 ? $"{index + 1}   {Format(clip.Length)}" : $"{index + 1}" };
+        Add(new Border { Style = StyleOf(selected ? "SelectedClipStyle" : "ClipStyle"), Width = width, Height = TrackHeight, Child = width > 16 ? label : null }, left, TrackTop);
+
+        // Grips show which clip the handles belong to, and that its ends can be dragged.
+        if (selected && width > 20)
+        {
+            Add(new Border { Style = StyleOf("GripStyle"), Width = 3, Height = TrackHeight - 24 }, left + 4, TrackTop + 12);
+            Add(new Border { Style = StyleOf("GripStyle"), Width = 3, Height = TrackHeight - 24 }, right - 7, TrackTop + 12);
+        }
+    }
+
+    // Labels every "nice" step that leaves at least 70px between them.
     private void DrawRuler(double width)
     {
         if (Duration <= TimeSpan.Zero)
@@ -160,43 +183,66 @@ public sealed partial class ClipTimeline : UserControl
 
         int[] steps = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
         double pixelsPerSecond = width / Duration.TotalSeconds;
-        int step = steps.FirstOrDefault(candidate => candidate * pixelsPerSecond >= 80, steps[^1]);
+        int step = steps.FirstOrDefault(candidate => candidate * pixelsPerSecond >= 70, steps[^1]);
         for (int second = 0; second <= Duration.TotalSeconds; second += step)
         {
             double x = second * pixelsPerSecond;
-            Add(new Border { Style = StyleOf("TickStyle"), Width = 1, Height = 4 }, x, RulerTop);
-            if (x < width - 30)
-                Add(new TextBlock { Style = (Style)Resources["RulerTextStyle"], Text = Format(TimeSpan.FromSeconds(second)) }, x + 3, RulerTop + 2);
+            Add(new Border { Style = StyleOf("TickStyle"), Width = 1, Height = 5 }, x, RulerTop + 2);
+            if (x < width - 36)
+                Add(new TextBlock { Style = StyleOf("RulerTextStyle"), Text = Format(TimeSpan.FromSeconds(second)) }, x + 4, RulerTop + 3);
         }
+
+        var end = new TextBlock { Style = StyleOf("RulerTextStyle"), Text = Format(Duration) };
+        end.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        Add(end, width - end.DesiredSize.Width, RulerTop + 3);
+    }
+
+    private void PlacePlayhead()
+    {
+        Canvas.SetLeft(_playhead, Math.Clamp(ToX(Position) - 1, 0, Math.Max(0, SurfaceWidth - 2)));
+        _playhead.Visibility = Duration > TimeSpan.Zero ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private Style StyleOf(string key) => (Style)Resources[key];
 
-    private void Add(FrameworkElement element, double left, double top)
+    private void Add(FrameworkElement element, double left, double top, bool hitTest = false)
     {
-        element.IsHitTestVisible = false; // The surface handles all input.
+        element.IsHitTestVisible = hitTest; // The surface handles all input.
         Canvas.SetLeft(element, left);
         Canvas.SetTop(element, top);
         surface.Children.Add(element);
     }
 
-    private (DragMode Mode, int Index) HitTest(Point point)
+    private (Part Part, int Index) HitTest(Point point)
     {
-        if (point.Y < TrackTop - 4 || point.Y > TrackTop + TrackHeight + 4 || Clips is null)
-            return (DragMode.None, -1);
+        if (point.Y >= RulerTop)
+            return (Part.Ruler, -1);
 
-        for (int index = Clips.Count - 1; index >= 0; index--)
+        if (point.Y < TrackTop)
         {
-            double left = ToX(Clips[index].Start), right = ToX(Clips[index].End);
-            if (Math.Abs(point.X - left) <= HandleWidth / 2 + 2)
-                return (DragMode.Start, index);
-            if (Math.Abs(point.X - right) <= HandleWidth / 2 + 2)
-                return (DragMode.End, index);
-            if (point.X > left && point.X < right)
-                return (DragMode.Move, index);
+            TimeSpan at = ToTime(point.X);
+            int chapter = Chapters?.Select((item, index) => (item, index)).FirstOrDefault(pair => pair.item.Start <= at && at < pair.item.End, (default!, -1)).index ?? -1;
+            return chapter >= 0 ? (Part.Chapter, chapter) : (Part.None, -1);
         }
 
-        return (DragMode.Create, -1);
+        IReadOnlyList<Clip> clips = Clips ?? (IReadOnlyList<Clip>)[];
+        // The selected clip's ends win over a neighbour's, then any clip's ends, then bodies.
+        foreach (int index in Enumerable.Range(0, clips.Count).OrderBy(index => index == SelectedIndex ? 0 : 1))
+        {
+            double left = ToX(clips[index].Start), right = ToX(clips[index].End);
+            if (Math.Abs(point.X - left) <= EdgeReach)
+                return (Part.ClipStart, index);
+            if (Math.Abs(point.X - right) <= EdgeReach)
+                return (Part.ClipEnd, index);
+        }
+
+        for (int index = 0; index < clips.Count; index++)
+        {
+            if (point.X > ToX(clips[index].Start) && point.X < ToX(clips[index].End))
+                return (Part.Clip, index);
+        }
+
+        return (Part.Track, -1);
     }
 
     private void Surface_PointerPressed(object sender, PointerRoutedEventArgs args)
@@ -207,20 +253,25 @@ public sealed partial class ClipTimeline : UserControl
         Focus(FocusState.Pointer);
         _pressedAt = args.GetCurrentPoint(surface).Position;
         _isDragging = false;
-
-        if (_pressedAt.Y < TrackTop - 4)
-        {
-            _drag = DragMode.None;
-            KeepChapterAt(_pressedAt.X);
-            return;
-        }
-
         (_drag, _dragIndex) = HitTest(_pressedAt);
-        if (_dragIndex >= 0)
+
+        switch (_drag)
         {
-            _original = Clips[_dragIndex];
-            SelectedIndex = _dragIndex;
-            Render();
+            case Part.Chapter:
+                KeepChapter(_dragIndex);
+                _drag = Part.None;
+                return;
+            case Part.Ruler:
+                SeekRequested?.Invoke(this, ToTime(_pressedAt.X));
+                break;
+            case Part.Clip or Part.ClipStart or Part.ClipEnd:
+                _original = Clips[_dragIndex];
+                SelectedIndex = _dragIndex;
+                Render();
+                break;
+            case Part.Track:
+                _dragIndex = -1;
+                break;
         }
 
         surface.CapturePointer(args.Pointer);
@@ -230,14 +281,15 @@ public sealed partial class ClipTimeline : UserControl
     private void Surface_PointerMoved(object sender, PointerRoutedEventArgs args)
     {
         Point point = args.GetCurrentPoint(surface).Position;
-        if (_drag == DragMode.None || Clips is null)
+        if (_drag == Part.None || Clips is null)
         {
-            ProtectedCursor = InputSystemCursor.Create(HitTest(point).Mode switch
-            {
-                DragMode.Start or DragMode.End => InputSystemCursorShape.SizeWestEast,
-                DragMode.Move => InputSystemCursorShape.SizeAll,
-                _ => InputSystemCursorShape.Arrow
-            });
+            ShowHover(point);
+            return;
+        }
+
+        if (_drag == Part.Ruler)
+        {
+            SeekRequested?.Invoke(this, ToTime(point.X));
             return;
         }
 
@@ -246,12 +298,11 @@ public sealed partial class ClipTimeline : UserControl
         _isDragging = true;
 
         TimeSpan at = ToTime(point.X);
-        (TimeSpan floor, TimeSpan ceiling) = Neighbours(_dragIndex);
         switch (_drag)
         {
-            case DragMode.Create:
+            case Part.Track:
                 TimeSpan anchor = ToTime(_pressedAt.X);
-                (floor, ceiling) = Gap(anchor);
+                (TimeSpan floor, TimeSpan ceiling) = Gap(anchor);
                 var created = new Clip(Clamp(Min(anchor, at), floor, ceiling), Clamp(Max(anchor, at), floor, ceiling));
                 if (_dragIndex < 0)
                 {
@@ -264,43 +315,48 @@ public sealed partial class ClipTimeline : UserControl
                 }
 
                 break;
-            case DragMode.Move:
-                TimeSpan offset = at - ToTime(_pressedAt.X);
-                offset = Clamp(offset, floor - _original.Start, ceiling - _original.End);
+            case Part.Clip:
+                (TimeSpan low, TimeSpan high) = Neighbours(_dragIndex);
+                TimeSpan offset = Clamp(at - ToTime(_pressedAt.X), low - _original.Start, high - _original.End);
                 Clips[_dragIndex] = new Clip(_original.Start + offset, _original.End + offset);
                 break;
-            case DragMode.Start:
-                Clips[_dragIndex] = _original with { Start = Clamp(at, floor, _original.End - MinimumClip) };
+            case Part.ClipStart:
+                Clips[_dragIndex] = _original with { Start = Clamp(at, Neighbours(_dragIndex).Floor, _original.End - MinimumClip) };
                 break;
-            case DragMode.End:
-                Clips[_dragIndex] = _original with { End = Clamp(at, _original.Start + MinimumClip, ceiling) };
+            case Part.ClipEnd:
+                Clips[_dragIndex] = _original with { End = Clamp(at, _original.Start + MinimumClip, Neighbours(_dragIndex).Ceiling) };
                 break;
         }
 
         Render();
+        ShowTip(point, _dragIndex >= 0 && _dragIndex < Clips.Count ? $"{Format(Clips[_dragIndex].Start)} – {Format(Clips[_dragIndex].End)}" : Format(at));
     }
 
     private void Surface_PointerReleased(object sender, PointerRoutedEventArgs args)
     {
         surface.ReleasePointerCaptures();
-        if (_drag == DragMode.None)
-            return;
-
-        if (!_isDragging && _drag is DragMode.Create or DragMode.Move)
+        if (_drag is Part.None or Part.Ruler)
         {
-            if (_drag == DragMode.Create)
+            _drag = Part.None;
+            return;
+        }
+
+        // A click without a drag moves the player there, and on empty track lets go of the selection.
+        if (!_isDragging)
+        {
+            if (_drag == Part.Track)
                 SelectedIndex = -1;
-            SeekRequested?.Invoke(this, ToTime(_pressedAt.X));
+            SeekRequested?.Invoke(this, _drag == Part.Clip && Clips is not null ? Clips[_dragIndex].Start : ToTime(_pressedAt.X));
         }
 
         // A drag too short to be a clip is dropped rather than kept as a sliver.
-        if (_drag == DragMode.Create && _dragIndex >= 0 && Clips![_dragIndex].Length < MinimumClip)
+        if (_drag == Part.Track && _dragIndex >= 0 && Clips![_dragIndex].Length < MinimumClip)
         {
             Clips.RemoveAt(_dragIndex);
             SelectedIndex = -1;
         }
 
-        _drag = DragMode.None;
+        _drag = Part.None;
         _dragIndex = -1;
         _isDragging = false;
         Render();
@@ -308,28 +364,82 @@ public sealed partial class ClipTimeline : UserControl
 
     private void Surface_PointerExited(object sender, PointerRoutedEventArgs args)
     {
-        if (_drag == DragMode.None)
-            ProtectedCursor = null;
+        if (_drag != Part.None)
+            return;
+
+        ProtectedCursor = null;
+        _hoverLine.Visibility = Visibility.Collapsed;
+        _tip.IsOpen = false;
+        if (_hoveredChapter >= 0)
+        {
+            _hoveredChapter = -1;
+            Render();
+        }
+    }
+
+    // What's under the pointer: the cursor says what dragging does, the tip says when and what it is.
+    private void ShowHover(Point point)
+    {
+        (Part part, int index) = HitTest(point);
+        ProtectedCursor = InputSystemCursor.Create(part switch
+        {
+            Part.ClipStart or Part.ClipEnd => InputSystemCursorShape.SizeWestEast,
+            Part.Clip => InputSystemCursorShape.SizeAll,
+            Part.Chapter or Part.Ruler => InputSystemCursorShape.Hand,
+            _ => InputSystemCursorShape.Cross
+        });
+
+        int chapter = part == Part.Chapter ? index : -1;
+        if (chapter != _hoveredChapter)
+        {
+            _hoveredChapter = chapter;
+            Render();
+        }
+
+        TimeSpan at = ToTime(point.X);
+        _hoverLine.Visibility = part is Part.Track or Part.Ruler ? Visibility.Visible : Visibility.Collapsed;
+        Canvas.SetLeft(_hoverLine, point.X);
+
+        string text = part switch
+        {
+            Part.Chapter => $"{Chapters![index].Title}, {Format(Chapters[index].Start)} – {Format(Chapters[index].End)}. Click to keep just this chapter.",
+            Part.Clip or Part.ClipStart or Part.ClipEnd => $"Clip {index + 1}, {Format(Clips![index].Start)} – {Format(Clips[index].End)}",
+            Part.Track => $"{Format(at)}. Drag to keep a part.",
+            Part.Ruler => $"{Format(at)}. Click to play from here.",
+            _ => string.Empty
+        };
+        ShowTip(point, text);
+    }
+
+    private void ShowTip(Point point, string text)
+    {
+        _tip.Content = text;
+        _tip.PlacementRect = new Rect(point.X, point.Y < TrackTop ? 0 : TrackTop, 1, 1);
+        _tip.IsOpen = text.Length > 0;
     }
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (args.Key is VirtualKey.Delete or VirtualKey.Back && Clips is not null && SelectedIndex >= 0)
+        if (args.Key is VirtualKey.Delete or VirtualKey.Back && Clips is not null && SelectedIndex >= 0 && SelectedIndex < Clips.Count)
         {
             Clips.RemoveAt(SelectedIndex);
             SelectedIndex = -1;
             args.Handled = true;
         }
+        else if (args.Key == VirtualKey.Escape && SelectedIndex >= 0)
+        {
+            SelectedIndex = -1;
+            args.Handled = true;
+        }
     }
 
-    /// <summary>Adds the chapter under <paramref name="x"/> as a clip, or removes it if it's already one.</summary>
-    private void KeepChapterAt(double x)
+    /// <summary>Adds a chapter as a clip, or removes it if it's already one. Anything overlapping it gives way.</summary>
+    private void KeepChapter(int index)
     {
-        TimeSpan at = ToTime(x);
-        if (Clips is null || Chapters?.FirstOrDefault(candidate => candidate.Start <= at && at < candidate.End) is not { } chapter)
+        if (Clips is null || Chapters is null || index < 0)
             return;
 
-        var clip = new Clip(chapter.Start, chapter.End);
+        var clip = new Clip(Chapters[index].Start, Chapters[index].End);
         int existing = Clips.IndexOf(clip);
         if (existing >= 0)
         {
@@ -338,17 +448,15 @@ public sealed partial class ClipTimeline : UserControl
             return;
         }
 
-        // Anything overlapping the chapter gives way to it.
         foreach (Clip overlapping in Clips.Where(other => other.Start < clip.End && clip.Start < other.End).ToArray())
             Clips.Remove(overlapping);
         SelectedIndex = Insert(clip);
         Render();
     }
 
-    /// <summary>Adds a clip in time order.</summary>
-    public int Insert(Clip clip)
+    private int Insert(Clip clip)
     {
-        ObservableCollection<Clip> clips = Clips ?? throw new InvalidOperationException("The timeline has no clips to add to.");
+        ObservableCollection<Clip> clips = Clips!;
         int index = clips.TakeWhile(other => other.Start < clip.Start).Count();
         clips.Insert(index, clip);
         return index;

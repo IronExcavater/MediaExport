@@ -6,8 +6,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.Web.WebView2.Core;
 using System;
+using Microsoft.UI.Xaml.Media.Imaging;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
+using Windows.Storage.Streams;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Windows.Foundation;
@@ -22,8 +25,7 @@ public sealed partial class PlayerView : MediaViewBase
 
     public static readonly DependencyProperty IsPlayerHiddenProperty = DependencyProperty.Register(
         nameof(IsPlayerHidden), typeof(bool), typeof(PlayerView),
-        new PropertyMetadata(false, (view, args) =>
-            ((PlayerView)view).player.Visibility = (bool)args.NewValue ? Visibility.Collapsed : Visibility.Visible));
+        new PropertyMetadata(false, (view, args) => _ = ((PlayerView)view).SetHiddenAsync((bool)args.NewValue)));
 
     public static readonly DependencyProperty PositionProperty = DependencyProperty.Register(
         nameof(Position), typeof(TimeSpan), typeof(PlayerView), new PropertyMetadata(TimeSpan.Zero));
@@ -37,8 +39,8 @@ public sealed partial class PlayerView : MediaViewBase
     }
 
     /// <summary>
-    /// Hides the web player behind its thumbnail. WebView2 swallows input meant for popups drawn
-    /// over it (and can hang doing so), so this is set while one is open.
+    /// Swaps the web player for a still of itself. WebView2 swallows input meant for popups drawn
+    /// over it (and can hang doing so), so this is set while one is open; the still keeps it looking the same.
     /// </summary>
     public bool IsPlayerHidden
     {
@@ -122,6 +124,40 @@ public sealed partial class PlayerView : MediaViewBase
         player.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
         player.CoreWebView2.Settings.AreDevToolsEnabled = false;
         player.CoreWebView2.Settings.IsStatusBarEnabled = false;
+    }
+
+    private async Task SetHiddenAsync(bool hidden)
+    {
+        if (!hidden)
+        {
+            player.Visibility = Visibility.Visible;
+            still.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        if (player.CoreWebView2 is not null && _shown != BlankPage)
+        {
+            try
+            {
+                using var stream = new InMemoryRandomAccessStream();
+                await player.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
+                var image = new BitmapImage();
+                stream.Seek(0);
+                await image.SetSourceAsync(stream);
+                still.Source = image;
+            }
+            catch (Exception exception) when (exception is COMException or InvalidOperationException)
+            {
+                still.Source = null; // The thumbnail underneath shows instead.
+            }
+        }
+
+        // The popup may have closed while the still was taken.
+        if (IsPlayerHidden)
+        {
+            still.Visibility = Visibility.Visible;
+            player.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void Post(string json)

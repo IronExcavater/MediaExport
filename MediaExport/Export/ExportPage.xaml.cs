@@ -10,7 +10,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
@@ -24,10 +23,6 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
 {
     private static readonly string[] TimeFormats = [@"%s", @"m\:ss", @"mm\:ss", @"h\:mm\:ss", @"m\:ss\.f", @"mm\:ss\.f", @"h\:mm\:ss\.f", @"%s\.f"];
 
-    public static readonly DependencyProperty SelectedClipProperty = DependencyProperty.Register(
-        nameof(SelectedClip), typeof(int), typeof(ExportPage),
-        new PropertyMetadata(-1, (page, _) => ((ExportPage)page).OnSelectedClipChanged()));
-
     private string? _dismissedLink;
 
     public ExportPage()
@@ -35,8 +30,8 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
         InitializeComponent();
         ViewModel.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName == nameof(ExportViewModel.Media))
-                Raise(nameof(HasCreatorLink));
+            if (args.PropertyName == nameof(ExportViewModel.SelectedClip))
+                ShowSelectedClipTimes();
         };
         ViewModel.Clips.CollectionChanged += (_, _) => ShowSelectedClipTimes();
         Search.Recents.CollectionChanged += (_, _) => Raise(nameof(HasRecents));
@@ -57,15 +52,8 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
 
     private static MainWindow Shell => (MainWindow)App.Current.MainWindow;
 
-    public int SelectedClip
-    {
-        get => (int)GetValue(SelectedClipProperty);
-        set => SetValue(SelectedClipProperty, value);
-    }
-
-    public bool HasSelectedClip => SelectedClip >= 0 && SelectedClip < ViewModel.Clips.Count;
+    public bool HasSelectedClip => ViewModel.SelectedClip >= 0 && ViewModel.SelectedClip < ViewModel.Clips.Count;
     public bool HasRecents => Search.Recents.Count > 0;
-    public bool HasCreatorLink => ViewModel.Media?.CreatorUrl is not null;
     public bool IsPlayerObscured => Search.IsPlayerObscured;
 
     /// <summary>A link on the clipboard that could be exported, offered on the home page.</summary>
@@ -75,7 +63,12 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
 
     public static Visibility ShowDuration(TimeSpan? duration) => duration is null ? Visibility.Collapsed : Visibility.Visible;
 
-    public static string ChapterCount(IReadOnlyList<Chapter> chapters) => $"Splits it into {chapters.Count} files, named after the chapters";
+    /// <summary>Settings for a part that's switched off stay in place, faded, so nothing moves.</summary>
+    public static double Dim(bool isOn) => isOn ? 1 : 0.4;
+
+    public static int JoinIndex(bool join) => join ? 0 : 1;
+
+    public void SetJoinIndex(int index) => ViewModel.JoinClips = index != 1;
 
     private async void CheckClipboard()
     {
@@ -144,63 +137,64 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
             ViewModel.OutputFolder = folder;
     }
 
+    // MenuFlyout has no ItemsSource, so the languages are listed as it opens; each stays ticked or not.
+    private void Subtitles_Opening(object? sender, object args)
+    {
+        var menu = (MenuFlyout)sender!;
+        menu.Items.Clear();
+        foreach (SubtitleChoice choice in ViewModel.Subtitles)
+        {
+            var item = new ToggleMenuFlyoutItem { Text = choice.Track.Name, IsChecked = choice.IsSelected };
+            item.Click += (_, _) => choice.IsSelected = item.IsChecked;
+            menu.Items.Add(item);
+        }
+    }
+
     private void Timeline_SeekRequested(object? sender, TimeSpan time) => player.Seek(time);
 
-    // Side by side, the player gets the height the details and clips don't need; stacked, the page scrolls instead.
-    private void Stage_SizeChanged(object sender, SizeChangedEventArgs args)
+    private void AddClip_Click(object sender, RoutedEventArgs args) => ViewModel.AddClipAtCommand.Execute(player.Position);
+
+    private void ClipItem_Click(object sender, RoutedEventArgs args)
+    {
+        int index = (int)((FrameworkElement)sender).Tag;
+        ViewModel.SelectedClip = index;
+        player.Seek(ViewModel.Clips[index].Start);
+    }
+
+    // With the panel beside it, the player gets the height the details and clips don't need, and the panel
+    // fits the window; stacked, everything scrolls instead.
+    private void Layout_SizeChanged(object sender, SizeChangedEventArgs args)
     {
         bool sideBySide = panelColumn.Width.Value > 0;
-        double available = editor.ActualHeight - editor.Padding.Top - editor.Padding.Bottom
-            - details.ActualHeight - clipsCard.ActualHeight - stage.RowSpacing * 2;
-        player.MaxHeight = sideBySide ? Math.Max(160, available) : double.PositiveInfinity;
+        double viewport = editorScroller.ViewportHeight - editor.Padding.Top - editor.Padding.Bottom;
+        double available = viewport - details.ActualHeight - clipsCard.ActualHeight - stage.RowSpacing * 2;
+        player.MaxHeight = sideBySide ? Math.Max(200, available) : double.PositiveInfinity;
+        panel.MaxHeight = sideBySide ? Math.Max(320, viewport) : double.PositiveInfinity;
     }
 
-    // Start here: moves the selected clip's start, or starts a new clip that runs to the next one (or the end).
     private void MarkStart_Click(object sender, RoutedEventArgs args)
-    {
-        TimeSpan at = player.Position;
-        if (HasSelectedClip)
-        {
-            Clip clip = ViewModel.Clips[SelectedClip];
-            if (at < clip.End - TimeSpan.FromSeconds(1) && at >= Floor(SelectedClip))
-                ViewModel.Clips[SelectedClip] = clip with { Start = at };
-            return;
-        }
-
-        if (ViewModel.Clips.Any(clip => clip.Start <= at && at < clip.End))
-            return;
-        TimeSpan end = ViewModel.Clips.Where(clip => clip.Start > at).Select(clip => clip.Start).DefaultIfEmpty(ViewModel.Duration).Min();
-        if (end - at >= TimeSpan.FromSeconds(1))
-            SelectedClip = timeline.Insert(new Clip(at, end));
-    }
-
-    // End here: moves the selected clip's end, or makes a clip from the previous one (or the start) to here.
-    private void MarkEnd_Click(object sender, RoutedEventArgs args)
-    {
-        TimeSpan at = player.Position;
-        if (HasSelectedClip)
-        {
-            Clip clip = ViewModel.Clips[SelectedClip];
-            if (at > clip.Start + TimeSpan.FromSeconds(1) && at <= Ceiling(SelectedClip))
-                ViewModel.Clips[SelectedClip] = clip with { End = at };
-            return;
-        }
-
-        if (ViewModel.Clips.Any(clip => clip.Start < at && at <= clip.End))
-            return;
-        TimeSpan start = ViewModel.Clips.Where(clip => clip.End < at).Select(clip => clip.End).DefaultIfEmpty(TimeSpan.Zero).Max();
-        if (at - start >= TimeSpan.FromSeconds(1))
-            SelectedClip = timeline.Insert(new Clip(start, at));
-    }
-
-    private void RemoveClip_Click(object sender, RoutedEventArgs args)
     {
         if (!HasSelectedClip)
             return;
 
-        ViewModel.Clips.RemoveAt(SelectedClip);
-        SelectedClip = -1;
+        Clip clip = ViewModel.Clips[ViewModel.SelectedClip];
+        TimeSpan at = player.Position;
+        if (at < clip.End - TimeSpan.FromSeconds(1) && at >= Floor(ViewModel.SelectedClip))
+            ViewModel.Clips[ViewModel.SelectedClip] = clip with { Start = at };
     }
+
+    private void MarkEnd_Click(object sender, RoutedEventArgs args)
+    {
+        if (!HasSelectedClip)
+            return;
+
+        Clip clip = ViewModel.Clips[ViewModel.SelectedClip];
+        TimeSpan at = player.Position;
+        if (at > clip.Start + TimeSpan.FromSeconds(1) && at <= Ceiling(ViewModel.SelectedClip))
+            ViewModel.Clips[ViewModel.SelectedClip] = clip with { End = at };
+    }
+
+    private void RemoveClip_Click(object sender, RoutedEventArgs args) => ViewModel.RemoveClipCommand.Execute(ViewModel.SelectedClip);
 
     private void ClipTime_KeyDown(object sender, KeyRoutedEventArgs args)
     {
@@ -219,10 +213,11 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
         if (!HasSelectedClip)
             return;
 
+        int index = ViewModel.SelectedClip;
         if (ParseTime(clipStart.Text) is { } start && ParseTime(clipEnd.Text) is { } end
-            && end - start >= TimeSpan.FromSeconds(1) && start >= Floor(SelectedClip) && end <= Ceiling(SelectedClip))
+            && end - start >= TimeSpan.FromSeconds(1) && start >= Floor(index) && end <= Ceiling(index))
         {
-            ViewModel.Clips[SelectedClip] = new Clip(start, end);
+            ViewModel.Clips[index] = new Clip(start, end);
         }
 
         ShowSelectedClipTimes();
@@ -232,20 +227,14 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
 
     private TimeSpan Ceiling(int index) => index < ViewModel.Clips.Count - 1 ? ViewModel.Clips[index + 1].Start : ViewModel.Duration;
 
-    private void OnSelectedClipChanged()
-    {
-        Raise(nameof(HasSelectedClip));
-        ShowSelectedClipTimes();
-    }
-
     private void ShowSelectedClipTimes()
     {
         Raise(nameof(HasSelectedClip));
         if (!HasSelectedClip)
             return;
 
-        clipStart.Text = FormatPrecise(ViewModel.Clips[SelectedClip].Start);
-        clipEnd.Text = FormatPrecise(ViewModel.Clips[SelectedClip].End);
+        clipStart.Text = FormatPrecise(ViewModel.Clips[ViewModel.SelectedClip].Start);
+        clipEnd.Text = FormatPrecise(ViewModel.Clips[ViewModel.SelectedClip].End);
     }
 
     private static string FormatPrecise(TimeSpan time) =>

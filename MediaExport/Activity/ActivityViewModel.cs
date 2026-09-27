@@ -49,6 +49,12 @@ public sealed partial class ActivityViewModel : ObservableObject
     public bool HasJobs => Jobs.Count > 0;
     public bool HasRunning => RunningCount > 0;
 
+    /// <summary>How far the running exports have got together, 0 to 100, for the navigation badge's ring.</summary>
+    public double RunningProgress => Jobs.Where(job => job.IsRunning).Select(job => job.Progress).DefaultIfEmpty(0).Average();
+
+    /// <summary>True while no running export has a percentage yet.</summary>
+    public bool IsRunningProgressUnknown => Jobs.Where(job => job.IsRunning).All(job => job.IsIndeterminate);
+
     // ponytail: exports run side by side with no queue; add one if people start many at once.
     public ExportJob Start(MediaSearchResult media, ExportOptions options)
     {
@@ -81,6 +87,13 @@ public sealed partial class ActivityViewModel : ObservableObject
 
     private async Task RunAsync(ExportJob job)
     {
+        void OnJobChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+        {
+            OnPropertyChanged(nameof(RunningProgress));
+            OnPropertyChanged(nameof(IsRunningProgressUnknown));
+        }
+
+        job.PropertyChanged += OnJobChanged;
         RunningCount++;
         try
         {
@@ -89,6 +102,7 @@ public sealed partial class ActivityViewModel : ObservableObject
         finally
         {
             RunningCount--;
+            job.PropertyChanged -= OnJobChanged;
         }
 
         SaveHistory();

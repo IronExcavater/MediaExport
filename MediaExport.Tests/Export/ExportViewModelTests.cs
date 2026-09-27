@@ -39,7 +39,7 @@ public sealed class ExportViewModelTests
             Assert.That(viewModel.State, Is.EqualTo(ExportState.Ready));
             Assert.That(viewModel.VideoQuality.Items.Select(choice => choice.Label), Is.EqualTo(new[] { "Best", "1080p", "720p" }));
             Assert.That(viewModel.VideoQuality.SelectedKey, Is.EqualTo("1080"), "the remembered height");
-            Assert.That(viewModel.StatusText, Is.EqualTo("About 250 MB · saves to Downloads"));
+            Assert.That(viewModel.StatusText, Is.EqualTo("About 250 MB"));
             Assert.That(viewModel.HasSubtitles && viewModel.HasChapters && viewModel.CanRemoveSponsors, Is.True);
         });
     }
@@ -128,7 +128,7 @@ public sealed class ExportViewModelTests
             Assert.That(options.RemoveSponsors, Is.True);
             Assert.That(options.EmbedChapters, Is.False, "chapters don't line up with clips");
             Assert.That(viewModel.ExportLabel, Is.EqualTo("Export 2 clips as one"));
-            Assert.That(viewModel.ClipsSummary, Is.EqualTo("2 clips, 0:30 in all"));
+            Assert.That(viewModel.ClipsSummary, Is.EqualTo("2 clips, 0:30"));
         });
     }
 
@@ -145,10 +145,10 @@ public sealed class ExportViewModelTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(viewModel.IsAudio, Is.True);
-            Assert.That(viewModel.Kind.Items[0].IsEnabled, Is.False, "there's no video to export");
+            Assert.That(viewModel.IsAudioOnly, Is.True);
+            Assert.That(viewModel.HasVideo, Is.False, "there's no video to export");
             Assert.That(settings.Current.AudioFormat, Is.EqualTo("flac"));
-            Assert.That(settings.Current.IsAudioExport, Is.True);
+            Assert.That(settings.Current.IncludeVideo, Is.False);
         });
     }
 
@@ -169,16 +169,48 @@ public sealed class ExportViewModelTests
     }
 
     [Test]
-    public void Choice_groups_keep_exactly_one_picked()
+    public void Choice_groups_keep_their_pick_when_the_options_change()
     {
-        var group = new ChoiceGroup([new Choice("a", "A"), new Choice("b", "B")], "a");
+        var group = new ChoiceGroup([new Choice("1080", "1080p"), new Choice("720", "720p")], "720");
 
-        group.Items[1].IsSelected = true;
+        group.Selected = null; // A combo box clears its selection while its items are rebuilt.
+        group.Reset([new Choice("720", "720p", "90 MB"), new Choice("480", "480p")], null);
+
+        Assert.That(group.SelectedKey, Is.EqualTo("720"));
+    }
+
+    [Test]
+    public void Video_can_go_without_sound_but_something_is_always_kept()
+    {
+        ExportViewModel viewModel = Create(new FakeDownloader());
+
+        viewModel.IncludeAudio = false;
+        ExportOptions silent = viewModel.CreateOptions();
+        viewModel.IncludeVideo = false;
 
         Assert.Multiple(() =>
         {
-            Assert.That(group.SelectedKey, Is.EqualTo("b"));
-            Assert.That(group.Items[0].IsSelected, Is.False);
+            Assert.That(silent is { IncludeVideo: true, IncludeAudio: false }, Is.True);
+            Assert.That(viewModel.IncludeAudio, Is.True, "switching off video with sound already off brings sound back");
+            Assert.That(viewModel.CreateOptions().Format, Is.EqualTo("mp3"));
+        });
+    }
+
+    [Test]
+    public void Clipping_each_chapter_saves_them_as_separate_files()
+    {
+        var downloader = new FakeDownloader();
+        downloader.Inspection.SetResult(Details with { Chapters = [new Chapter(TimeSpan.Zero, TimeSpan.FromMinutes(1), "Intro"), new Chapter(TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10), "Main")] });
+        ExportViewModel viewModel = Create(downloader);
+        viewModel.Open(Video);
+
+        viewModel.ClipChaptersCommand.Execute(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.Clips, Has.Count.EqualTo(2));
+            Assert.That(viewModel.JoinClips, Is.False);
+            Assert.That(viewModel.ExportLabel, Is.EqualTo("Export 2 clips"));
         });
     }
 

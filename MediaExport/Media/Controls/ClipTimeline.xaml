@@ -15,30 +15,53 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="6" />
         </Style>
+        <!-- Over the parts that aren't kept once there are clips, so what's kept stands out. -->
+        <Style x:Key="DroppedStyle" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource SmokeFillColorDefaultBrush}" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Opacity" Value="0.35" />
+        </Style>
         <Style x:Key="ChapterStyle" TargetType="Border">
-            <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+            <Setter Property="Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
             <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
-            <Setter Property="BorderThickness" Value="0,0,1,0" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="6,0" />
+        </Style>
+        <Style x:Key="HoveredChapterStyle" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource AccentFillColorTertiaryBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
             <Setter Property="Padding" Value="6,0" />
         </Style>
         <Style x:Key="ChapterTextStyle" BasedOn="{StaticResource CaptionTextBlockStyle}" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
         <Style x:Key="ClipStyle" TargetType="Border">
-            <Setter Property="Background" Value="{ThemeResource AccentFillColorTertiaryBrush}" />
+            <Setter Property="Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
             <Setter Property="BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
             <Setter Property="BorderThickness" Value="2" />
             <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="8,0" />
         </Style>
         <Style x:Key="SelectedClipStyle" TargetType="Border">
-            <Setter Property="Background" Value="{ThemeResource AccentFillColorSecondaryBrush}" />
+            <Setter Property="Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
             <Setter Property="BorderBrush" Value="{ThemeResource TextFillColorPrimaryBrush}" />
             <Setter Property="BorderThickness" Value="2" />
             <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="12,0" />
         </Style>
-        <Style x:Key="HandleStyle" TargetType="Border">
+        <Style x:Key="ClipTextStyle" BasedOn="{StaticResource CaptionTextBlockStyle}" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+            <Setter Property="TextTrimming" Value="Clip" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="GripStyle" TargetType="Border">
             <Setter Property="Background" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
             <Setter Property="CornerRadius" Value="2" />
         </Style>
@@ -46,14 +69,18 @@
             <Setter Property="Background" Value="{ThemeResource TextFillColorPrimaryBrush}" />
             <Setter Property="CornerRadius" Value="1" />
         </Style>
+        <Style x:Key="HoverStyle" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+        </Style>
         <Style x:Key="TickStyle" TargetType="Border">
-            <Setter Property="Background" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+            <Setter Property="Background" Value="{ThemeResource ControlStrokeColorSecondaryBrush}" />
         </Style>
         <Style x:Key="RulerTextStyle" BasedOn="{StaticResource CaptionTextBlockStyle}" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}" />
         </Style>
     </UserControl.Resources>
 
+    <!-- Clipped, so nothing drawn near the ends spills past the timeline. -->
     <Canvas
         x:Name="surface"
         Background="Transparent"

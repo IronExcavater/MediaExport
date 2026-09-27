@@ -20,7 +20,7 @@ public sealed class ActivityViewModelTests
         var downloader = new ExportViewModelTests.FakeDownloader();
         var activity = new ActivityViewModel(downloader, settings);
 
-        ExportJob job = activity.Start(Video, new ExportOptions(MediaKind.Video, "mp4", 720, "out"));
+        ExportJob job = activity.Start(Video, new ExportOptions("mp4", "out") { MaxHeight = 720 });
         downloader.Download.SetResult([@"C:\out\Result.mp4"]);
         await Task.Yield();
         var restored = new ActivityViewModel(downloader, settings);
@@ -32,7 +32,7 @@ public sealed class ActivityViewModelTests
             Assert.That(restored.Jobs, Has.Count.EqualTo(1));
             Assert.That(restored.Jobs[0].IsCompleted, Is.True);
             Assert.That(restored.Jobs[0].Status, Is.EqualTo("Saved to out"));
-            Assert.That(restored.Jobs[0].Summary, Is.EqualTo("MP4 · 720p"));
+            Assert.That(restored.Jobs[0].Summary, Is.EqualTo("MP4 720p"));
         });
     }
 
@@ -40,9 +40,9 @@ public sealed class ActivityViewModelTests
     public void Clearing_finished_exports_keeps_running_ones()
     {
         var settings = new SettingsStore(null);
-        settings.Current.History.Add(new ExportRecord(Video, new ExportOptions(MediaKind.Audio, "mp3", null, "out"), ExportOutcome.Failed, [], "Offline", DateTimeOffset.Now));
+        settings.Current.History.Add(new ExportRecord(Video, new ExportOptions("mp3", "out") { IncludeVideo = false }, ExportOutcome.Failed, [], "Offline", DateTimeOffset.Now));
         var activity = new ActivityViewModel(new ExportViewModelTests.FakeDownloader(), settings);
-        ExportJob running = activity.Start(Video, new ExportOptions(MediaKind.Audio, "mp3", null, "out"));
+        ExportJob running = activity.Start(Video, new ExportOptions("mp3", "out") { IncludeVideo = false });
 
         activity.ClearFinishedCommand.Execute(null);
 
