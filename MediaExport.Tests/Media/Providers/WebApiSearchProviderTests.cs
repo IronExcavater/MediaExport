@@ -32,7 +32,7 @@ public sealed class WebApiSearchProviderTests
     public async Task Internet_Archive_items_are_audio_or_video_by_their_type()
     {
         var provider = new InternetArchiveSearchProvider(Serve("""
-            {"response":{"docs":[{"identifier":"tape","title":"Tape","creator":["Band","Label"],"mediatype":"audio"},{"identifier":"reel","title":"Reel","mediatype":"movies"}]}}
+            {"response":{"docs":[{"identifier":"tape","title":"Tape","creator":["Band","Label"],"mediatype":"audio"},{"identifier":"reel","title":"&#34;Reel&#34;","mediatype":"movies"}]}}
             """));
 
         IReadOnlyList<MediaSearchResult> results = await provider.SearchAsync("old");
@@ -42,6 +42,7 @@ public sealed class WebApiSearchProviderTests
             Assert.That(results.Select(result => result.Kind), Is.EqualTo(new[] { MediaKind.Audio, MediaKind.Video }));
             Assert.That(results[0].Creator, Is.EqualTo("Band"));
             Assert.That(results[0].ThumbnailUri, Is.EqualTo(new Uri("https://archive.org/services/img/tape")));
+            Assert.That(results[1].Title, Is.EqualTo("\"Reel\""));
             Assert.That(results[1].EmbedUri, Is.EqualTo(new Uri("https://archive.org/embed/reel")));
         });
     }

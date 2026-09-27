@@ -291,7 +291,10 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
             return DrmProblem;
         if (text.Contains("Sign in to confirm", StringComparison.OrdinalIgnoreCase))
             return SignInProblem;
-        return text;
+
+        // Anything else is passed on as yt-dlp said it, just written as a sentence.
+        text = text.Length > 0 ? char.ToUpperInvariant(text[0]) + text[1..] : text;
+        return text.Length == 0 || text.EndsWith('.') ? text : text + ".";
     }
 
     [GeneratedRegex(@"^ERROR:\s*(\[[^\]]+\]\s*)?([\w-]+:\s)?")]

@@ -184,17 +184,22 @@ public sealed partial class ClipTimeline : UserControl
         int[] steps = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
         double pixelsPerSecond = width / Duration.TotalSeconds;
         int step = steps.FirstOrDefault(candidate => candidate * pixelsPerSecond >= 70, steps[^1]);
+
+        // The length is always shown at the end; step labels stop short of it.
+        var end = new TextBlock { Style = StyleOf("RulerTextStyle"), Text = Format(Duration) };
+        end.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        double endLeft = width - end.DesiredSize.Width;
+        Add(end, endLeft, RulerTop + 3);
+
         for (int second = 0; second <= Duration.TotalSeconds; second += step)
         {
             double x = second * pixelsPerSecond;
             Add(new Border { Style = StyleOf("TickStyle"), Width = 1, Height = 5 }, x, RulerTop + 2);
-            if (x < width - 36)
-                Add(new TextBlock { Style = StyleOf("RulerTextStyle"), Text = Format(TimeSpan.FromSeconds(second)) }, x + 4, RulerTop + 3);
+            var label = new TextBlock { Style = StyleOf("RulerTextStyle"), Text = Format(TimeSpan.FromSeconds(second)) };
+            label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            if (x + 4 + label.DesiredSize.Width + 12 <= endLeft)
+                Add(label, x + 4, RulerTop + 3);
         }
-
-        var end = new TextBlock { Style = StyleOf("RulerTextStyle"), Text = Format(Duration) };
-        end.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        Add(end, width - end.DesiredSize.Width, RulerTop + 3);
     }
 
     private void PlacePlayhead()

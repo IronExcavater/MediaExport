@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 using MediaExport.Core.Media.Models;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 
@@ -30,13 +31,14 @@ public abstract class WebApiSearchProvider(HttpClient http) : IMediaSearchProvid
         return ReadResults(document.RootElement).Take(ResultCount).ToArray();
     }
 
+    // Uploaders' text sometimes arrives HTML-encoded (&#34; for a quote).
     protected static string? Text(JsonElement element, string name) =>
-        element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String ? WebUtility.HtmlDecode(value.GetString()) : null;
 
     // Some fields come as a list when there are several (e.g. an Internet Archive item's creators).
     protected static string? FirstText(JsonElement element, string name) =>
         element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Array && value.GetArrayLength() > 0
-            ? value[0].GetString()
+            ? WebUtility.HtmlDecode(value[0].GetString())
             : Text(element, name);
 }
 
