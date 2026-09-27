@@ -27,11 +27,14 @@ public sealed partial class MainWindow : Window
 {
     private const double CompactPaneLength = 48;
     private const double OpenPaneLength = 240;
-    private static readonly TimeSpan PaneAnimationLength = TimeSpan.FromMilliseconds(200);
+    // Closing gets out of the way a little quicker than opening draws the pane in.
+    private static readonly TimeSpan PaneOpenLength = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan PaneCloseLength = TimeSpan.FromMilliseconds(180);
 
     private readonly SettingsStore _settings = App.Current.Services.GetRequiredService<SettingsStore>();
     private readonly ExportViewModel _export = App.Current.Services.GetRequiredService<ExportViewModel>();
-    private DateTime _paneAnimationStart;
+    private TimeSpan? _paneAnimationStart;
+    private TimeSpan _paneDuration;
     private double _paneFrom;
     private double _paneTo;
 
@@ -179,23 +182,27 @@ public sealed partial class MainWindow : Window
         _settings.Current.IsPaneOpen = !_settings.Current.IsPaneOpen;
         _paneFrom = navView.OpenPaneLength;
         _paneTo = _settings.Current.IsPaneOpen ? OpenPaneLength : CompactPaneLength;
-        _paneAnimationStart = DateTime.Now;
+        // Partway through a previous toggle, only the rest of the distance is left to go, so it takes that much less time.
+        _paneDuration = (_settings.Current.IsPaneOpen ? PaneOpenLength : PaneCloseLength)
+            * (Math.Abs(_paneTo - _paneFrom) / (OpenPaneLength - CompactPaneLength));
+        _paneAnimationStart = null;
         _settings.Save();
         UpdatePaneToolTips();
 
-        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= AnimatePane;
-        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += AnimatePane;
+        CompositionTarget.Rendering -= AnimatePane;
+        CompositionTarget.Rendering += AnimatePane;
     }
 
+    // Timed by the frames themselves, so every frame drawn gets its own step.
     private void AnimatePane(object? sender, object args)
     {
-        double progress = Math.Min(1, (DateTime.Now - _paneAnimationStart) / PaneAnimationLength);
-        double eased = 1 - Math.Pow(1 - progress, 3); // Decelerates, like Fluent's own motion.
+        TimeSpan now = ((RenderingEventArgs)args).RenderingTime;
+        _paneAnimationStart ??= now;
+        double progress = _paneDuration > TimeSpan.Zero ? Math.Min(1, (now - _paneAnimationStart.Value) / _paneDuration) : 1;
+        double eased = 1 - Math.Pow(1 - progress, 4); // Fluent's decelerate: quick to start, gentle to land.
         navView.OpenPaneLength = _paneFrom + (_paneTo - _paneFrom) * eased;
-        if (progress < 1)
-            return;
-
-        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= AnimatePane;
+        if (progress >= 1)
+            CompositionTarget.Rendering -= AnimatePane;
     }
 
     // With the pane narrowed its labels are hidden, so the icons say what they are on hover instead.
@@ -321,7 +328,8 @@ public sealed partial class MainWindow : Window
     {
         if ((args.SelectedItemContainer as NavigationViewItem)?.Tag is MediaSearchResult media)
         {
-            Open(media);
+            // Opening it reorders the recents, which rebuilds these items; that can't happen mid-selection.
+            DispatcherQueue.TryEnqueue(() => Open(media));
             return;
         }
 
