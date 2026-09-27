@@ -17,13 +17,16 @@ public sealed partial class ToolViewModel(Tool tool, ToolchainService toolchain,
 {
     public Tool Tool { get; } = tool;
     public string Name => Tool.Name;
-    public string Purpose => Tool.Purpose;
+    public Uri? Website => Tool.Website is { } site ? new Uri(site) : null;
+    public Uri SourceCode => new(Tool.SourceUrl);
+    public bool HasWebsite => Website is not null;
 
-    /// <summary>Recent releases, newest first, for picking a version.</summary>
+    /// <summary>Releases with a Windows build, newest first.</summary>
     public ObservableCollection<ToolRelease> Releases { get; } = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsInstalled), nameof(IsHealthy), nameof(IsMissing), nameof(IsManaged), nameof(StatusText), nameof(Summary), nameof(Latest), nameof(HasUpdate), nameof(PrimaryAction), nameof(HasPrimaryAction))]
+    [NotifyPropertyChangedFor(nameof(IsInstalled), nameof(IsHealthy), nameof(IsMissing), nameof(IsManaged), nameof(VersionText), nameof(SourceText))]
+    [NotifyPropertyChangedFor(nameof(Latest), nameof(HasUpdate), nameof(PrimaryAction), nameof(HasPrimaryAction))]
     public partial ToolStatus? Status { get; private set; }
 
     [ObservableProperty]
@@ -38,11 +41,8 @@ public sealed partial class ToolViewModel(Tool tool, ToolchainService toolchain,
     public partial bool IsProgressKnown { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasError), nameof(Summary), nameof(IsHealthy), nameof(IsMissing))]
+    [NotifyPropertyChangedFor(nameof(HasError), nameof(SourceText), nameof(IsHealthy), nameof(IsMissing))]
     public partial string? Error { get; private set; }
-
-    /// <summary>The status line: what went wrong if something did, otherwise what's installed.</summary>
-    public string Summary => Error ?? StatusText;
 
     public bool IsInstalled => Status?.IsInstalled == true;
     public bool IsHealthy => IsInstalled && !HasError;
@@ -53,15 +53,24 @@ public sealed partial class ToolViewModel(Tool tool, ToolchainService toolchain,
     public ToolRelease? Latest => Releases.FirstOrDefault();
     public bool HasUpdate => IsInstalled && Latest is { } latest && Status?.Version is { } version && IsNewer(latest.Version, version);
 
-    public string StatusText => Status switch
+    /// <summary>The first line under the name: the version, or that it's missing.</summary>
+    public string VersionText => Status switch
     {
         null => "Checking…",
-        { IsInstalled: false } => Tool.IsRequired ? "Not installed · needed to export" : "Not installed · optional",
-        { IsManaged: true } => $"Version {Status.Version}",
-        _ => $"Version {Status.Version ?? "unknown"} · installed outside MediaExport"
+        { IsInstalled: false } => Tool.IsRequired ? "Not installed" : "Not installed (optional)",
+        { Version: { } version } => version,
+        _ => "Installed"
     };
 
-    /// <summary>The one thing most worth doing: install it, update it, or take over a copy found on PATH.</summary>
+    /// <summary>The second line: where it's from, or what went wrong.</summary>
+    public string? SourceText => Error ?? Status switch
+    {
+        { IsManaged: true } => "Installed by MediaExport",
+        { Path: { } path } => $"Found at {path}",
+        _ => null
+    };
+
+    /// <summary>The one thing most worth doing: install it, or update it.</summary>
     public string? PrimaryAction => this switch
     {
         { IsInstalled: false } => "Install",
@@ -84,13 +93,10 @@ public sealed partial class ToolViewModel(Tool tool, ToolchainService toolchain,
         }
         catch (Exception exception)
         {
-            Error = $"Couldn't check for versions: {exception.Message}";
+            Error = $"Couldn't look for versions: {exception.Message}";
         }
 
-        OnPropertyChanged(nameof(Latest));
-        OnPropertyChanged(nameof(HasUpdate));
-        OnPropertyChanged(nameof(PrimaryAction));
-        OnPropertyChanged(nameof(HasPrimaryAction));
+        RaiseReleaseState();
     }
 
     private bool CanAct() => !IsWorking;
@@ -132,11 +138,17 @@ public sealed partial class ToolViewModel(Tool tool, ToolchainService toolchain,
         {
             Status = await toolchain.CheckAsync(Tool);
             IsWorking = false;
-            OnPropertyChanged(nameof(HasUpdate));
-            OnPropertyChanged(nameof(PrimaryAction));
-            OnPropertyChanged(nameof(HasPrimaryAction));
+            RaiseReleaseState();
             changed();
         }
+    }
+
+    private void RaiseReleaseState()
+    {
+        OnPropertyChanged(nameof(Latest));
+        OnPropertyChanged(nameof(HasUpdate));
+        OnPropertyChanged(nameof(PrimaryAction));
+        OnPropertyChanged(nameof(HasPrimaryAction));
     }
 
     // Tags are dates (yt-dlp) or semantic versions (FFmpeg, Deno); both compare part by part as numbers.

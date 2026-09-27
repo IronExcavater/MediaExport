@@ -16,13 +16,22 @@
             <Setter Property="FontSize" Value="20" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
+        <Style x:Key="SettingsComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="MinWidth" Value="200" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <converters:PassThroughConverter x:Key="PassThrough" />
     </Page.Resources>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <StackPanel
-            MaxWidth="1000"
-            Padding="24,0,24,32"
-            Spacing="4">
+        <!-- Centred at a readable width; the side columns take whatever's left over. -->
+        <Grid Padding="24,0,24,32">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="60*" MaxWidth="1000" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+        <StackPanel Grid.Column="1" Spacing="4">
 
             <TextBlock Style="{StaticResource SettingsHeaderStyle}" Text="Appearance" />
             <Border Style="{StaticResource CardStyle}">
@@ -37,26 +46,12 @@
                         Grid.Column="1"
                         VerticalAlignment="Center"
                         Text="Theme" />
-                    <StackPanel
+                    <ComboBox
                         Grid.Column="2"
-                        Orientation="Horizontal"
-                        Spacing="8">
-                        <RadioButton
-                            Content="Light"
-                            GroupName="theme"
-                            IsChecked="{x:Bind ViewModel.IsLightTheme, Mode=TwoWay}"
-                            Style="{StaticResource ChipRadioButtonStyle}" />
-                        <RadioButton
-                            Content="Dark"
-                            GroupName="theme"
-                            IsChecked="{x:Bind ViewModel.IsDarkTheme, Mode=TwoWay}"
-                            Style="{StaticResource ChipRadioButtonStyle}" />
-                        <RadioButton
-                            Content="Same as Windows"
-                            GroupName="theme"
-                            IsChecked="{x:Bind ViewModel.IsSystemTheme, Mode=TwoWay}"
-                            Style="{StaticResource ChipRadioButtonStyle}" />
-                    </StackPanel>
+                        AutomationProperties.Name="Theme"
+                        ItemsSource="{x:Bind ViewModel.Themes}"
+                        SelectedItem="{x:Bind ViewModel.SelectedTheme, Mode=TwoWay, Converter={StaticResource PassThrough}}"
+                        Style="{StaticResource SettingsComboBoxStyle}" />
                 </Grid>
             </Border>
 
@@ -89,41 +84,66 @@
                                             Style="{StaticResource SettingsIconStyle}"
                                             Visibility="{x:Bind HasError, Mode=OneWay}" />
                                     </Grid>
+
+                                    <!-- Name and version first; where it came from, or what went wrong, underneath. -->
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock>
-                                            <Run Text="{x:Bind Name}" />
-                                            <Run Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Purpose}" />
-                                        </TextBlock>
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="{x:Bind Name}" />
+                                            <TextBlock
+                                                VerticalAlignment="Bottom"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Text="{x:Bind VersionText, Mode=OneWay}" />
+                                        </StackPanel>
                                         <TextBlock
                                             Style="{StaticResource SecondaryTextStyle}"
-                                            Text="{x:Bind Summary, Mode=OneWay}"
+                                            Text="{x:Bind SourceText, Mode=OneWay}"
                                             TextTrimming="CharacterEllipsis"
                                             TextWrapping="NoWrap"
-                                            ToolTipService.ToolTip="{x:Bind Status.Path, Mode=OneWay}" />
+                                            ToolTipService.ToolTip="{x:Bind SourceText, Mode=OneWay}" />
                                     </StackPanel>
+
                                     <StackPanel
                                         Grid.Column="2"
                                         VerticalAlignment="Center"
                                         Orientation="Horizontal"
-                                        Spacing="8">
+                                        Spacing="4">
                                         <Button
+                                            Margin="0,0,4,0"
                                             Command="{x:Bind InstallCommand}"
                                             Content="{x:Bind PrimaryAction, Mode=OneWay}"
                                             Style="{StaticResource AccentButtonStyle}"
                                             Visibility="{x:Bind HasPrimaryAction, Mode=OneWay}" />
                                         <DropDownButton
-                                            Content="Version"
+                                            AutomationProperties.Name="Choose a version"
+                                            Content="Versions"
                                             IsEnabled="{x:Bind IsIdle, Mode=OneWay}"
-                                            ToolTipService.ToolTip="Install a particular version">
+                                            ToolTipService.ToolTip="Install any released version">
                                             <DropDownButton.Flyout>
                                                 <MenuFlyout Opening="Versions_Opening" Placement="BottomEdgeAlignedRight" />
                                             </DropDownButton.Flyout>
                                         </DropDownButton>
                                         <Button
+                                            AutomationProperties.Name="Website"
+                                            Click="Link_Click"
+                                            Style="{StaticResource SubtleButtonStyle}"
+                                            Tag="{x:Bind Website}"
+                                            ToolTipService.ToolTip="Website"
+                                            Visibility="{x:Bind HasWebsite}">
+                                            <FontIcon FontSize="16" Glyph="&#xE774;" />
+                                        </Button>
+                                        <Button
+                                            AutomationProperties.Name="Source code"
+                                            Click="Link_Click"
+                                            Style="{StaticResource SubtleButtonStyle}"
+                                            Tag="{x:Bind SourceCode}"
+                                            ToolTipService.ToolTip="Source code">
+                                            <FontIcon FontSize="16" Glyph="&#xE943;" />
+                                        </Button>
+                                        <Button
                                             AutomationProperties.Name="Remove"
                                             Command="{x:Bind RemoveCommand}"
                                             Style="{StaticResource SubtleButtonStyle}"
-                                            ToolTipService.ToolTip="Remove MediaExport's copy"
+                                            ToolTipService.ToolTip="Remove the copy MediaExport installed"
                                             Visibility="{x:Bind IsManaged, Mode=OneWay}">
                                             <FontIcon FontSize="16" Glyph="&#xE74D;" />
                                         </Button>
@@ -152,17 +172,15 @@
                     </Grid.ColumnDefinitions>
                     <FontIcon Glyph="&#xE77B;" Style="{StaticResource SettingsIconStyle}" />
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="Use a browser's sign-in" />
-                        <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="For media that needs an account, like age-restricted or members-only videos. Pick a browser you're signed in with." />
+                        <TextBlock Text="Sign in with a browser" />
+                        <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="For videos that need an account, such as age-restricted ones" />
                     </StackPanel>
                     <ComboBox
                         Grid.Column="2"
-                        MinWidth="180"
-                        VerticalAlignment="Center"
                         AutomationProperties.Name="Browser to sign in with"
-                        DisplayMemberPath="Label"
                         ItemsSource="{x:Bind ViewModel.Browsers}"
-                        SelectedItem="{x:Bind ViewModel.SelectedBrowser, Mode=TwoWay}" />
+                        SelectedItem="{x:Bind ViewModel.SelectedBrowser, Mode=TwoWay, Converter={StaticResource PassThrough}}"
+                        Style="{StaticResource SettingsComboBoxStyle}" />
                 </Grid>
             </Border>
 
@@ -176,10 +194,10 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <FontIcon Glyph="&#xE721;" Style="{StaticResource SettingsIconStyle}" />
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock Text="Recent picks" />
-                            <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="Shown on the home page and when you start a search" />
-                        </StackPanel>
+                        <TextBlock
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Text="Recently opened media" />
                         <Button
                             Grid.Column="2"
                             Command="{x:Bind ViewModel.ClearSearchHistoryCommand}"
@@ -196,7 +214,7 @@
                         <FontIcon Glyph="&#xE81C;" Style="{StaticResource SettingsIconStyle}" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock Text="Finished exports" />
-                            <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="Listed in Activity. Clearing the list leaves the files alone." />
+                            <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="The exported files are kept" />
                         </StackPanel>
                         <Button
                             Grid.Column="2"
@@ -209,45 +227,50 @@
 
             <TextBlock Style="{StaticResource SettingsHeaderStyle}" Text="About" />
             <Border Style="{StaticResource CardStyle}">
-                <StackPanel Spacing="16">
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Image
-                            Width="56"
-                            Height="56"
-                            Source="ms-appx:///Assets/App/Square44x44Logo.targetsize-256_altform-unplated.png" />
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="MediaExport" />
-                            <TextBlock Style="{StaticResource SecondaryTextStyle}">
-                                <Run Text="Version" />
-                                <Run Text="{x:Bind ViewModel.Version}" />
-                            </TextBlock>
-                        </StackPanel>
-                    </Grid>
-                    <TextBlock TextWrapping="Wrap">
-                        Save video and audio from YouTube, SoundCloud and hundreds of other sites, whole or in clips. Please only export what you have the right to keep.
-                    </TextBlock>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <HyperlinkButton Content="Source code" NavigateUri="https://github.com/IronExcavater/MediaExport" />
-                        <HyperlinkButton Content="Report a problem" NavigateUri="https://github.com/IronExcavater/MediaExport/issues/new" />
-                        <HyperlinkButton Content="Licence (MPL 2.0)" NavigateUri="https://github.com/IronExcavater/MediaExport/blob/main/LICENSE" />
-                    </StackPanel>
-                    <Rectangle Style="{StaticResource DividerStyle}" />
-                    <StackPanel Spacing="4">
-                        <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="Made by Niclas Rogulski, Andrew Shillabeer and Ezekiel Paterno." />
-                        <TextBlock Style="{StaticResource SecondaryTextStyle}">
-                            <Run Text="Built on" />
-                            <Hyperlink NavigateUri="https://github.com/yt-dlp/yt-dlp">yt-dlp</Hyperlink><Run Text="," />
-                            <Hyperlink NavigateUri="https://ffmpeg.org">FFmpeg</Hyperlink>
-                            <Run Text="and" />
-                            <Hyperlink NavigateUri="https://deno.com">Deno</Hyperlink><Run Text="." />
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Image
+                        Width="48"
+                        Height="48"
+                        Source="ms-appx:///Assets/App/Square44x44Logo.targetsize-256_altform-unplated.png" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock>
+                            <Run FontWeight="SemiBold" Text="MediaExport" />
+                            <Run Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.Version}" />
                         </TextBlock>
+                        <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="By Niclas Rogulski, Andrew Shillabeer and Ezekiel Paterno" />
                     </StackPanel>
-                </StackPanel>
+                    <StackPanel
+                        Grid.Column="2"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="4">
+                        <Button Click="Link_Click" Tag="https://github.com/IronExcavater/MediaExport">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontSize="14" Glyph="&#xE943;" />
+                                <TextBlock Text="Source code" />
+                            </StackPanel>
+                        </Button>
+                        <Button Click="Link_Click" Tag="https://github.com/IronExcavater/MediaExport/issues/new">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontSize="14" Glyph="&#xEBE8;" />
+                                <TextBlock Text="Report a problem" />
+                            </StackPanel>
+                        </Button>
+                        <Button Click="Link_Click" Tag="https://github.com/IronExcavater/MediaExport/blob/main/LICENSE">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontSize="14" Glyph="&#xE8A5;" />
+                                <TextBlock Text="Licence" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
             </Border>
         </StackPanel>
+        </Grid>
     </ScrollViewer>
 </Page>
