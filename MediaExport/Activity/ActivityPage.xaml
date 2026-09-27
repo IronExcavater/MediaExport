@@ -140,15 +140,7 @@
 
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                 <TextBlock Text="{x:Bind Media.Title}" TextTrimming="CharacterEllipsis" />
-                                <TextBlock
-                                    Style="{StaticResource SecondaryTextStyle}"
-                                    TextTrimming="CharacterEllipsis"
-                                    TextWrapping="NoWrap"
-                                    ToolTipService.ToolTip="{x:Bind Status, Mode=OneWay}">
-                                    <Run Text="{x:Bind Summary}" />
-                                    <Run Text=" · " />
-                                    <Run Text="{x:Bind Status, Mode=OneWay}" />
-                                </TextBlock>
+                                <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind Summary}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
                             </StackPanel>
 
                             <StackPanel
@@ -156,6 +148,7 @@
                                 VerticalAlignment="Center"
                                 Orientation="Horizontal"
                                 Spacing="4">
+                                <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" MaxWidth="320" Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind Status, Mode=OneWay}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTipService.ToolTip="{x:Bind Status, Mode=OneWay}" />
                                 <Button
                                     AutomationProperties.Name="Cancel"
                                     Command="{x:Bind CancelCommand}"

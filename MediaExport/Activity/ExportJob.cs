@@ -33,7 +33,7 @@ public sealed partial class ExportJob : ObservableObject
     {
         Media = media;
         Options = options;
-        Status = "Starting";
+        Status = "Looking it up";
     }
 
     public ExportJob(ExportRecord record)
@@ -55,13 +55,25 @@ public sealed partial class ExportJob : ObservableObject
     public ExportOptions Options { get; }
     public DateTimeOffset? FinishedAt { get; private set; }
 
-    public string Summary => Options switch
+    /// <summary>What was exported, e.g. "MP4 1080p, no sound" or "MP3 320 kbps, 2 clips".</summary>
+    public string Summary
     {
-        { Kind: MediaKind.Audio, AudioBitrate: int kbps } => $"{Options.Format.ToUpperInvariant()} · {kbps} kbps",
-        { Kind: MediaKind.Audio } => $"{Options.Format.ToUpperInvariant()} · Best quality",
-        { MaxHeight: int height } => $"{Options.Format.ToUpperInvariant()} · {height}p",
-        _ => $"{Options.Format.ToUpperInvariant()} · Best quality"
-    } + (Options.Clips.Count switch { 0 => string.Empty, 1 => " · 1 clip", var count => $" · {count} clips" });
+        get
+        {
+            string quality = Options switch
+            {
+                { IncludeVideo: true, MaxHeight: int height } => $"{height}p",
+                { IncludeVideo: false, AudioBitrate: int kbps } => $"{kbps} kbps",
+                _ => "best quality"
+            };
+            var parts = new List<string> { $"{Options.Format.ToUpperInvariant()} {quality}" };
+            if (Options is { IncludeVideo: true, IncludeAudio: false })
+                parts.Add("no sound");
+            if (Options.Clips.Count > 0)
+                parts.Add(Options.Clips.Count == 1 ? "1 clip" : $"{Options.Clips.Count} clips");
+            return string.Join(", ", parts);
+        }
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsCompleted), nameof(IsFailed), nameof(IsFinished))]
@@ -143,11 +155,10 @@ public sealed partial class ExportJob : ObservableObject
 
         // Video downloads fetch video then audio; the bar never runs backwards.
         Progress = value.IsProcessing ? 100 : Math.Max(Progress, value.Percent);
-        Status = Progress >= 100
-            ? "Finishing up"
-            : value.Speed is { } speed && !speed.StartsWith("0.00", StringComparison.Ordinal)
-                ? $"Downloading · {Progress:0}% · {speed}"
-                : $"Downloading · {Progress:0}%";
+        Status = value.Step
+            ?? (Progress >= 100 ? "Finishing up"
+                : value.Speed is { } speed && !speed.StartsWith("0.00", StringComparison.Ordinal) ? $"{Progress:0}% at {speed}"
+                : $"{Progress:0}%");
     }
 
     [RelayCommand(CanExecute = nameof(IsRunning))]

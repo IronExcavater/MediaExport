@@ -42,6 +42,14 @@ public sealed partial class SubtitleChoice(SubtitleTrack track) : ObservableObje
     public override string ToString() => Track.Name;
 }
 
+/// <summary>A clip as listed under the timeline: its number, its times, and whether it's the one being edited.</summary>
+public sealed record ClipItem(int Index, Clip Clip, bool IsSelected)
+{
+    public int Number => Index + 1;
+    public string Range => $"{ExportViewModel.Format(Clip.Start)} – {ExportViewModel.Format(Clip.End)}";
+    public override string ToString() => $"Clip {Number}, {Range}";
+}
+
 /// <summary>The media being exported and every choice about how.</summary>
 public sealed partial class ExportViewModel : ObservableObject
 {
@@ -54,7 +62,7 @@ public sealed partial class ExportViewModel : ObservableObject
     private CancellationTokenSource? _inspection;
     private bool _isRestoring;
 
-    // The options a finished job was made with count as "done" only until something changes.
+    // A finished job counts as "done" only until a choice changes.
     private int _optionsVersion;
     private int _jobOptionsVersion;
 
@@ -66,33 +74,37 @@ public sealed partial class ExportViewModel : ObservableObject
         AppSettings saved = settings.Current;
         _isRestoring = true; // Otherwise each choice restored here would save the rest before they're restored.
 
-        Kind = new ChoiceGroup(
-            [new Choice("video", "Video", "Picture and sound"), new Choice("audio", "Audio only", "Just the sound")],
-            saved.IsAudioExport ? "audio" : "video");
         VideoFormat = new ChoiceGroup(
-            [new Choice("mp4", "MP4", "Plays almost everywhere"), new Choice("mkv", "MKV", "Keeps every subtitle and track"), new Choice("webm", "WebM", "Open format, often smaller")],
+            [new Choice("mp4", "MP4", "Plays everywhere"), new Choice("mkv", "MKV", "Keeps every track"), new Choice("webm", "WebM", "Open, often smaller")],
             saved.VideoFormat);
         AudioFormat = new ChoiceGroup(
-            [new Choice("mp3", "MP3", "Plays almost everywhere"), new Choice("m4a", "M4A", "Apple devices and iTunes"), new Choice("opus", "Opus", "Smallest at the same quality"),
-             new Choice("flac", "FLAC", "Lossless copy of what's there"), new Choice("wav", "WAV", "Uncompressed, for editing")],
+            [new Choice("mp3", "MP3", "Plays everywhere"), new Choice("m4a", "M4A", "Apple devices"), new Choice("opus", "Opus", "Smallest"),
+             new Choice("flac", "FLAC", "Lossless"), new Choice("wav", "WAV", "Uncompressed")],
             saved.AudioFormat);
-        VideoQuality = new ChoiceGroup(VideoQualities(null), saved.VideoQuality?.ToString(CultureInfo.InvariantCulture) ?? Best);
+        VideoQuality = new ChoiceGroup(VideoQualities(null), Key(saved.VideoQuality));
         AudioQuality = new ChoiceGroup(
             [new Choice(Best, "Best"), new Choice("320", "320 kbps"), new Choice("256", "256 kbps"), new Choice("192", "192 kbps"), new Choice("128", "128 kbps")],
-            saved.AudioBitrate?.ToString(CultureInfo.InvariantCulture) ?? Best);
+            Key(saved.AudioBitrate));
         FileName = new ChoiceGroup(
             [new Choice("%(title)s", "Title"), new Choice("%(uploader)s - %(title)s", "Creator - Title"), new Choice("%(title)s [%(id)s]", "Title [ID]")],
             saved.FileNameTemplate);
 
+        IncludeVideo = saved.IncludeVideo;
+        IncludeAudio = saved.IncludeAudio || !saved.IncludeVideo;
         OutputFolder = saved.OutputFolder ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
         EmbedDetails = saved.EmbedMetadata && saved.EmbedThumbnail;
         EmbedChapters = saved.EmbedChapters;
         RemoveSponsors = saved.RemoveSponsors;
         _isRestoring = false;
 
-        foreach (ChoiceGroup group in new[] { Kind, VideoFormat, AudioFormat, VideoQuality, AudioQuality, FileName })
+        foreach (ChoiceGroup group in new[] { VideoFormat, AudioFormat, VideoQuality, AudioQuality, FileName })
             group.Changed += (_, _) => OnOptionChanged();
-        Clips.CollectionChanged += (_, _) => OnOptionChanged();
+        Clips.CollectionChanged += (_, _) =>
+        {
+            if (SelectedClip >= Clips.Count)
+                SelectedClip = Clips.Count - 1;
+            OnOptionChanged();
+        };
         activity.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(ActivityViewModel.RunningCount))
@@ -100,7 +112,6 @@ public sealed partial class ExportViewModel : ObservableObject
         };
     }
 
-    public ChoiceGroup Kind { get; }
     public ChoiceGroup VideoFormat { get; }
     public ChoiceGroup AudioFormat { get; }
     public ChoiceGroup VideoQuality { get; }
@@ -109,16 +120,26 @@ public sealed partial class ExportViewModel : ObservableObject
 
     public ObservableCollection<SubtitleChoice> Subtitles { get; } = [];
 
-    /// <summary>Parts to keep, in order; empty keeps all of it.</summary>
+    /// <summary>Parts to keep, in time order; empty keeps all of it.</summary>
     public ObservableCollection<Clip> Clips { get; } = [];
 
+    /// <summary>The clips as listed under the timeline.</summary>
+    public ObservableCollection<ClipItem> ClipItems { get; } = [];
+
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasMedia), nameof(Duration))]
+    [NotifyPropertyChangedFor(nameof(HasMedia), nameof(Duration), nameof(HasCreatorLink), nameof(ProviderName))]
     public partial MediaSearchResult? Media { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Chapters), nameof(HasChapters), nameof(HasSubtitles), nameof(CanRemoveSponsors))]
+    [NotifyPropertyChangedFor(nameof(Chapters), nameof(HasChapters), nameof(CanRemoveSponsors), nameof(HasVideo))]
     public partial MediaDetails? Details { get; private set; }
+
+    /// <summary>Whether the file has pictures. Without, it's an audio file.</summary>
+    [ObservableProperty]
+    public partial bool IncludeVideo { get; set; } = true;
+
+    [ObservableProperty]
+    public partial bool IncludeAudio { get; set; } = true;
 
     [ObservableProperty]
     public partial string OutputFolder { get; set; }
@@ -133,10 +154,11 @@ public sealed partial class ExportViewModel : ObservableObject
     public partial bool RemoveSponsors { get; set; }
 
     [ObservableProperty]
-    public partial bool SplitChapters { get; set; }
-
-    [ObservableProperty]
     public partial bool JoinClips { get; set; } = true;
+
+    /// <summary>The clip being edited, or -1.</summary>
+    [ObservableProperty]
+    public partial int SelectedClip { get; set; } = -1;
 
     /// <summary>The export shown on the button: running, or finished with the current options.</summary>
     [ObservableProperty]
@@ -150,14 +172,28 @@ public sealed partial class ExportViewModel : ObservableObject
     public partial string? StatusText { get; private set; }
 
     public bool HasMedia => Media is not null;
-    public bool IsAudio => Kind.SelectedKey == "audio";
-    public bool IsVideo => !IsAudio;
-    public bool CanExportVideo => Details?.HasVideo ?? Media?.Kind != MediaKind.Audio;
+
+    /// <summary>The source's name, e.g. "YouTube", from its id.</summary>
+    public string? ProviderName => Media?.ProviderId switch
+    {
+        "youtube" => "YouTube",
+        "soundcloud" => "SoundCloud",
+        "dailymotion" => "Dailymotion",
+        "internetarchive" => "Internet Archive",
+        var other => other
+    };
+    public bool HasCreatorLink => Media?.CreatorUrl is not null;
+
+    /// <summary>Whether the media has pictures at all; sound-only media can't be exported as video.</summary>
+    public bool HasVideo => Details?.HasVideo ?? Media?.Kind != MediaKind.Audio;
     public bool HasChapters => Chapters.Count > 0;
     public bool HasSubtitles => Subtitles.Count > 0;
     public bool CanRemoveSponsors => Details?.SupportsSponsorBlock == true;
     public bool HasClips => Clips.Count > 0;
     public bool HasSeveralClips => Clips.Count > 1;
+    public bool IsAudioOnly => !IncludeVideo;
+    public bool CanChooseSubtitles => IncludeVideo && HasSubtitles;
+    public bool CanEmbedChapters => HasChapters && !HasClips;
     public TimeSpan Duration => Media?.Duration ?? TimeSpan.Zero;
     public IReadOnlyList<Chapter> Chapters => Details?.Chapters ?? [];
 
@@ -175,7 +211,15 @@ public sealed partial class ExportViewModel : ObservableObject
         ExportState.Failed => "Try again",
         _ when Clips.Count == 1 => "Export clip",
         _ when Clips.Count > 1 => JoinClips ? $"Export {Clips.Count} clips as one" : $"Export {Clips.Count} clips",
-        _ => IsAudio ? "Export audio" : "Export video"
+        _ => IncludeVideo ? "Export video" : "Export audio"
+    };
+
+    /// <summary>With video, the sound goes in the video's container in its usual codec.</summary>
+    public string AudioCodec => VideoFormat.SelectedKey switch
+    {
+        "webm" => "Opus, to suit WebM",
+        "mkv" => "As the site has it",
+        _ => "AAC, to suit MP4"
     };
 
     public double ProgressFraction => Job is { } job && (IsRunning || IsFailed) ? job.DisplayProgress / 100 : 0;
@@ -183,9 +227,16 @@ public sealed partial class ExportViewModel : ObservableObject
 
     public string ClipsSummary => Clips.Count switch
     {
-        0 => "The whole thing",
-        1 => $"{Format(Clips[0].Start)} to {Format(Clips[0].End)}",
-        var count => $"{count} clips, {Format(TimeSpan.FromTicks(Clips.Sum(clip => clip.Length.Ticks)))} in all"
+        0 => "All of it",
+        1 => $"1 clip, {Format(Clips[0].Length)}",
+        var count => $"{count} clips, {Format(TimeSpan.FromTicks(Clips.Sum(clip => clip.Length.Ticks)))}"
+    };
+
+    public string SubtitlesSummary => Subtitles.Where(choice => choice.IsSelected).Select(choice => choice.Track.Name).ToArray() switch
+    {
+        { Length: 0 } => "None",
+        { Length: 1 } one => one[0],
+        var several => $"{several.Length} languages"
     };
 
     public string FileNamePreview
@@ -196,8 +247,8 @@ public sealed partial class ExportViewModel : ObservableObject
                 .Replace("%(title)s", Media?.Title ?? "Title")
                 .Replace("%(uploader)s", Media?.Creator ?? "Creator")
                 .Replace("%(id)s", Media?.Identity ?? "id");
-            string extension = (IsAudio ? AudioFormat : VideoFormat).SelectedKey ?? "mp4";
-            return Clips.Count > 1 && !JoinClips ? $"{name} (part 1).{extension}, …" : $"{name}.{extension}";
+            string extension = (IncludeVideo ? VideoFormat : AudioFormat).SelectedKey ?? "mp4";
+            return Clips.Count > 1 && !JoinClips ? $"{name} (clip 1).{extension}" : $"{name}.{extension}";
         }
     }
 
@@ -210,11 +261,9 @@ public sealed partial class ExportViewModel : ObservableObject
         _isRestoring = true;
         Media = media;
         Clips.Clear();
-        SplitChapters = false;
+        SelectedClip = -1;
         Details = null;
         Subtitles.Clear();
-        if (media.Kind == MediaKind.Audio)
-            Kind.Select("audio");
         _isRestoring = false;
 
         Job = _activity.FindRunning(media);
@@ -237,14 +286,62 @@ public sealed partial class ExportViewModel : ObservableObject
     {
         Open(job.Media);
         ExportOptions options = job.Options;
-        Kind.Select(options.Kind == MediaKind.Audio ? "audio" : "video");
-        (options.Kind == MediaKind.Audio ? AudioFormat : VideoFormat).Select(options.Format);
-        VideoQuality.Select(options.MaxHeight?.ToString(CultureInfo.InvariantCulture) ?? Best);
-        AudioQuality.Select(options.AudioBitrate?.ToString(CultureInfo.InvariantCulture) ?? Best);
+        IncludeVideo = options.IncludeVideo;
+        IncludeAudio = options.IncludeAudio;
+        (options.IncludeVideo ? VideoFormat : AudioFormat).Select(options.Format);
+        VideoQuality.Select(Key(options.MaxHeight));
+        AudioQuality.Select(Key(options.AudioBitrate));
         foreach (Clip clip in options.Clips)
             Clips.Add(clip);
         JoinClips = options.JoinClips;
         RemoveSponsors = options.RemoveSponsors;
+    }
+
+    /// <summary>Adds a clip in time order and selects it.</summary>
+    public void AddClip(Clip clip)
+    {
+        int index = Clips.TakeWhile(other => other.Start < clip.Start).Count();
+        Clips.Insert(index, clip);
+        SelectedClip = index;
+    }
+
+    /// <summary>A clip from <paramref name="at"/>, up to 30 seconds long, in the free space there.</summary>
+    [RelayCommand]
+    private void AddClipAt(TimeSpan at)
+    {
+        if (Duration <= TimeSpan.Zero || Clips.Any(clip => clip.Start <= at && at < clip.End))
+            return;
+
+        TimeSpan end = Clips.Where(clip => clip.Start > at).Select(clip => clip.Start).DefaultIfEmpty(Duration).Min();
+        end = TimeSpan.FromTicks(Math.Min(end.Ticks, (at + TimeSpan.FromSeconds(30)).Ticks));
+        if (end - at >= TimeSpan.FromSeconds(1))
+            AddClip(new Clip(at, end));
+    }
+
+    /// <summary>A clip per chapter, saved as a file each.</summary>
+    [RelayCommand]
+    private void ClipChapters()
+    {
+        Clips.Clear();
+        foreach (Chapter chapter in Chapters)
+            Clips.Add(new Clip(chapter.Start, chapter.End));
+        JoinClips = false;
+        SelectedClip = -1;
+    }
+
+    [RelayCommand]
+    private void RemoveClip(int index)
+    {
+        if (index >= 0 && index < Clips.Count)
+            Clips.RemoveAt(index);
+        SelectedClip = -1;
+    }
+
+    [RelayCommand]
+    private void ClearClips()
+    {
+        Clips.Clear();
+        SelectedClip = -1;
     }
 
     [RelayCommand]
@@ -269,34 +366,42 @@ public sealed partial class ExportViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ClearClips() => Clips.Clear();
-
-    [RelayCommand]
     private void OpenFolder() =>
         System.Diagnostics.Process.Start("explorer.exe", $"\"{OutputFolder}\"");
 
-    internal ExportOptions CreateOptions()
-    {
-        bool audio = IsAudio;
-        return new ExportOptions(
-            audio ? MediaKind.Audio : MediaKind.Video,
-            (audio ? AudioFormat : VideoFormat).SelectedKey ?? (audio ? "mp3" : "mp4"),
-            audio ? null : ParseNumber(VideoQuality.SelectedKey),
-            OutputFolder)
+    internal ExportOptions CreateOptions() =>
+        new((IncludeVideo ? VideoFormat : AudioFormat).SelectedKey ?? (IncludeVideo ? "mp4" : "mp3"), OutputFolder)
         {
-            AudioBitrate = audio ? ParseNumber(AudioQuality.SelectedKey) : null,
+            IncludeVideo = IncludeVideo,
+            IncludeAudio = IncludeAudio || !IncludeVideo,
+            MaxHeight = IncludeVideo ? ParseNumber(VideoQuality.SelectedKey) : null,
+            AudioBitrate = ParseNumber(AudioQuality.SelectedKey),
             EmbedMetadata = EmbedDetails,
             EmbedThumbnail = EmbedDetails,
-            EmbedChapters = EmbedChapters && Clips.Count == 0,
-            SubtitleLanguages = audio ? [] : Subtitles.Where(choice => choice.IsSelected).Select(choice => choice.Track.Language).ToArray(),
+            EmbedChapters = EmbedChapters && CanEmbedChapters,
+            SubtitleLanguages = CanChooseSubtitles ? Subtitles.Where(choice => choice.IsSelected).Select(choice => choice.Track.Language).ToArray() : [],
             Clips = Clips.ToArray(),
             JoinClips = JoinClips,
-            SplitChapters = SplitChapters && HasChapters && Clips.Count == 0,
             RemoveSponsors = RemoveSponsors && CanRemoveSponsors,
-            CookiesFromBrowser = _settings.Current.CookiesFromBrowser,
+            CookiesFromBrowser = SignInBrowser(_settings.Current.CookiesFromBrowser),
+            SignInOnlyWhenNeeded = _settings.Current.CookiesFromBrowser?.StartsWith("auto", StringComparison.Ordinal) == true,
             FileNameTemplate = FileName.SelectedKey ?? "%(title)s"
         };
+
+    // At least one of video and sound: switching one off with the other already off switches the other on.
+    partial void OnIncludeVideoChanged(bool value)
+    {
+        if (!value && !IncludeAudio)
+            IncludeAudio = true;
     }
+
+    partial void OnIncludeAudioChanged(bool value)
+    {
+        if (!value && !IncludeVideo)
+            IncludeVideo = true;
+    }
+
+    partial void OnSelectedClipChanged(int value) => SyncClipItems();
 
     partial void OnJobChanged(ExportJob? oldValue, ExportJob? newValue)
     {
@@ -312,8 +417,8 @@ public sealed partial class ExportViewModel : ObservableObject
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (e.PropertyName is nameof(OutputFolder) or nameof(EmbedDetails) or nameof(EmbedChapters)
-            or nameof(RemoveSponsors) or nameof(SplitChapters) or nameof(JoinClips))
+        if (e.PropertyName is nameof(OutputFolder) or nameof(EmbedDetails) or nameof(EmbedChapters) or nameof(RemoveSponsors)
+            or nameof(JoinClips) or nameof(IncludeVideo) or nameof(IncludeAudio))
         {
             OnOptionChanged();
         }
@@ -332,7 +437,8 @@ public sealed partial class ExportViewModel : ObservableObject
     private void Remember()
     {
         AppSettings saved = _settings.Current;
-        saved.IsAudioExport = IsAudio;
+        saved.IncludeVideo = IncludeVideo;
+        saved.IncludeAudio = IncludeAudio;
         saved.VideoFormat = VideoFormat.SelectedKey ?? saved.VideoFormat;
         saved.AudioFormat = AudioFormat.SelectedKey ?? saved.AudioFormat;
         saved.VideoQuality = ParseNumber(VideoQuality.SelectedKey);
@@ -366,13 +472,13 @@ public sealed partial class ExportViewModel : ObservableObject
             if (!inspection.IsCancellationRequested && Media == media)
                 ApplyDetails(details);
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (OperationCanceledException) { }
+        catch (Exception)
         {
             // Details only refine the choices; the export still reports its own errors.
             if (Media == media)
                 ApplyDetails(new MediaDetails(null, [], null, [], [], false));
         }
-        catch (OperationCanceledException) { }
     }
 
     private void ApplyDetails(MediaDetails details)
@@ -380,20 +486,19 @@ public sealed partial class ExportViewModel : ObservableObject
         _isRestoring = true;
         Details = details;
 
-        Kind.Items[0].IsEnabled = CanExportVideo;
-        if (!CanExportVideo)
-            Kind.Select("audio");
-
-        VideoQuality.Reset(VideoQualities(details), VideoQuality.SelectedKey ?? _settings.Current.VideoQuality?.ToString(CultureInfo.InvariantCulture));
         // Remembered heights the media doesn't have fall back to the tallest it does, not to "Best".
-        if (_settings.Current.VideoQuality is int height && VideoQuality.SelectedKey == Best && details.VideoQualities.Count > 0)
-            VideoQuality.Select(details.VideoQualities.FirstOrDefault(quality => quality.Height <= height)?.Height.ToString(CultureInfo.InvariantCulture) ?? Best);
+        string? wanted = Key(_settings.Current.VideoQuality);
+        VideoQuality.Reset(VideoQualities(details), wanted);
+        if (_settings.Current.VideoQuality is int height && details.VideoQualities.Count > 0 && VideoQuality.SelectedKey != wanted)
+            VideoQuality.Select(Key(details.VideoQualities.FirstOrDefault(quality => quality.Height <= height)?.Height));
 
         Subtitles.Clear();
         foreach (SubtitleTrack track in details.Subtitles)
-            Subtitles.Add(new SubtitleChoice(track) { IsSelected = _settings.Current.SubtitleLanguageCodes.Contains(track.Language) });
-        foreach (SubtitleChoice choice in Subtitles)
+        {
+            var choice = new SubtitleChoice(track) { IsSelected = _settings.Current.SubtitleLanguageCodes.Contains(track.Language) };
             choice.PropertyChanged += (_, _) => OnOptionChanged();
+            Subtitles.Add(choice);
+        }
 
         _isRestoring = false;
         RefreshAll();
@@ -407,35 +512,37 @@ public sealed partial class ExportViewModel : ObservableObject
             : new[] { 2160, 1440, 1080, 720, 480 }.Select(height => (height, (long?)null));
 
         foreach ((int height, long? bytes) in heights)
-            yield return new Choice(height.ToString(CultureInfo.InvariantCulture), Label(height)) { Detail = bytes is long size ? FormatSize(size) : null };
-
-        static string Label(int height) => height switch
-        {
-            >= 2160 => $"4K",
-            >= 1440 => "1440p",
-            _ => $"{height}p"
-        };
+            yield return new Choice(height.ToString(CultureInfo.InvariantCulture), height >= 2160 ? "4K" : $"{height}p", bytes is long size ? FormatSize(size) : null);
     }
 
     private void RefreshAll()
     {
-        OnPropertyChanged(nameof(IsAudio));
-        OnPropertyChanged(nameof(IsVideo));
-        OnPropertyChanged(nameof(CanExportVideo));
-        OnPropertyChanged(nameof(HasClips));
-        OnPropertyChanged(nameof(HasSeveralClips));
-        OnPropertyChanged(nameof(ClipsSummary));
-        OnPropertyChanged(nameof(FileNamePreview));
-        OnPropertyChanged(nameof(HasSubtitles));
-        UpdateKindDetails();
+        foreach (string property in new[]
+        {
+            nameof(IsAudioOnly), nameof(HasVideo), nameof(HasClips), nameof(HasSeveralClips), nameof(ClipsSummary), nameof(FileNamePreview),
+            nameof(HasSubtitles), nameof(CanChooseSubtitles), nameof(SubtitlesSummary), nameof(CanEmbedChapters), nameof(AudioCodec)
+        })
+        {
+            OnPropertyChanged(property);
+        }
+
+        // Media without pictures can only be exported as audio.
+        if (Details is not null && !HasVideo && IncludeVideo)
+            IncludeVideo = false;
+
+        SyncClipItems();
         RefreshState();
     }
 
-    private void UpdateKindDetails()
+    private void SyncClipItems()
     {
-        string videoQuality = VideoQuality.Selected?.Label ?? "Best";
-        Kind.Items[0].Detail = CanExportVideo ? $"{VideoFormat.Selected?.Label} · {videoQuality}" : "Not available for this one";
-        Kind.Items[1].Detail = $"{AudioFormat.Selected?.Label} · {AudioQuality.Selected?.Label}";
+        ClipItem[] items = Clips.Select((clip, index) => new ClipItem(index, clip, index == SelectedClip)).ToArray();
+        if (items.SequenceEqual(ClipItems))
+            return;
+
+        ClipItems.Clear();
+        foreach (ClipItem item in items)
+            ClipItems.Add(item);
     }
 
     private void RefreshState()
@@ -452,10 +559,8 @@ public sealed partial class ExportViewModel : ObservableObject
         if (Media is null)
             return (ExportState.Empty, null);
 
-        // The button shows the progress; the line under it says where it's going.
-        string destination = $"Saves to {FolderName(OutputFolder)}";
         if (Job is { IsRunning: true })
-            return (ExportState.Running, destination.Replace("Saves", "Saving"));
+            return (ExportState.Running, $"Saving to {FolderName(OutputFolder)}");
 
         if (Details is { IsExportable: false } unavailable)
             return (ExportState.Blocked, unavailable.Problem);
@@ -471,19 +576,16 @@ public sealed partial class ExportViewModel : ObservableObject
         if (Details is null)
             return (ExportState.Checking, "Checking what's available");
 
-        return (ExportState.Ready, EstimateSize() is long bytes ? $"About {FormatSize(bytes)} · saves to {FolderName(OutputFolder)}" : destination);
+        return (ExportState.Ready, EstimateSize() is long bytes ? $"About {FormatSize(bytes)}" : null);
     }
-
-    private static string FolderName(string folder) =>
-        Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar)) is { Length: > 0 } name ? name : folder;
 
     private long? EstimateSize()
     {
         long? full;
-        if (IsAudio)
+        if (!IncludeVideo)
             full = ParseNumber(AudioQuality.SelectedKey) is int kbps && Duration > TimeSpan.Zero ? (long)(kbps * 125 * Duration.TotalSeconds) : Details?.AudioBytes;
         else
-            full = (Details?.VideoQualities.FirstOrDefault(quality => quality.Height.ToString(CultureInfo.InvariantCulture) == VideoQuality.SelectedKey)
+            full = (Details?.VideoQualities.FirstOrDefault(quality => Key(quality.Height) == VideoQuality.SelectedKey)
                 ?? Details?.VideoQualities.FirstOrDefault())?.ApproximateBytes;
 
         if (full is not long size || Clips.Count == 0 || Duration <= TimeSpan.Zero)
@@ -492,8 +594,21 @@ public sealed partial class ExportViewModel : ObservableObject
         return (long)(size * Clips.Sum(clip => clip.Length.TotalSeconds) / Duration.TotalSeconds);
     }
 
+    // "auto:edge" signs in with Edge when needed; plain "auto" hasn't found a default browser, so there's none to use.
+    private static string? SignInBrowser(string? setting) => setting switch
+    {
+        null or "auto" or "never" => null,
+        _ when setting.StartsWith("auto:", StringComparison.Ordinal) => setting["auto:".Length..],
+        _ => setting
+    };
+
+    private static string? Key(int? number) => number?.ToString(CultureInfo.InvariantCulture) ?? Best;
+
     private static int? ParseNumber(string? text) =>
         int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number) ? number : null;
+
+    private static string FolderName(string folder) =>
+        Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar)) is { Length: > 0 } name ? name : folder;
 
     internal static string Format(TimeSpan time) =>
         time.ToString(time.TotalHours >= 1 ? @"h\:mm\:ss" : @"m\:ss", CultureInfo.InvariantCulture);
