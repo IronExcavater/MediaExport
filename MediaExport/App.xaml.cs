@@ -30,6 +30,10 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // Anything that brings the app down is written down first, so it can be looked into.
+        UnhandledException += (_, error) =>
+            File.AppendAllText(Path.Combine(GetDataFolder(), "crash.log"), $"{DateTime.Now:u} {error.Exception}{Environment.NewLine}{Environment.NewLine}");
+
         MainWindow = new MainWindow();
         MainWindow.Activate();
     }

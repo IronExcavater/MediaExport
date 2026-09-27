@@ -10,6 +10,18 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+            <!--
+                The logo's cyan, whatever accent Windows uses: a grey or pale accent makes selected and accent
+                controls hard to read. Controls pick Light2 on dark and Dark1 on light, so both stay readable.
+            -->
+            <Color x:Key="SystemAccentColor">#14A596</Color>
+            <Color x:Key="SystemAccentColorLight1">#37C2B3</Color>
+            <Color x:Key="SystemAccentColorLight2">#5FD6C8</Color>
+            <Color x:Key="SystemAccentColorLight3">#9BE9DF</Color>
+            <Color x:Key="SystemAccentColorDark1">#0E8579</Color>
+            <Color x:Key="SystemAccentColorDark2">#09675E</Color>
+            <Color x:Key="SystemAccentColorDark3">#054A44</Color>
+
             <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
             <converters:IconImageConverter x:Key="IconImageConverter" />
 

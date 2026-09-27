@@ -15,6 +15,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using System;
 using System.Threading.Tasks;
 using Windows.Graphics;
@@ -39,6 +40,8 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         ConfigureTitleBar();
         RestorePlacement();
+        ShowRecentsInPane();
+        Search.LatestRecents.CollectionChanged += (_, _) => ShowRecentsInPane();
         AppWindow.SetIcon("Assets/App/Square44x44Logo.ico");
         AppWindow.Closing += (_, _) => SavePlacement();
 
@@ -130,13 +133,6 @@ public sealed partial class MainWindow : Window
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
     }
 
-    // The title bar's caption-sized title is easy to miss; body size reads as the app's name.
-    private void TitleBar_Loaded(object sender, RoutedEventArgs args)
-    {
-        if (FindDescendant<TextBlock>(titleBar, "PART_TitleText") is { } title)
-            title.Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"];
-    }
-
     private void Root_Loaded(object sender, RoutedEventArgs args)
     {
         // Below this the export page's two columns and the title bar search stop fitting.
@@ -196,8 +192,10 @@ public sealed partial class MainWindow : Window
         double progress = Math.Min(1, (DateTime.Now - _paneAnimationStart) / PaneAnimationLength);
         double eased = 1 - Math.Pow(1 - progress, 3); // Decelerates, like Fluent's own motion.
         navView.OpenPaneLength = _paneFrom + (_paneTo - _paneFrom) * eased;
-        if (progress >= 1)
-            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= AnimatePane;
+        if (progress < 1)
+            return;
+
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= AnimatePane;
     }
 
     // With the pane narrowed its labels are hidden, so the icons say what they are on hover instead.
@@ -297,8 +295,36 @@ public sealed partial class MainWindow : Window
         GoTo(0);
     }
 
+    // The pane's spare room lists the latest picks under the pages; narrowed, their thumbnails still show.
+    private void ShowRecentsInPane()
+    {
+        while (navView.MenuItems.Count > 2)
+            navView.MenuItems.RemoveAt(2);
+        if (Search.LatestRecents.Count == 0)
+            return;
+
+        navView.MenuItems.Add(new NavigationViewItemHeader { Content = "Recent" });
+        foreach (MediaSearchResult media in Search.LatestRecents)
+        {
+            var item = new NavigationViewItem
+            {
+                Content = media.Title,
+                Tag = media,
+                Icon = new ImageIcon { Source = media.ThumbnailUri is { } thumbnail ? new BitmapImage(thumbnail) { DecodePixelWidth = 64 } : null }
+            };
+            ToolTipService.SetToolTip(item, media.Title);
+            navView.MenuItems.Add(item);
+        }
+    }
+
     private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
+        if ((args.SelectedItemContainer as NavigationViewItem)?.Tag is MediaSearchResult media)
+        {
+            Open(media);
+            return;
+        }
+
         Type? pageType = args.IsSettingsSelected
             ? typeof(SettingsPage)
             : ((args.SelectedItemContainer as NavigationViewItem)?.Tag as string) switch

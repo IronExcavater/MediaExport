@@ -24,8 +24,18 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(new ToolchainService(Path.Combine(dataFolder, "Tools")));
         services.AddSingleton<YtdlpService>();
         services.AddSingleton<IMediaDownloader>(provider => provider.GetRequiredService<YtdlpService>());
+        services.AddSingleton(_ =>
+        {
+            var http = new System.Net.Http.HttpClient();
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("MediaExport");
+            return http;
+        });
+
+        // In the order the title bar lists them.
         services.AddSingleton<IMediaSearchProvider, YouTubeSearchProvider>();
         services.AddSingleton<IMediaSearchProvider, SoundCloudSearchProvider>();
+        services.AddSingleton<IMediaSearchProvider, DailymotionSearchProvider>();
+        services.AddSingleton<IMediaSearchProvider, InternetArchiveSearchProvider>();
         services.AddSingleton<SearchViewModel>();
         services.AddSingleton<ActivityViewModel>();
         services.AddSingleton<ExportViewModel>();

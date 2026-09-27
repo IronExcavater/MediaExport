@@ -35,6 +35,9 @@ public sealed partial class SearchViewModel : ObservableObject
     private readonly SettingsStore _settings;
     private readonly YtdlpService _ytdlp;
     private readonly Dictionary<string, MediaDetails> _linkDetails = [];
+
+    // Each source's last results, so switching sources back and forth doesn't search again.
+    private readonly Dictionary<string, (string Query, IReadOnlyList<MediaSearchResult> Results)> _results = [];
     private CancellationTokenSource? _search;
     private string? _shownQuery;
 
@@ -49,6 +52,12 @@ public sealed partial class SearchViewModel : ObservableObject
         for (int i = 0; i < recents.Count; i++)
             recents[i] = recents[i] with { ProviderId = recents[i].ProviderId ?? GuessProvider(recents[i].SourceUrl) };
         Recents = new ObservableCollection<MediaSearchResult>(recents);
+        Recents.CollectionChanged += (_, _) =>
+        {
+            Sync(LatestRecents, Recents.Take(6).ToArray());
+            OnPropertyChanged(nameof(HasRecents));
+        };
+        Sync(LatestRecents, Recents.Take(6).ToArray());
     }
 
     public IReadOnlyList<IMediaSearchProvider> Providers { get; }
@@ -56,6 +65,11 @@ public sealed partial class SearchViewModel : ObservableObject
 
     /// <summary>Everything picked recently, from every source, newest first.</summary>
     public ObservableCollection<MediaSearchResult> Recents { get; }
+
+    /// <summary>The few newest picks, for the navigation pane.</summary>
+    public ObservableCollection<MediaSearchResult> LatestRecents { get; } = [];
+
+    public bool HasRecents => Recents.Count > 0;
 
     [ObservableProperty]
     public partial string SearchText { get; set; } = string.Empty;
@@ -143,6 +157,13 @@ public sealed partial class SearchViewModel : ObservableObject
         _settings.Save();
         _shownQuery = null;
         Suggestions.Clear();
+
+        string query = SearchText.Trim();
+        if (query.Length > 0 && !IsLink(query) && _results.TryGetValue(value.Id, out var cached) && cached.Query == query)
+        {
+            Show(MatchingRecents(query, RecentMatchLimit), cached.Results, query);
+            _shownQuery = query;
+        }
     }
 
     private async Task RunSearchAsync(string query, bool debounce)
@@ -164,6 +185,8 @@ public sealed partial class SearchViewModel : ObservableObject
                 : await SelectedProvider.SearchAsync(query, token);
             token.ThrowIfCancellationRequested();
 
+            if (!IsLink(query))
+                _results[SelectedProvider.Id] = (query, results);
             Show(MatchingRecents(query, RecentMatchLimit), results, query);
             if (Suggestions.Count == 0)
                 Suggestions.Add(new SearchSuggestion(null, Message: $"No results for \"{query}\"", Query: query));
