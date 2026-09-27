@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 using Microsoft.UI.Xaml;
+using System;
 
 namespace MediaExport.Converters;
 
@@ -15,6 +16,8 @@ public static class Show
     public static Visibility When(bool value) => value ? Visibility.Visible : Visibility.Collapsed;
 
     public static Visibility WhenText(string? value) => string.IsNullOrEmpty(value) ? Visibility.Collapsed : Visibility.Visible;
+
+    public static Visibility WhenSet(TimeSpan? value) => value is null ? Visibility.Collapsed : Visibility.Visible;
 
     public static Visibility WhenAll(bool first, bool second) => first && second ? Visibility.Visible : Visibility.Collapsed;
 

@@ -51,10 +51,6 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
     /// <summary>A link on the clipboard that could be exported, offered on the home page.</summary>
     public string? ClipboardLink { get; private set; }
 
-    public static string FormatDuration(TimeSpan? duration) => duration is { } time ? ExportViewModel.Format(time) : string.Empty;
-
-    public static Visibility ShowDuration(TimeSpan? duration) => duration is null ? Visibility.Collapsed : Visibility.Visible;
-
     /// <summary>Settings for a part that's switched off stay in place, faded, so nothing moves.</summary>
     public static double Dim(bool isOn) => isOn ? 1 : 0.4;
 

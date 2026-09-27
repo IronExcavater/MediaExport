@@ -7,6 +7,7 @@ using MediaExport.Activity;
 using MediaExport.Core.Exporting;
 using MediaExport.Core.Media.Models;
 using MediaExport.Core.Media.Providers;
+using MediaExport.Converters;
 using MediaExport.Core.Settings;
 using System;
 using System.Collections.Generic;
@@ -47,7 +48,7 @@ public sealed partial class SubtitleChoice(SubtitleTrack track) : ObservableObje
 public sealed record ClipItem(int Index, Clip Clip, bool IsSelected)
 {
     public int Number => Index + 1;
-    public string Range => $"{ExportViewModel.Format(Clip.Start)} – {ExportViewModel.Format(Clip.End)}";
+    public string Range => $"{Format.Time(Clip.Start)} – {Format.Time(Clip.End)}";
     public override string ToString() => $"Clip {Number}, {Range}";
 }
 
@@ -224,8 +225,8 @@ public sealed partial class ExportViewModel : ObservableObject
     public string ClipsSummary => Clips.Count switch
     {
         0 => "All of it",
-        1 => $"1 clip, {Format(Clips[0].Length)}",
-        var count => $"{count} clips, {Format(TimeSpan.FromTicks(Clips.Sum(clip => clip.Length.Ticks)))}"
+        1 => $"1 clip, {Format.Time(Clips[0].Length)}",
+        var count => $"{count} clips, {Format.Time(TimeSpan.FromTicks(Clips.Sum(clip => clip.Length.Ticks)))}"
     };
 
     public string SubtitlesSummary => Subtitles.Where(choice => choice.IsSelected).Select(choice => choice.Track.Name).ToArray() switch
@@ -524,7 +525,7 @@ public sealed partial class ExportViewModel : ObservableObject
             : new[] { 2160, 1440, 1080, 720, 480 }.Select(height => (height, (long?)null));
 
         foreach ((int height, long? bytes) in heights)
-            yield return new Choice(height.ToString(CultureInfo.InvariantCulture), height >= 2160 ? "4K" : $"{height}p", bytes is long size ? FormatSize(size) : null);
+            yield return new Choice(height.ToString(CultureInfo.InvariantCulture), height >= 2160 ? "4K" : $"{height}p", bytes is long size ? Format.Size(size) : null);
     }
 
     private void RefreshAll()
@@ -588,7 +589,7 @@ public sealed partial class ExportViewModel : ObservableObject
         if (Details is null)
             return (ExportState.Checking, "Checking what's available");
 
-        return (ExportState.Ready, EstimateSize() is long bytes ? $"About {FormatSize(bytes)}" : null);
+        return (ExportState.Ready, EstimateSize() is long bytes ? $"About {Format.Size(bytes)}" : null);
     }
 
     private long? EstimateSize()
@@ -622,13 +623,5 @@ public sealed partial class ExportViewModel : ObservableObject
     private static string FolderName(string folder) =>
         Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar)) is { Length: > 0 } name ? name : folder;
 
-    internal static string Format(TimeSpan time) =>
-        time.ToString(time.TotalHours >= 1 ? @"h\:mm\:ss" : @"m\:ss", CultureInfo.InvariantCulture);
 
-    internal static string FormatSize(long bytes) => bytes switch
-    {
-        >= 1L << 30 => $"{bytes / (double)(1L << 30):0.0} GB",
-        >= 1L << 20 => $"{bytes / (double)(1L << 20):0} MB",
-        _ => $"{Math.Max(1, bytes / 1024)} KB"
-    };
 }
