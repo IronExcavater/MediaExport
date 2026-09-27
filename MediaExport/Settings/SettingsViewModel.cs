@@ -165,24 +165,26 @@ public sealed partial class SettingsViewModel : ObservableObject
         };
     }
 
-    // A browser counts as installed when its profile folder is there, which is also where yt-dlp reads cookies from.
-    private static IEnumerable<SettingsChoice> FindInstalledBrowsers()
+    // Browsers yt-dlp can borrow a sign-in from: its name for each, how Windows names it as the link handler, and
+    // its profile folder, which is where the cookies are read from and so says whether it's installed.
+    private static (string Label, string Value, string ProgId, string Profile)[] KnownBrowsers()
     {
         string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         string roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        (string Label, string Value, string Profile)[] known =
+        return
         [
-            ("Microsoft Edge", "edge", Path.Combine(local, "Microsoft", "Edge", "User Data")),
-            ("Google Chrome", "chrome", Path.Combine(local, "Google", "Chrome", "User Data")),
-            ("Firefox", "firefox", Path.Combine(roaming, "Mozilla", "Firefox", "Profiles")),
-            ("Brave", "brave", Path.Combine(local, "BraveSoftware", "Brave-Browser", "User Data")),
-            ("Opera", "opera", Path.Combine(roaming, "Opera Software", "Opera Stable")),
-            ("Vivaldi", "vivaldi", Path.Combine(local, "Vivaldi", "User Data")),
-            ("Chromium", "chromium", Path.Combine(local, "Chromium", "User Data"))
+            ("Microsoft Edge", "edge", "MSEdge", Path.Combine(local, "Microsoft", "Edge", "User Data")),
+            ("Google Chrome", "chrome", "Chrome", Path.Combine(local, "Google", "Chrome", "User Data")),
+            ("Firefox", "firefox", "Firefox", Path.Combine(roaming, "Mozilla", "Firefox", "Profiles")),
+            ("Brave", "brave", "Brave", Path.Combine(local, "BraveSoftware", "Brave-Browser", "User Data")),
+            ("Opera", "opera", "Opera", Path.Combine(roaming, "Opera Software", "Opera Stable")),
+            ("Vivaldi", "vivaldi", "Vivaldi", Path.Combine(local, "Vivaldi", "User Data")),
+            ("Chromium", "chromium", "Chromium", Path.Combine(local, "Chromium", "User Data"))
         ];
-
-        return known.Where(browser => Directory.Exists(browser.Profile)).Select(browser => new SettingsChoice(browser.Label, browser.Value));
     }
+
+    private static IEnumerable<SettingsChoice> FindInstalledBrowsers() =>
+        KnownBrowsers().Where(browser => Directory.Exists(browser.Profile)).Select(browser => new SettingsChoice(browser.Label, browser.Value));
 
     /// <summary>The browser Windows opens web links with, as yt-dlp names it.</summary>
     private static string? FindDefaultBrowser()
@@ -190,16 +192,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         using Microsoft.Win32.RegistryKey? choice = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
             @"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice");
         string program = choice?.GetValue("ProgId") as string ?? string.Empty;
-        return program switch
-        {
-            _ when program.StartsWith("MSEdge", StringComparison.OrdinalIgnoreCase) => "edge",
-            _ when program.StartsWith("Chrome", StringComparison.OrdinalIgnoreCase) => "chrome",
-            _ when program.StartsWith("Firefox", StringComparison.OrdinalIgnoreCase) => "firefox",
-            _ when program.StartsWith("Brave", StringComparison.OrdinalIgnoreCase) => "brave",
-            _ when program.StartsWith("Opera", StringComparison.OrdinalIgnoreCase) => "opera",
-            _ when program.StartsWith("Vivaldi", StringComparison.OrdinalIgnoreCase) => "vivaldi",
-            _ when program.StartsWith("Chromium", StringComparison.OrdinalIgnoreCase) => "chromium",
-            _ => null
-        };
+        return KnownBrowsers().FirstOrDefault(browser => program.StartsWith(browser.ProgId, StringComparison.OrdinalIgnoreCase)).Value;
     }
 }
