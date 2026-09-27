@@ -198,13 +198,19 @@ public sealed partial class ToolchainService
         await using FileStream target = File.Create(path);
         byte[] buffer = new byte[81920];
         long received = 0;
-        int read;
+        int read, reported = -1;
         while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
         {
             await target.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
             received += read;
-            if (total > 0)
-                progress?.Report(received * 100d / total);
+
+            // Each report is a trip to the UI thread, so only whole-percent steps are sent.
+            int percent = total > 0 ? (int)(received * 100 / total) : -1;
+            if (percent > reported)
+            {
+                reported = percent;
+                progress?.Report(percent);
+            }
         }
     }
 
