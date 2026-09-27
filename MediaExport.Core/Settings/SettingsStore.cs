@@ -36,7 +36,8 @@ public sealed class AppSettings
     // The export page's choices, so the next export starts from the last one.
     public string? ProviderId { get; set; }
     public string? OutputFolder { get; set; }
-    public bool IsAudioExport { get; set; }
+    public bool IncludeVideo { get; set; } = true;
+    public bool IncludeAudio { get; set; } = true;
     public string VideoFormat { get; set; } = "mp4";
     public int? VideoQuality { get; set; } = 1080;
     public string AudioFormat { get; set; } = "mp3";
@@ -48,8 +49,8 @@ public sealed class AppSettings
     public bool RemoveSponsors { get; set; }
     public List<string> SubtitleLanguageCodes { get; set; } = [];
 
-    /// <summary>A browser to borrow sign-in cookies from; <c>null</c> for none.</summary>
-    public string? CookiesFromBrowser { get; set; }
+    /// <summary>A browser to borrow a sign-in from, e.g. <c>edge</c>; <c>auto:edge</c> uses it only when a site asks; <c>null</c> never signs in.</summary>
+    public string? CookiesFromBrowser { get; set; } = "auto";
 
     public List<MediaSearchResult> RecentResults { get; set; } = [];
     public List<ExportRecord> History { get; set; } = [];

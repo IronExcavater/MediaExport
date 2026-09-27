@@ -21,6 +21,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
     private const string OutputMarker = "__MEDIA_EXPORT_FILE__:";
     private const string DrmProblem = "It's protected by DRM, so it can't be exported.";
     private const string SponsorCategories = "sponsor,selfpromo,interaction";
+    private const string SignInProblem = "The site wants you signed in for this one. Choose a browser you're signed in with under Settings, then try again.";
 
     public async Task<IReadOnlyList<YtdlpSearchResult>> SearchAsync(string searchTarget, CancellationToken cancellationToken = default)
     {
@@ -56,7 +57,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         MediaDetails details = ReadDetails(root);
         string identity = GetString(root, "id") ?? url;
         string sourceUrl = GetSourceUrl(root) ?? url;
-        string providerId = (GetString(root, "extractor_key") ?? "web").ToLowerInvariant();
+        string providerId = (GetString(root, "extractor_key") ?? "web").ToLowerInvariant() switch { "archiveorg" => "internetarchive", var key => key };
         var media = new MediaSearchResult(
             identity,
             sourceUrl,
@@ -89,6 +90,23 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         IProgress<ExportProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        try
+        {
+            return await DownloadOnceAsync(sourceUrl, options, progress, cancellationToken);
+        }
+        catch (InvalidOperationException exception) when (options.SignInOnlyWhenNeeded && exception.Message == SignInProblem)
+        {
+            progress?.Report(new ExportProgress(0, null, null, false, "Signing in with your browser"));
+            return await DownloadOnceAsync(sourceUrl, options with { SignInOnlyWhenNeeded = false }, progress, cancellationToken);
+        }
+    }
+
+    private async Task<IReadOnlyList<string>> DownloadOnceAsync(
+        string sourceUrl,
+        ExportOptions options,
+        IProgress<ExportProgress>? progress,
+        CancellationToken cancellationToken)
+    {
         Directory.CreateDirectory(options.OutputFolder);
 
         var errors = new ErrorLog();
@@ -101,23 +119,38 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
             download = value is null ? download.AddFlag(name) : download.AddOption(name, value);
 
         var outputs = new List<string>();
-        DateTime started = DateTime.Now;
+        int clips = options.Clips.Count;
+        if (clips > 0)
+            progress?.Report(new ExportProgress(0, null, null, false, ClipStep(1, clips)));
 
-        void OnProgress(object? sender, DownloadProgressEventArgs args) =>
-            progress?.Report(new ExportProgress(
-                Math.Clamp(args.Percent, 0, 100),
-                string.IsNullOrWhiteSpace(args.Speed) ? null : args.Speed,
-                string.IsNullOrWhiteSpace(args.ETA) ? null : args.ETA,
-                false));
+        // Clips are cut by FFmpeg, which gives no percentages; they count up as each one finishes instead.
+        void OnProgress(object? sender, DownloadProgressEventArgs args)
+        {
+            if (clips == 0)
+            {
+                progress?.Report(new ExportProgress(
+                    Math.Clamp(args.Percent, 0, 100),
+                    string.IsNullOrWhiteSpace(args.Speed) ? null : args.Speed,
+                    string.IsNullOrWhiteSpace(args.ETA) ? null : args.ETA,
+                    false));
+            }
+        }
 
-        void OnPostProcessing(object? sender, string message) =>
-            progress?.Report(new ExportProgress(100, null, null, true));
+        void OnPostProcessing(object? sender, string message)
+        {
+            if (clips == 0)
+                progress?.Report(new ExportProgress(100, null, null, true));
+        }
 
         void OnOutput(object? sender, string line)
         {
             int marker = line.IndexOf(OutputMarker, StringComparison.Ordinal);
-            if (marker >= 0)
-                outputs.Add(line[(marker + OutputMarker.Length)..].Trim());
+            if (marker < 0)
+                return;
+
+            outputs.Add(line[(marker + OutputMarker.Length)..].Trim());
+            if (clips > 0 && outputs.Count < clips)
+                progress?.Report(new ExportProgress(outputs.Count * 100d / clips, null, null, false, ClipStep(outputs.Count + 1, clips)));
         }
 
         download.ProgressDownload += OnProgress;
@@ -140,20 +173,44 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         if (files.Length == 0)
             throw new InvalidOperationException(errors.Last ?? "The export finished without producing a file.");
 
-        if (options.Clips.Count > 1 && options.JoinClips)
+        if (clips == 0)
+            return files;
+
+        // Parts are named by where they start, so none overwrites another; they're put in order, then joined or numbered.
+        string[] parts = files.OrderBy(file => ClipStart(file)).ToArray();
+        if (parts.Length == 1)
+            return [MoveAside(parts[0], ClipSuffix().Replace(parts[0], string.Empty))];
+
+        if (options.JoinClips)
         {
-            progress?.Report(new ExportProgress(100, null, null, true));
-            return [await JoinAsync(files, cancellationToken)];
+            progress?.Report(new ExportProgress(100, null, null, true, "Joining the clips"));
+            return [await JoinAsync(parts, cancellationToken)];
         }
 
-        if (options.SplitChapters)
-            return FindChapterFiles(files[0], started) is { Length: > 0 } chapters ? chapters : files;
-
-        return files;
+        return parts.Select((part, index) => MoveAside(part, ClipSuffix().Replace(part, $" (clip {index + 1})"))).ToArray();
     }
 
     internal static string GetOutputTemplate(ExportOptions options) =>
-        options.Clips.Count > 1 ? $"{options.FileNameTemplate} (part %(section_number)s).%(ext)s" : $"{options.FileNameTemplate}.%(ext)s";
+        options.Clips.Count > 0 ? $"{options.FileNameTemplate} [%(section_start)s].%(ext)s" : $"{options.FileNameTemplate}.%(ext)s";
+
+    private static string ClipStep(int number, int count) => count == 1 ? "Cutting the clip" : $"Cutting clip {number} of {count}";
+
+    private static double ClipStart(string file) =>
+        ClipSuffix().Match(file) is { Success: true } match
+        && double.TryParse(match.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double start) ? start : 0;
+
+    // A part's final name, without replacing a file that's already there.
+    private static string MoveAside(string from, string to)
+    {
+        string target = to;
+        for (int copy = 2; File.Exists(target) && !string.Equals(target, from, StringComparison.OrdinalIgnoreCase); copy++)
+            target = Path.Combine(Path.GetDirectoryName(to)!, $"{Path.GetFileNameWithoutExtension(to)} ({copy}){Path.GetExtension(to)}");
+        File.Move(from, target);
+        return target;
+    }
+
+    [GeneratedRegex(@" \[([\d.]+)\](?=\.[^.\\]+$)")]
+    private static partial Regex ClipSuffix();
 
     internal static IReadOnlyList<(string Name, string? Value)> GetExportArguments(ExportOptions options)
     {
@@ -169,7 +226,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         if (options.EmbedMetadata)
             arguments.Add(("--embed-metadata", null));
 
-        if (options.CookiesFromBrowser is { Length: > 0 } browser)
+        if (options.CookiesFromBrowser is { Length: > 0 } browser && !options.SignInOnlyWhenNeeded)
             arguments.Add(("--cookies-from-browser", browser));
 
         if (options.RemoveSponsors)
@@ -180,13 +237,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         if (options.Clips.Count > 0)
             arguments.Add(("--force-keyframes-at-cuts", null)); // Exact cuts rather than the nearest keyframe.
 
-        if (options.SplitChapters)
-        {
-            arguments.Add(("--split-chapters", null));
-            arguments.Add(("-o", $"chapter:{options.FileNameTemplate} - %(section_number)02d %(section_title)s.%(ext)s"));
-        }
-
-        if (options.Kind == MediaKind.Audio)
+        if (options.IsAudioOnly)
         {
             arguments.Add(("-f", "ba/b"));
             arguments.Add(("-x", null));
@@ -209,16 +260,20 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         if (options.EmbedThumbnail && options.Format is "mp4" or "mkv")
             arguments.Add(("--embed-thumbnail", null));
 
-        // Sorting (rather than filtering) falls back gracefully when the preferred height doesn't exist.
+        // Sorting (rather than filtering) falls back gracefully when the preferred height or bitrate doesn't exist.
         var sort = new List<string>();
         if (options.MaxHeight is int height)
             sort.Add($"res:{height}");
+        if (options.IncludeAudio && options.AudioBitrate is int kbps)
+            sort.Add($"abr:{kbps}");
         if (options.Format is "mp4")
             sort.Add("vcodec:h264,acodec:aac");
         if (options.Format is "webm")
             sort.Add("vcodec:vp9,acodec:opus");
 
-        arguments.Add(("-f", "bv*+ba/b"));
+        arguments.Add(("-f", options.IncludeAudio ? "bv*+ba/b" : "bv*/b"));
+        if (!options.IncludeAudio)
+            arguments.Add(("--postprocessor-args", "Merger+ffmpeg:-an")); // A combined stream is the fallback; its sound is dropped.
         if (sort.Count > 0)
             arguments.Add(("-S", string.Join(',', sort)));
         arguments.Add(("--merge-output-format", options.Format));
@@ -235,7 +290,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         if (text.Contains("DRM", StringComparison.OrdinalIgnoreCase))
             return DrmProblem;
         if (text.Contains("Sign in to confirm", StringComparison.OrdinalIgnoreCase))
-            return "The site wants you signed in for this one. Choose a browser you're signed in with under Settings, then try again.";
+            return SignInProblem;
         return text;
     }
 
@@ -317,7 +372,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
     private async Task<string> JoinAsync(IReadOnlyList<string> parts, CancellationToken cancellationToken)
     {
         string ffmpeg = tools.Locate("ffmpeg") ?? throw new InvalidOperationException("FFmpeg is needed to join clips.");
-        string joined = PartSuffix().Replace(parts[0], string.Empty);
+        string joined = ClipSuffix().Replace(parts[0], string.Empty);
         string list = Path.Combine(Path.GetTempPath(), $"MediaExport-join-{Guid.NewGuid():N}.txt");
         await File.WriteAllLinesAsync(list, parts.Select(part => $"file '{part.Replace("'", @"'\''")}'"), new UTF8Encoding(false), cancellationToken);
         try
@@ -340,19 +395,6 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         {
             File.Delete(list);
         }
-    }
-
-    [GeneratedRegex(@" \(part \d+\)(?=\.[^.\\]+$)")]
-    private static partial Regex PartSuffix();
-
-    // yt-dlp doesn't print the chapter files it splits off, so they're found by name.
-    private static string[] FindChapterFiles(string file, DateTime since)
-    {
-        string prefix = Path.GetFileNameWithoutExtension(file) + " - ";
-        return Directory.EnumerateFiles(Path.GetDirectoryName(file)!, prefix + "*")
-            .Where(path => File.GetLastWriteTime(path) >= since.AddSeconds(-2))
-            .Order(StringComparer.CurrentCulture)
-            .ToArray();
     }
 
     private YtdlpClient CreateClient(ILogger errors)

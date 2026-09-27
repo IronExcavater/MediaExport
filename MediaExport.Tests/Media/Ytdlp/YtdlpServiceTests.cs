@@ -82,7 +82,7 @@ public sealed class YtdlpServiceTests
     [Test]
     public void Audio_exports_extract_and_convert_the_best_audio()
     {
-        var arguments = YtdlpService.GetExportArguments(new ExportOptions(MediaKind.Audio, "mp3", null, "out"));
+        var arguments = YtdlpService.GetExportArguments(new ExportOptions("mp3", "out") { IncludeVideo = false });
 
         Assert.That(arguments, Is.SupersetOf(new (string, string?)[]
         {
@@ -93,7 +93,7 @@ public sealed class YtdlpServiceTests
     [Test]
     public void Video_exports_prefer_the_chosen_height_and_compatible_codecs()
     {
-        var arguments = YtdlpService.GetExportArguments(new ExportOptions(MediaKind.Video, "mp4", 1080, "out"));
+        var arguments = YtdlpService.GetExportArguments(new ExportOptions("mp4", "out") { MaxHeight = 1080 });
 
         Assert.That(arguments, Is.SupersetOf(new (string, string?)[]
         {
@@ -104,7 +104,7 @@ public sealed class YtdlpServiceTests
     [Test]
     public void Clips_subtitles_sponsors_and_sign_in_become_arguments()
     {
-        var options = new ExportOptions(MediaKind.Video, "mkv", null, "out")
+        var options = new ExportOptions("mkv", "out")
         {
             Clips = [new Clip(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(45.5)), new Clip(TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(3))],
             SubtitleLanguages = ["en", "de-orig"],
@@ -124,14 +124,14 @@ public sealed class YtdlpServiceTests
                 ("--sponsorblock-remove", "sponsor,selfpromo,interaction"), ("--cookies-from-browser", "edge")
             }));
             Assert.That(arguments, Does.Not.Contain(("--embed-chapters", (string?)null)));
-            Assert.That(YtdlpService.GetOutputTemplate(options), Is.EqualTo("%(title)s (part %(section_number)s).%(ext)s"));
+            Assert.That(YtdlpService.GetOutputTemplate(options), Is.EqualTo("%(title)s [%(section_start)s].%(ext)s"));
         });
     }
 
     [Test]
     public void Audio_bitrate_is_passed_as_a_quality()
     {
-        var arguments = YtdlpService.GetExportArguments(new ExportOptions(MediaKind.Audio, "mp3", null, "out") { AudioBitrate = 192 });
+        var arguments = YtdlpService.GetExportArguments(new ExportOptions("mp3", "out") { IncludeVideo = false, AudioBitrate = 192 });
 
         Assert.That(arguments, Does.Contain(("--audio-quality", (string?)"192K")));
     }
