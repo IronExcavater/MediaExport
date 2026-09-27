@@ -17,6 +17,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Windows.Graphics;
 using Windows.System;
@@ -27,6 +28,7 @@ public sealed partial class MainWindow : Window
 {
     private const double CompactPaneLength = 48;
     private const double OpenPaneLength = 240;
+    private const int PaneRecentCount = 6;
     // Closing gets out of the way a little quicker than opening draws the pane in.
     private static readonly TimeSpan PaneOpenLength = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan PaneCloseLength = TimeSpan.FromMilliseconds(180);
@@ -37,6 +39,7 @@ public sealed partial class MainWindow : Window
     private TimeSpan _paneDuration;
     private double _paneFrom;
     private double _paneTo;
+    private bool _recentsQueued;
 
     public MainWindow()
     {
@@ -44,7 +47,7 @@ public sealed partial class MainWindow : Window
         ConfigureTitleBar();
         RestorePlacement();
         ShowRecentsInPane();
-        Search.LatestRecents.CollectionChanged += (_, _) => ShowRecentsInPane();
+        Search.Recents.CollectionChanged += (_, _) => QueueRecentsInPane();
         AppWindow.SetIcon("Assets/App/Square44x44Logo.ico");
         AppWindow.Closing += (_, _) => SavePlacement();
 
@@ -302,16 +305,30 @@ public sealed partial class MainWindow : Window
         GoTo(0);
     }
 
+    // A pick changes the recents a few times over (moved up, the oldest dropped); the pane is rebuilt once after.
+    private void QueueRecentsInPane()
+    {
+        if (_recentsQueued)
+            return;
+
+        _recentsQueued = true;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _recentsQueued = false;
+            ShowRecentsInPane();
+        });
+    }
+
     // The pane's spare room lists the latest picks under the pages; narrowed, their thumbnails still show.
     private void ShowRecentsInPane()
     {
         while (navView.MenuItems.Count > 2)
             navView.MenuItems.RemoveAt(2);
-        if (Search.LatestRecents.Count == 0)
+        if (Search.Recents.Count == 0)
             return;
 
         navView.MenuItems.Add(new NavigationViewItemHeader { Content = "Recent" });
-        foreach (MediaSearchResult media in Search.LatestRecents)
+        foreach (MediaSearchResult media in Search.Recents.Take(PaneRecentCount))
         {
             var item = new NavigationViewItem
             {
@@ -328,7 +345,7 @@ public sealed partial class MainWindow : Window
     {
         if ((args.SelectedItemContainer as NavigationViewItem)?.Tag is MediaSearchResult media)
         {
-            // Opening it reorders the recents, which rebuilds these items; that can't happen mid-selection.
+            // Opening it selects the Export page instead, which can't happen mid-selection.
             DispatcherQueue.TryEnqueue(() => Open(media));
             return;
         }

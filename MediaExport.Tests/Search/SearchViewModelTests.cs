@@ -36,6 +36,26 @@ public sealed class SearchViewModelTests
     }
 
     [Test]
+    public void Picking_a_recent_again_moves_it_to_the_top_and_saves_the_order()
+    {
+        var settings = new SettingsStore(null);
+        SearchViewModel search = Create(settings, new FakeProvider("youtube"));
+        search.Remember(Song);
+        search.Remember(Clip);
+        int changes = 0;
+        search.Recents.CollectionChanged += (_, _) => changes++;
+
+        search.Remember(Song);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(search.Recents, Is.EqualTo(new[] { Song, Clip }));
+            Assert.That(settings.Current.RecentResults, Is.EqualTo(new[] { Song, Clip }));
+            Assert.That(changes, Is.EqualTo(2), "moved, not rebuilt");
+        });
+    }
+
+    [Test]
     public async Task Focusing_a_box_with_unsearched_text_searches_straight_away()
     {
         var provider = new FakeProvider("youtube") { Results = [Clip] };
