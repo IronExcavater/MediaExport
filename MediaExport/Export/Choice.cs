@@ -33,9 +33,10 @@ public sealed partial class ChoiceGroup : ObservableObject
         get;
         set
         {
-            if (value is null || value == field || !Items.Contains(value))
+            if (value is null || ReferenceEquals(value, field) || !Items.Contains(value))
                 return;
 
+            // Checked by reference: after a rebuild the combo box has lost its pick, even one equal to the last.
             field = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedKey));

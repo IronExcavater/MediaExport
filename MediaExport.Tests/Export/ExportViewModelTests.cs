@@ -180,6 +180,19 @@ public sealed class ExportViewModelTests
     }
 
     [Test]
+    public void Choice_groups_announce_their_pick_again_after_a_rebuild_to_equal_options()
+    {
+        var group = new ChoiceGroup([new Choice("best", "Best"), new Choice("720", "720p")], "best");
+        int announced = 0;
+        group.PropertyChanged += (_, args) => announced += args.PropertyName == nameof(ChoiceGroup.Selected) ? 1 : 0;
+
+        // The combo box lost its pick when the items were cleared, so it needs telling even though "Best" is unchanged.
+        group.Reset([new Choice("best", "Best"), new Choice("480", "480p")], "best");
+
+        Assert.That(announced, Is.EqualTo(1));
+    }
+
+    [Test]
     public void Video_can_go_without_sound_but_something_is_always_kept()
     {
         ExportViewModel viewModel = Create(new FakeDownloader());

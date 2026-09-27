@@ -137,8 +137,9 @@ public sealed class YtdlpServiceTests
     }
 
     [TestCase("ERROR: [soundcloud] 257461521: This video is DRM protected", "It's protected by DRM, so it can't be exported.")]
-    [TestCase("ERROR: [youtube] xxxxxxxxxxx: This video is unavailable", "This video is unavailable")]
-    [TestCase("ERROR: Unable to download webpage: timed out", "Unable to download webpage: timed out")]
+    [TestCase("ERROR: [youtube] xxxxxxxxxxx: This video is unavailable", "This video is unavailable.")]
+    [TestCase("ERROR: Unable to download webpage: timed out", "Unable to download webpage: timed out.")]
+    [TestCase("ERROR: [archive.org] item: opening play-av tag not found", "Opening play-av tag not found.")]
     public void DescribeError_strips_ytdlp_prefixes(string message, string expected) =>
         Assert.That(YtdlpService.DescribeError(message), Is.EqualTo(expected));
 
