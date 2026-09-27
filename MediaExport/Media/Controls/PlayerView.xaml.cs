@@ -4,6 +4,7 @@
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.Web.WebView2.Core;
 using System;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -55,15 +56,11 @@ public sealed partial class PlayerView : MediaViewBase
         private set => SetValue(PositionProperty, value);
     }
 
-    public bool IsPlaying { get; private set; }
-
     public void Seek(TimeSpan time)
     {
         Position = time;
         Post($$"""{"type":"seek","seconds":{{time.TotalSeconds.ToString(CultureInfo.InvariantCulture)}}}""");
     }
-
-    public void TogglePlayback() => Post(IsPlaying ? """{"type":"pause"}""" : """{"type":"play"}""");
 
     // Always 16:9, as big as the space allows.
     protected override Size MeasureOverride(Size available)
@@ -85,7 +82,6 @@ public sealed partial class PlayerView : MediaViewBase
     {
         Bindings.Update();
         Position = TimeSpan.Zero;
-        IsPlaying = false;
         _ = ShowPlayerAsync();
     }
 
@@ -170,10 +166,25 @@ public sealed partial class PlayerView : MediaViewBase
     {
         using JsonDocument message = JsonDocument.Parse(args.WebMessageAsJson);
         JsonElement root = message.RootElement;
-        if (root.TryGetProperty("type", out JsonElement type) && type.GetString() == "time")
+        switch (root.TryGetProperty("type", out JsonElement type) ? type.GetString() : null)
         {
-            Position = TimeSpan.FromSeconds(root.GetProperty("seconds").GetDouble());
-            IsPlaying = root.GetProperty("playing").GetBoolean();
+            case "time":
+                Position = TimeSpan.FromSeconds(root.GetProperty("seconds").GetDouble());
+                break;
+            case "scroll":
+                ScrollPage(root.GetProperty("delta").GetDouble());
+                break;
         }
+    }
+
+    // The web player takes the wheel, so the scrolling it doesn't use is passed on to the page around it.
+    private void ScrollPage(double delta)
+    {
+        DependencyObject? parent = this;
+        while (parent is not null and not ScrollViewer)
+            parent = VisualTreeHelper.GetParent(parent);
+
+        if (parent is ScrollViewer scroller)
+            scroller.ChangeView(null, scroller.VerticalOffset + delta, null, disableAnimation: true);
     }
 }

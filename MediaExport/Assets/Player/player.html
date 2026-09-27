@@ -3,26 +3,28 @@
 <head>
     <meta charset="utf-8">
     <style>
-        html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
-        iframe { width: 100%; height: 100%; border: 0; display: block; }
+        /* The page scrolls (invisibly) so wheel turns the embed doesn't use chain up to it and can be passed on to the app. */
+        html { scrollbar-width: none; background: transparent; }
+        body { margin: 0; height: 200000px; }
+        iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
     </style>
 </head>
 <body>
     <!-- Embeds are framed from an https origin so a Referer is sent; YouTube rejects embeds without one (error 153). -->
     <iframe id="frame" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>
     <script>
-        // A bridge to the app: the player's position goes out, seek/play/pause requests come in.
+        // A bridge to the app: the player's position goes out, seek requests come in.
         const frame = document.getElementById('frame');
         const src = new URLSearchParams(location.search).get('src') ?? '';
         const post = message => window.chrome?.webview?.postMessage(message);
-        let control = { seek() {}, play() {}, pause() {} };
+        let seek = () => {};
         let last = '';
 
-        function report(seconds, playing) {
-            const next = `${seconds.toFixed(1)}|${playing}`;
+        function report(seconds) {
+            const next = seconds.toFixed(1);
             if (next !== last) {
                 last = next;
-                post({ type: 'time', seconds, playing });
+                post({ type: 'time', seconds });
             }
         }
 
@@ -39,12 +41,8 @@
                 const player = new YT.Player(frame, {
                     events: {
                         onReady() {
-                            control = {
-                                seek: seconds => player.seekTo(seconds, true),
-                                play: () => player.playVideo(),
-                                pause: () => player.pauseVideo()
-                            };
-                            setInterval(() => report(player.getCurrentTime() ?? 0, player.getPlayerState() === YT.PlayerState.PLAYING), 200);
+                            seek = seconds => player.seekTo(seconds, true);
+                            setInterval(() => report(player.getCurrentTime() ?? 0), 200);
                         }
                     }
                 });
@@ -55,25 +53,28 @@
             load('https://w.soundcloud.com/player/api.js', () => {
                 const widget = SC.Widget(frame);
                 widget.bind(SC.Widget.Events.READY, () => {
-                    control = {
-                        seek: seconds => widget.seekTo(seconds * 1000),
-                        play: () => widget.play(),
-                        pause: () => widget.pause()
-                    };
+                    seek = seconds => widget.seekTo(seconds * 1000);
                 });
-                widget.bind(SC.Widget.Events.PLAY_PROGRESS, event => report(event.currentPosition / 1000, true));
-                widget.bind(SC.Widget.Events.PAUSE, event => report(event.currentPosition / 1000, false));
-                widget.bind(SC.Widget.Events.SEEK, event => report(event.currentPosition / 1000, false));
+                widget.bind(SC.Widget.Events.PLAY_PROGRESS, event => report(event.currentPosition / 1000));
+                widget.bind(SC.Widget.Events.PAUSE, event => report(event.currentPosition / 1000));
+                widget.bind(SC.Widget.Events.SEEK, event => report(event.currentPosition / 1000));
             });
         } else if (src.startsWith('https://')) {
             frame.src = src;
         }
 
+        // Starts mid-page so it can scroll both ways; moved back to the middle only near an end, as that stops a smooth scroll.
+        const middle = () => document.scrollingElement.scrollTop = 100000;
+        let scrolled = middle();
+        addEventListener('scroll', () => {
+            const top = document.scrollingElement.scrollTop;
+            if (top !== scrolled) post({ type: 'scroll', delta: top - scrolled });
+            scrolled = top < 20000 || top > 180000 ? middle() : top;
+        });
+
         window.chrome?.webview?.addEventListener('message', event => {
             const message = event.data;
-            if (message?.type === 'seek') control.seek(message.seconds);
-            if (message?.type === 'play') control.play();
-            if (message?.type === 'pause') control.pause();
+            if (message?.type === 'seek') seek(message.seconds);
         });
     </script>
 </body>
