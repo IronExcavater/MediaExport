@@ -6,13 +6,18 @@ using MediaExport.Core.Media.Ytdlp;
 
 namespace MediaExport.Core.Media.Providers;
 
+/// <summary>A source searched through yt-dlp, with a search prefix (<c>ytsearch10:…</c>) or a search page's URL.</summary>
 public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProvider
 {
-    protected abstract string SearchPrefix { get; }
+    protected const int ResultCount = 10;
+
     protected virtual MediaKind Kind => MediaKind.Video;
 
     public abstract string Id { get; }
     public abstract string DisplayName { get; }
+
+    /// <summary>What yt-dlp is asked to read for <paramref name="query"/>.</summary>
+    protected abstract string GetSearchTarget(string query);
 
     public async Task<IReadOnlyList<MediaSearchResult>> SearchAsync(
         string query,
@@ -21,19 +26,8 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
         if (string.IsNullOrWhiteSpace(query))
             return [];
 
-        IReadOnlyList<YtdlpSearchResult> results = await ytdlp.SearchAsync(
-            $"{SearchPrefix}10:{query.Trim()}",
-            cancellationToken);
-
-        var media = new List<MediaSearchResult>(results.Count);
-        foreach (YtdlpSearchResult result in results)
-        {
-            MediaSearchResult? mappedResult = MapSearchResult(result);
-            if (mappedResult is not null)
-                media.Add(mappedResult);
-        }
-
-        return media;
+        IReadOnlyList<YtdlpSearchResult> results = await ytdlp.SearchAsync(GetSearchTarget(query.Trim()), cancellationToken);
+        return results.Take(ResultCount).Select(MapSearchResult).OfType<MediaSearchResult>().ToArray();
     }
 
     internal MediaSearchResult? MapSearchResult(YtdlpSearchResult result)

@@ -10,7 +10,7 @@ public sealed class YouTubeSearchProvider(YtdlpService ytdlp) : YtdlpSearchProvi
     public override string Id => "youtube";
     public override string DisplayName => "YouTube";
 
-    protected override string SearchPrefix => "ytsearch";
+    protected override string GetSearchTarget(string query) => $"ytsearch{ResultCount}:{query}";
 
     protected override string GetSourceUrl(YtdlpSearchResult result) =>
         result.SourceUrl ?? $"https://www.youtube.com/watch?v={Uri.EscapeDataString(result.Identity)}";

@@ -11,6 +11,7 @@ public sealed class SoundCloudSearchProvider(YtdlpService ytdlp) : YtdlpSearchPr
     public override string Id => "soundcloud";
     public override string DisplayName => "SoundCloud";
 
-    protected override string SearchPrefix => "scsearch";
     protected override MediaKind Kind => MediaKind.Audio;
+
+    protected override string GetSearchTarget(string query) => $"scsearch{ResultCount}:{query}";
 }

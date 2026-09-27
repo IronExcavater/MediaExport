@@ -18,6 +18,10 @@ public static class EmbedLinks
             + "&visual=true&auto_play=false&hide_related=true&show_comments=false&show_reposts=false"
             + "&show_teaser=false&sharing=false&buying=false&download=false&show_playcount=false"),
 
+        "dailymotion" => new Uri($"https://geo.dailymotion.com/player.html?video={Uri.EscapeDataString(identity)}"),
+
+        "internetarchive" => new Uri($"https://archive.org/embed/{Uri.EscapeDataString(identity)}"),
+
         _ => null
     };
 }
