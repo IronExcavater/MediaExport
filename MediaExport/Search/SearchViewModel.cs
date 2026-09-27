@@ -52,22 +52,14 @@ public sealed partial class SearchViewModel : ObservableObject
         for (int i = 0; i < recents.Count; i++)
             recents[i] = recents[i] with { ProviderId = recents[i].ProviderId ?? GuessProvider(recents[i].SourceUrl) };
         Recents = new ObservableCollection<MediaSearchResult>(recents);
-        Recents.CollectionChanged += (_, _) =>
-        {
-            Sync(LatestRecents, Recents.Take(6).ToArray());
-            OnPropertyChanged(nameof(HasRecents));
-        };
-        Sync(LatestRecents, Recents.Take(6).ToArray());
+        Recents.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasRecents));
     }
 
     public IReadOnlyList<IMediaSearchProvider> Providers { get; }
     public ObservableCollection<SearchSuggestion> Suggestions { get; } = [];
 
-    /// <summary>Everything picked recently, from every source, newest first.</summary>
+    /// <summary>Everything picked recently, from every source, newest first. Kept in step with the saved list.</summary>
     public ObservableCollection<MediaSearchResult> Recents { get; }
-
-    /// <summary>The few newest picks, for the navigation pane.</summary>
-    public ObservableCollection<MediaSearchResult> LatestRecents { get; } = [];
 
     public bool HasRecents => Recents.Count > 0;
 
@@ -133,13 +125,16 @@ public sealed partial class SearchViewModel : ObservableObject
         IsSearching = false;
         IsSuggestionListOpen = false;
 
-        List<MediaSearchResult> recents = _settings.Current.RecentResults;
-        recents.RemoveAll(recent => recent.SourceUrl == media.SourceUrl);
-        recents.Insert(0, media);
-        if (recents.Count > RecentLimit)
-            recents.RemoveRange(RecentLimit, recents.Count - RecentLimit);
+        // Moved to the top in place, so lists showing the recents change once rather than being rebuilt.
+        int existing = Recents.ToList().FindIndex(recent => recent.SourceUrl == media.SourceUrl);
+        if (existing >= 0)
+            Recents.RemoveAt(existing);
+        Recents.Insert(0, media);
+        while (Recents.Count > RecentLimit)
+            Recents.RemoveAt(Recents.Count - 1);
+
+        _settings.Current.RecentResults = [.. Recents];
         _settings.Save();
-        Sync(Recents, recents);
     }
 
     public void ClearRecents()
@@ -255,13 +250,6 @@ public sealed partial class SearchViewModel : ObservableObject
         url.Contains("soundcloud.com", StringComparison.OrdinalIgnoreCase) ? "soundcloud"
         : url.Contains("youtube.com", StringComparison.OrdinalIgnoreCase) || url.Contains("youtu.be", StringComparison.OrdinalIgnoreCase) ? "youtube"
         : null;
-
-    private static void Sync(ObservableCollection<MediaSearchResult> target, IReadOnlyList<MediaSearchResult> source)
-    {
-        target.Clear();
-        foreach (MediaSearchResult item in source)
-            target.Add(item);
-    }
 
     private CancellationTokenSource Restart()
     {
