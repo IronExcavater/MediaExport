@@ -15,6 +15,7 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
 
     public abstract string Id { get; }
     public abstract string DisplayName { get; }
+    public abstract string Icon { get; }
 
     /// <summary>What yt-dlp is asked to read for <paramref name="query"/>.</summary>
     protected abstract string GetSearchTarget(string query);

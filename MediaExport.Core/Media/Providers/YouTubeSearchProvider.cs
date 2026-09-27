@@ -9,6 +9,7 @@ public sealed class YouTubeSearchProvider(YtdlpService ytdlp) : YtdlpSearchProvi
 {
     public override string Id => "youtube";
     public override string DisplayName => "YouTube";
+    public override string Icon => "youtube";
 
     protected override string GetSearchTarget(string query) => $"ytsearch{ResultCount}:{query}";
 
