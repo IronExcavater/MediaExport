@@ -124,8 +124,8 @@
                                             Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                                             CornerRadius="4"
                                             Opacity="0.9"
-                                            Visibility="{x:Bind local:ExportPage.ShowDuration(Duration)}">
-                                            <TextBlock FontSize="12" Text="{x:Bind local:ExportPage.FormatDuration(Duration)}" />
+                                            Visibility="{x:Bind converters:Show.WhenSet(Duration)}">
+                                            <TextBlock FontSize="12" Text="{x:Bind converters:Format.Duration(Duration)}" />
                                         </Border>
                                     </Grid>
                                     <StackPanel Spacing="2">
@@ -346,8 +346,8 @@
                                     VerticalAlignment="Center"
                                     Background="{ThemeResource ControlFillColorSecondaryBrush}"
                                     CornerRadius="4"
-                                    Visibility="{x:Bind local:ExportPage.ShowDuration(ViewModel.Media.Duration), Mode=OneWay}">
-                                    <TextBlock FontSize="12" Text="{x:Bind local:ExportPage.FormatDuration(ViewModel.Media.Duration), Mode=OneWay}" />
+                                    Visibility="{x:Bind converters:Show.WhenSet(ViewModel.Media.Duration), Mode=OneWay}">
+                                    <TextBlock FontSize="12" Text="{x:Bind converters:Format.Duration(ViewModel.Media.Duration), Mode=OneWay}" />
                                 </Border>
                             </StackPanel>
                         </StackPanel>

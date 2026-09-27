@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
+using MediaExport.Converters;
 using MediaExport.Core.Exporting;
 using MediaExport.Core.Media.Models;
 using Microsoft.UI.Input;
@@ -165,7 +166,7 @@ public sealed partial class ClipTimeline : UserControl
     private void DrawClip(Clip clip, int index, bool selected)
     {
         double left = ToX(clip.Start), right = ToX(clip.End), width = Math.Max(6, right - left);
-        var label = new TextBlock { Style = StyleOf("ClipTextStyle"), Text = width > 70 ? $"{index + 1}   {Format(clip.Length)}" : $"{index + 1}" };
+        var label = new TextBlock { Style = StyleOf("ClipTextStyle"), Text = width > 70 ? $"{index + 1}   {Format.Time(clip.Length)}" : $"{index + 1}" };
         Add(new Border { Style = StyleOf(selected ? "SelectedClipStyle" : "ClipStyle"), Width = width, Height = TrackHeight, Child = width > 16 ? label : null }, left, TrackTop);
 
         // Grips show which clip the handles belong to, and that its ends can be dragged.
@@ -187,7 +188,7 @@ public sealed partial class ClipTimeline : UserControl
         int step = steps.FirstOrDefault(candidate => candidate * pixelsPerSecond >= 70, steps[^1]);
 
         // The length is always shown at the end; step labels stop short of it.
-        var end = new TextBlock { Style = StyleOf("RulerTextStyle"), Text = Format(Duration) };
+        var end = new TextBlock { Style = StyleOf("RulerTextStyle"), Text = Format.Time(Duration) };
         end.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         double endLeft = width - end.DesiredSize.Width;
         Add(end, endLeft, RulerTop + 3);
@@ -196,7 +197,7 @@ public sealed partial class ClipTimeline : UserControl
         {
             double x = second * pixelsPerSecond;
             Add(new Border { Style = StyleOf("TickStyle"), Width = 1, Height = 5 }, x, RulerTop + 2);
-            var label = new TextBlock { Style = StyleOf("RulerTextStyle"), Text = Format(TimeSpan.FromSeconds(second)) };
+            var label = new TextBlock { Style = StyleOf("RulerTextStyle"), Text = Format.Time(TimeSpan.FromSeconds(second)) };
             label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             if (x + 4 + label.DesiredSize.Width + 12 <= endLeft)
                 Add(label, x + 4, RulerTop + 3);
@@ -335,7 +336,7 @@ public sealed partial class ClipTimeline : UserControl
         }
 
         Render();
-        ShowTip(point, _dragIndex >= 0 && _dragIndex < Clips.Count ? $"{Format(Clips[_dragIndex].Start)} – {Format(Clips[_dragIndex].End)}" : Format(at));
+        ShowTip(point, _dragIndex >= 0 && _dragIndex < Clips.Count ? $"{Format.Time(Clips[_dragIndex].Start)} – {Format.Time(Clips[_dragIndex].End)}" : Format.Time(at));
     }
 
     private void Surface_PointerReleased(object sender, PointerRoutedEventArgs args)
@@ -408,10 +409,10 @@ public sealed partial class ClipTimeline : UserControl
 
         string text = part switch
         {
-            Part.Chapter => $"{Chapters![index].Title}, {Format(Chapters[index].Start)} – {Format(Chapters[index].End)}. Click to keep just this chapter.",
-            Part.Clip or Part.ClipStart or Part.ClipEnd => $"Clip {index + 1}, {Format(Clips![index].Start)} – {Format(Clips[index].End)}",
-            Part.Track => $"{Format(at)}. Drag to keep a part.",
-            Part.Ruler => $"{Format(at)}. Click to play from here.",
+            Part.Chapter => $"{Chapters![index].Title}, {Format.Time(Chapters[index].Start)} – {Format.Time(Chapters[index].End)}. Click to keep just this chapter.",
+            Part.Clip or Part.ClipStart or Part.ClipEnd => $"Clip {index + 1}, {Format.Time(Clips![index].Start)} – {Format.Time(Clips[index].End)}",
+            Part.Track => $"{Format.Time(at)}. Drag to keep a part.",
+            Part.Ruler => $"{Format.Time(at)}. Click to play from here.",
             _ => string.Empty
         };
         ShowTip(point, text);
@@ -487,6 +488,4 @@ public sealed partial class ClipTimeline : UserControl
     private static TimeSpan Min(TimeSpan a, TimeSpan b) => a < b ? a : b;
     private static TimeSpan Max(TimeSpan a, TimeSpan b) => a > b ? a : b;
 
-    internal static string Format(TimeSpan time) =>
-        time.ToString(time.TotalHours >= 1 ? @"h\:mm\:ss" : @"m\:ss", CultureInfo.InvariantCulture);
 }
