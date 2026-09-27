@@ -29,27 +29,13 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
             return [];
 
         cancellationToken.ThrowIfCancellationRequested();
-        var errors = new ErrorLog();
-        string? json = await CreateClient(errors).GetMetadataRawAsync(searchTarget, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (string.IsNullOrWhiteSpace(json))
-            throw new InvalidOperationException(errors.Last ?? "The search returned nothing.");
-
-        return ReadSearchResults(json);
+        return ReadSearchResults(await ReadMetadataAsync(searchTarget, "The search returned nothing.", cancellationToken));
     }
 
     /// <summary>Reads a link someone pasted: what it is, and what can be exported from it.</summary>
     public async Task<(MediaSearchResult Media, MediaDetails Details)> OpenLinkAsync(string url, CancellationToken cancellationToken = default)
     {
-        var errors = new ErrorLog();
-        string? json = await CreateClient(errors).GetMetadataRawAsync(url, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (string.IsNullOrWhiteSpace(json))
-            throw new InvalidOperationException(errors.Last ?? "That link couldn't be opened.");
-
-        using JsonDocument document = JsonDocument.Parse(json);
+        using JsonDocument document = JsonDocument.Parse(await ReadMetadataAsync(url, "That link couldn't be opened.", cancellationToken));
         JsonElement root = document.RootElement;
         if (GetString(root, "_type") == "playlist")
             throw new InvalidOperationException("That's a playlist. Open one of its videos or tracks instead.");
@@ -75,13 +61,27 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
 
     public async Task<MediaDetails> InspectAsync(string sourceUrl, CancellationToken cancellationToken = default)
     {
-        var errors = new ErrorLog();
-        string? json = await CreateClient(errors).GetMetadataRawAsync(sourceUrl, cancellationToken);
-        if (string.IsNullOrWhiteSpace(json))
-            return MediaDetails.Unavailable(errors.Last ?? "This media couldn't be read.");
+        string json;
+        try
+        {
+            json = await ReadMetadataAsync(sourceUrl, "This media couldn't be read.", cancellationToken);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return MediaDetails.Unavailable(exception.Message);
+        }
 
         using JsonDocument document = JsonDocument.Parse(json);
         return ReadDetails(document.RootElement);
+    }
+
+    // What yt-dlp knows about a link or search, as JSON; when it has nothing, why (or else what went wrong, in general).
+    private async Task<string> ReadMetadataAsync(string target, string nothing, CancellationToken cancellationToken)
+    {
+        var errors = new ErrorLog();
+        string? json = await CreateClient(errors).GetMetadataRawAsync(target, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return string.IsNullOrWhiteSpace(json) ? throw new InvalidOperationException(errors.Last ?? nothing) : json;
     }
 
     public async Task<IReadOnlyList<string>> DownloadAsync(
