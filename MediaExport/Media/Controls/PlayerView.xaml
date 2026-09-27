@@ -13,7 +13,7 @@
         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
         BorderThickness="1"
         CornerRadius="8">
-        <Image Source="{x:Bind ThumbnailSource, Mode=OneWay}" Stretch="UniformToFill" />
+        <Image Source="{x:Bind ThumbnailSource}" Stretch="UniformToFill" />
         <WebView2 x:Name="player" WebMessageReceived="Player_WebMessageReceived" />
         <!-- A still of the player, shown in its place while a popup is over it. -->
         <Image x:Name="still" Stretch="Fill" Visibility="Collapsed" />
