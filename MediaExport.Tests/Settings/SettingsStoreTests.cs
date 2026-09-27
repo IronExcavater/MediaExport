@@ -22,7 +22,7 @@ public sealed class SettingsStoreTests
             store.Current.RecentResults.Add(media);
             store.Current.History.Add(new ExportRecord(
                 media,
-                new ExportOptions(MediaKind.Audio, "opus", null, "out") { Clips = [new Clip(TimeSpan.Zero, TimeSpan.FromSeconds(30))] },
+                new ExportOptions("opus", "out") { IncludeVideo = false, Clips = [new Clip(TimeSpan.Zero, TimeSpan.FromSeconds(30))] },
                 ExportOutcome.Completed,
                 [@"C:\out\Result.opus"],
                 null,

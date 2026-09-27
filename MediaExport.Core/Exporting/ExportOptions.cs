@@ -12,10 +12,17 @@ public record struct Clip(TimeSpan Start, TimeSpan End)
     public readonly TimeSpan Length => End - Start;
 }
 
-/// <param name="Format">Output file extension, e.g. <c>mp4</c> or <c>mp3</c>.</param>
-/// <param name="MaxHeight">Preferred maximum video height; <c>null</c> for the best available.</param>
-public sealed record ExportOptions(MediaKind Kind, string Format, int? MaxHeight, string OutputFolder)
+/// <param name="Format">The file type: a container such as <c>mp4</c> with video, or an audio format such as <c>mp3</c> without.</param>
+public sealed record ExportOptions(string Format, string OutputFolder)
 {
+    /// <summary>With video, the file is a video (with or without sound); without, it's audio only.</summary>
+    public bool IncludeVideo { get; init; } = true;
+
+    public bool IncludeAudio { get; init; } = true;
+
+    /// <summary>Preferred maximum video height; <c>null</c> for the best available.</summary>
+    public int? MaxHeight { get; init; }
+
     /// <summary>Audio bitrate in kbps; <c>null</c> for the best available.</summary>
     public int? AudioBitrate { get; init; }
 
@@ -32,20 +39,23 @@ public sealed record ExportOptions(MediaKind Kind, string Format, int? MaxHeight
     /// <summary>With several clips: one file of them all, rather than a file each.</summary>
     public bool JoinClips { get; init; } = true;
 
-    /// <summary>A file per chapter rather than one file.</summary>
-    public bool SplitChapters { get; init; }
-
     /// <summary>Cuts sponsor segments, self-promotion and interaction reminders (YouTube, via SponsorBlock).</summary>
     public bool RemoveSponsors { get; init; }
 
     /// <summary>A browser to borrow sign-in cookies from, for media that needs an account; <c>null</c> for none.</summary>
     public string? CookiesFromBrowser { get; init; }
 
+    /// <summary>Tries without the browser's sign-in first, and uses it only if the site asks for one.</summary>
+    public bool SignInOnlyWhenNeeded { get; init; }
+
     /// <summary>yt-dlp output template without the extension.</summary>
     public string FileNameTemplate { get; init; } = "%(title)s";
+
+    public bool IsAudioOnly => !IncludeVideo;
 }
 
-public sealed record ExportProgress(double Percent, string? Speed, string? Eta, bool IsProcessing);
+/// <param name="Step">What's happening when there's no percentage to show, e.g. "Cutting clip 2 of 3".</param>
+public sealed record ExportProgress(double Percent, string? Speed, string? Eta, bool IsProcessing, string? Step = null);
 
 public interface IMediaDownloader
 {
