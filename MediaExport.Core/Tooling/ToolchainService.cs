@@ -16,11 +16,16 @@ namespace MediaExport.Core.Tooling;
 public sealed record Tool(
     string Id,
     string Name,
-    string Purpose,
     string Repository,
     string AssetPattern,
     IReadOnlyList<string> Executables,
-    bool IsRequired);
+    bool IsRequired,
+    string? Website = null,
+    string? SourceCode = null)
+{
+    /// <summary>Where the project's code lives; the release repository unless that's only a build of it.</summary>
+    public string SourceUrl => SourceCode ?? $"https://github.com/{Repository}";
+}
 
 public sealed record ToolRelease(string Version, string Tag, DateTimeOffset Published, string AssetUrl, long AssetSize);
 
@@ -66,16 +71,16 @@ public sealed partial class ToolchainService
     private static bool IsArm64 => RuntimeInformation.OSArchitecture == Architecture.Arm64;
 
     public static Tool YtDlp { get; } = new(
-        "yt-dlp", "yt-dlp", "Finds and downloads media", "yt-dlp/yt-dlp",
+        "yt-dlp", "yt-dlp", "yt-dlp/yt-dlp",
         IsArm64 ? @"^yt-dlp_arm64\.exe$" : @"^yt-dlp\.exe$", ["yt-dlp"], true);
 
     public static Tool FFmpeg { get; } = new(
-        "ffmpeg", "FFmpeg", "Joins, cuts and converts what's downloaded", "GyanD/codexffmpeg",
-        @"essentials_build\.zip$", ["ffmpeg", "ffprobe"], true);
+        "ffmpeg", "FFmpeg", "GyanD/codexffmpeg",
+        @"essentials_build\.zip$", ["ffmpeg", "ffprobe"], true, "https://ffmpeg.org", "https://github.com/FFmpeg/FFmpeg");
 
     public static Tool Deno { get; } = new(
-        "deno", "Deno", "Lets yt-dlp play YouTube's newer formats", "denoland/deno",
-        IsArm64 ? @"^deno-aarch64-pc-windows-msvc\.zip$" : @"^deno-x86_64-pc-windows-msvc\.zip$", ["deno"], false);
+        "deno", "Deno", "denoland/deno",
+        IsArm64 ? @"^deno-aarch64-pc-windows-msvc\.zip$" : @"^deno-x86_64-pc-windows-msvc\.zip$", ["deno"], false, "https://deno.com");
 
     public static IReadOnlyList<Tool> Tools { get; } = [YtDlp, FFmpeg, Deno];
 
@@ -121,7 +126,7 @@ public sealed partial class ToolchainService
             return known;
 
         GitHubRelease[] releases = await _http.GetFromJsonAsync(
-            $"https://api.github.com/repos/{tool.Repository}/releases?per_page=30",
+            $"https://api.github.com/repos/{tool.Repository}/releases?per_page=100",
             ToolchainJson.Default.GitHubReleaseArray,
             cancellationToken) ?? [];
 

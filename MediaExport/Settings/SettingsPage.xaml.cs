@@ -3,9 +3,11 @@
 
 using MediaExport.Core.Tooling;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
-using System.Linq;
+using System;
+using Windows.System;
 
 namespace MediaExport.Settings;
 
@@ -30,7 +32,13 @@ public sealed partial class SettingsPage : Page
         await ViewModel.RefreshToolsAsync();
     }
 
-    // MenuFlyout has no ItemsSource, so the versions are listed as it opens.
+    private async void Link_Click(object sender, RoutedEventArgs args)
+    {
+        if (((FrameworkElement)sender).Tag is { } link && Uri.TryCreate(link.ToString(), UriKind.Absolute, out Uri? uri))
+            await Launcher.LaunchUriAsync(uri);
+    }
+
+    // MenuFlyout has no ItemsSource, so the versions are listed as it opens, each with its release date.
     private void Versions_Opening(object? sender, object args)
     {
         var menu = (MenuFlyout)sender!;
@@ -39,23 +47,22 @@ public sealed partial class SettingsPage : Page
 
         if (tool.Releases.Count == 0)
         {
-            menu.Items.Add(new MenuFlyoutItem { Text = tool.HasError ? "Couldn't list versions" : "Looking for versions…", IsEnabled = false });
+            menu.Items.Add(new MenuFlyoutItem { Text = tool.HasError ? "Couldn't find any versions" : "Looking for versions…", IsEnabled = false });
             return;
         }
 
-        foreach (ToolRelease release in tool.Releases.Take(15))
+        foreach (ToolRelease release in tool.Releases)
         {
-            bool isCurrent = tool.IsManaged && tool.Status?.Version == release.Version;
-            var item = new ToggleMenuFlyoutItem
+            bool isCurrent = tool.Status?.Version == release.Version;
+            menu.Items.Add(new ToggleMenuFlyoutItem
             {
-                Text = release == tool.Latest ? $"{release.Version} (newest)" : release.Version,
+                Text = release == tool.Latest ? $"{release.Version}   newest" : release.Version,
+                KeyboardAcceleratorTextOverride = release.Published.ToLocalTime().ToString("d MMM yyyy"),
                 IsChecked = isCurrent,
-                IsEnabled = !isCurrent,
+                IsEnabled = !(isCurrent && tool.IsManaged),
                 Command = tool.InstallVersionCommand,
                 CommandParameter = release
-            };
-            ToolTipService.SetToolTip(item, $"Released {release.Published:d}");
-            menu.Items.Add(item);
+            });
         }
     }
 }

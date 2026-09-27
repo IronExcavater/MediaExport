@@ -7,14 +7,19 @@ using MediaExport.Activity;
 using MediaExport.Core.Settings;
 using MediaExport.Core.Tooling;
 using MediaExport.Search;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Windows.ApplicationModel;
 
 namespace MediaExport.Settings;
 
-public sealed record BrowserChoice(string Label, string? Value);
+public sealed record SettingsChoice(string Label, string? Value)
+{
+    public override string ToString() => Label;
+}
 
 public sealed partial class SettingsViewModel : ObservableObject
 {
@@ -30,26 +35,40 @@ public sealed partial class SettingsViewModel : ObservableObject
         _search = search;
         _activity = activity;
         Tools = ToolchainService.Tools.Select(tool => new ToolViewModel(tool, toolchain, UpdateMissingTools)).ToArray();
-        SelectedBrowser = Browsers.FirstOrDefault(browser => browser.Value == settings.Current.CookiesFromBrowser) ?? Browsers[0];
-        Theme = settings.Current.Theme;
+        SettingsChoice[] installed = FindInstalledBrowsers().ToArray();
+        string? defaultBrowser = FindDefaultBrowser();
+        SettingsChoice? automatic = installed.FirstOrDefault(browser => browser.Value == defaultBrowser) is { } found
+            ? new SettingsChoice($"{found.Label}, only when needed", $"auto:{found.Value}")
+            : null;
+        Browsers = [.. automatic is null ? [] : new[] { automatic }, .. installed, new SettingsChoice("Never", "never")];
+
+        // "auto" follows whichever browser is the default now, in case it changed.
+        string? saved = settings.Current.CookiesFromBrowser;
+        SelectedBrowser = (saved is null || saved.StartsWith("auto", StringComparison.Ordinal)) && automatic is not null
+            ? automatic
+            : Browsers.FirstOrDefault(browser => browser.Value == saved) ?? Browsers[^1];
+        if (SelectedBrowser == automatic && saved != automatic.Value)
+        {
+            settings.Current.CookiesFromBrowser = automatic.Value;
+            settings.Save();
+        }
+        SelectedTheme = Themes.FirstOrDefault(theme => theme.Value == settings.Current.Theme) ?? Themes[0];
         UpdateMissingTools();
     }
 
     public IReadOnlyList<ToolViewModel> Tools { get; }
 
-    public IReadOnlyList<BrowserChoice> Browsers { get; } =
-    [
-        new("Don't sign in", null), new("Microsoft Edge", "edge"), new("Google Chrome", "chrome"), new("Firefox", "firefox"),
-        new("Brave", "brave"), new("Opera", "opera"), new("Vivaldi", "vivaldi")
-    ];
+    public IReadOnlyList<SettingsChoice> Themes { get; } =
+        [new("Same as Windows", "System"), new("Light", "Light"), new("Dark", "Dark")];
 
-    /// <summary><c>System</c>, <c>Light</c> or <c>Dark</c>.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsSystemTheme), nameof(IsLightTheme), nameof(IsDarkTheme))]
-    public partial string Theme { get; set; }
+    /// <summary>Browsers on this PC that yt-dlp can borrow a sign-in from.</summary>
+    public IReadOnlyList<SettingsChoice> Browsers { get; }
 
     [ObservableProperty]
-    public partial BrowserChoice SelectedBrowser { get; set; }
+    public partial SettingsChoice SelectedTheme { get; set; }
+
+    [ObservableProperty]
+    public partial SettingsChoice SelectedBrowser { get; set; }
 
     /// <summary>Required tools that are missing, as a sentence; <c>null</c> when everything's there.</summary>
     [ObservableProperty]
@@ -61,10 +80,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool HasMissingTools => MissingTools is not null;
 
-    // Radio buttons bind one of these each.
-    public bool IsSystemTheme { get => Theme == "System"; set { if (value) Theme = "System"; } }
-    public bool IsLightTheme { get => Theme == "Light"; set { if (value) Theme = "Light"; } }
-    public bool IsDarkTheme { get => Theme == "Dark"; set { if (value) Theme = "Dark"; } }
+    /// <summary><c>System</c>, <c>Light</c> or <c>Dark</c>.</summary>
+    public string Theme => SelectedTheme.Value ?? "System";
 
     public string Version
     {
@@ -75,7 +92,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 PackageVersion version = Package.Current.Id.Version;
                 return $"{version.Major}.{version.Minor}.{version.Build}";
             }
-            catch (System.InvalidOperationException)
+            catch (InvalidOperationException)
             {
                 return typeof(SettingsViewModel).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
             }
@@ -85,13 +102,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool HasSearchHistory => _search.Recents.Count > 0;
     public bool HasExportHistory => _activity.Jobs.Any(job => job.IsFinished);
 
-    partial void OnThemeChanged(string value)
+    partial void OnSelectedThemeChanged(SettingsChoice value)
     {
-        _settings.Current.Theme = value;
+        _settings.Current.Theme = value.Value ?? "System";
         _settings.Save();
+        OnPropertyChanged(nameof(Theme));
     }
 
-    partial void OnSelectedBrowserChanged(BrowserChoice value)
+    partial void OnSelectedBrowserChanged(SettingsChoice value)
     {
         _settings.Current.CookiesFromBrowser = value.Value;
         _settings.Save();
@@ -144,6 +162,44 @@ public sealed partial class SettingsViewModel : ObservableObject
             0 => null,
             1 => $"{missing[0].Name} is needed to search and export.",
             _ => $"{string.Join(" and ", missing.Select(tool => tool.Name))} are needed to search and export."
+        };
+    }
+
+    // A browser counts as installed when its profile folder is there, which is also where yt-dlp reads cookies from.
+    private static IEnumerable<SettingsChoice> FindInstalledBrowsers()
+    {
+        string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        string roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        (string Label, string Value, string Profile)[] known =
+        [
+            ("Microsoft Edge", "edge", Path.Combine(local, "Microsoft", "Edge", "User Data")),
+            ("Google Chrome", "chrome", Path.Combine(local, "Google", "Chrome", "User Data")),
+            ("Firefox", "firefox", Path.Combine(roaming, "Mozilla", "Firefox", "Profiles")),
+            ("Brave", "brave", Path.Combine(local, "BraveSoftware", "Brave-Browser", "User Data")),
+            ("Opera", "opera", Path.Combine(roaming, "Opera Software", "Opera Stable")),
+            ("Vivaldi", "vivaldi", Path.Combine(local, "Vivaldi", "User Data")),
+            ("Chromium", "chromium", Path.Combine(local, "Chromium", "User Data"))
+        ];
+
+        return known.Where(browser => Directory.Exists(browser.Profile)).Select(browser => new SettingsChoice(browser.Label, browser.Value));
+    }
+
+    /// <summary>The browser Windows opens web links with, as yt-dlp names it.</summary>
+    private static string? FindDefaultBrowser()
+    {
+        using Microsoft.Win32.RegistryKey? choice = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+            @"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice");
+        string program = choice?.GetValue("ProgId") as string ?? string.Empty;
+        return program switch
+        {
+            _ when program.StartsWith("MSEdge", StringComparison.OrdinalIgnoreCase) => "edge",
+            _ when program.StartsWith("Chrome", StringComparison.OrdinalIgnoreCase) => "chrome",
+            _ when program.StartsWith("Firefox", StringComparison.OrdinalIgnoreCase) => "firefox",
+            _ when program.StartsWith("Brave", StringComparison.OrdinalIgnoreCase) => "brave",
+            _ when program.StartsWith("Opera", StringComparison.OrdinalIgnoreCase) => "opera",
+            _ when program.StartsWith("Vivaldi", StringComparison.OrdinalIgnoreCase) => "vivaldi",
+            _ when program.StartsWith("Chromium", StringComparison.OrdinalIgnoreCase) => "chromium",
+            _ => null
         };
     }
 }
