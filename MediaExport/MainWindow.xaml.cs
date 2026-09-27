@@ -19,6 +19,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Graphics;
 using Windows.System;
 
@@ -148,6 +149,25 @@ public sealed partial class MainWindow : Window
             presenter.PreferredMinimumWidth = (int)(860 * scale);
             presenter.PreferredMinimumHeight = (int)(600 * scale);
         }
+    }
+
+    // A link dragged in from a browser (its address bar or a link on the page) opens like a pasted one.
+    private void Root_DragOver(object sender, DragEventArgs args)
+    {
+        if (args.DataView.Contains(StandardDataFormats.WebLink) || args.DataView.Contains(StandardDataFormats.Text))
+        {
+            args.AcceptedOperation = DataPackageOperation.Link;
+            args.DragUIOverride.Caption = "Open";
+        }
+    }
+
+    private async void Root_Drop(object sender, DragEventArgs args)
+    {
+        string? text = args.DataView.Contains(StandardDataFormats.WebLink) ? (await args.DataView.GetWebLinkAsync()).AbsoluteUri
+            : args.DataView.Contains(StandardDataFormats.Text) ? (await args.DataView.GetTextAsync()).Trim()
+            : null;
+        if (text is not null && SearchViewModel.IsLink(text))
+            await OpenLinkAsync(text);
     }
 
     private void RestorePlacement()

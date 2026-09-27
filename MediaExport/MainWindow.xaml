@@ -15,7 +15,12 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid x:Name="root" Loaded="Root_Loaded">
+    <Grid
+        x:Name="root"
+        AllowDrop="True"
+        DragOver="Root_DragOver"
+        Drop="Root_Drop"
+        Loaded="Root_Loaded">
         <Grid.Resources>
             <!-- Its DataContext is the activity: the ring is the running exports' progress, the number how many. -->
             <Style x:Key="ProgressBadgeStyle" TargetType="InfoBadge">
