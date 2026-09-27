@@ -6,7 +6,6 @@
     xmlns:controls="using:MediaExport.Controls"
     xmlns:converters="using:MediaExport.Converters"
     xmlns:media="using:MediaExport.Media.Controls"
-    xmlns:models="using:MediaExport.Core.Media.Models"
     xmlns:providers="using:MediaExport.Core.Media.Providers"
     xmlns:search="using:MediaExport.Search"
     Title="MediaExport">
