@@ -14,6 +14,7 @@ public abstract class WebApiSearchProvider(HttpClient http) : IMediaSearchProvid
 
     public abstract string Id { get; }
     public abstract string DisplayName { get; }
+    public abstract string Icon { get; }
 
     protected abstract string GetSearchUrl(string query);
 
@@ -43,6 +44,7 @@ public sealed class DailymotionSearchProvider(HttpClient http) : WebApiSearchPro
 {
     public override string Id => "dailymotion";
     public override string DisplayName => "Dailymotion";
+    public override string Icon => "dailymotion";
 
     protected override string GetSearchUrl(string query) =>
         $"https://api.dailymotion.com/videos?search={Uri.EscapeDataString(query)}&limit={ResultCount}"
@@ -77,6 +79,7 @@ public sealed class InternetArchiveSearchProvider(HttpClient http) : WebApiSearc
 {
     public override string Id => "internetarchive";
     public override string DisplayName => "Internet Archive";
+    public override string Icon => "internet-archive";
 
     protected override string GetSearchUrl(string query) =>
         $"https://archive.org/advancedsearch.php?q={Uri.EscapeDataString($"({query}) AND mediatype:(movies OR audio)")}"

@@ -102,6 +102,7 @@ public sealed class SearchViewModelTests
     {
         public string Id => id;
         public string DisplayName => id == "youtube" ? "YouTube" : "SoundCloud";
+        public string Icon => id;
         public IReadOnlyList<MediaSearchResult> Results { get; init; } = [];
         public Exception? Failure { get; init; }
         public List<string> Queries { get; } = [];

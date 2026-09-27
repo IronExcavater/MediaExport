@@ -10,6 +10,7 @@ public sealed class SoundCloudSearchProvider(YtdlpService ytdlp) : YtdlpSearchPr
 {
     public override string Id => "soundcloud";
     public override string DisplayName => "SoundCloud";
+    public override string Icon => "soundcloud";
 
     protected override MediaKind Kind => MediaKind.Audio;
 

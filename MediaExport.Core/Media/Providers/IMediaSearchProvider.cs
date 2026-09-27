@@ -10,6 +10,9 @@ public interface IMediaSearchProvider
     string Id { get; }
     string DisplayName { get; }
 
+    /// <summary>Its icon's name in the app's icons, e.g. <c>internet-archive</c>; not tied to <see cref="Id"/>.</summary>
+    string Icon { get; }
+
     Task<IReadOnlyList<MediaSearchResult>> SearchAsync(
         string query,
         CancellationToken cancellationToken = default);

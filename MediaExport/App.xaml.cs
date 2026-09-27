@@ -1,12 +1,15 @@
 // Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
+using MediaExport.Controls;
+using MediaExport.Core.Media.Providers;
 using MediaExport.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.Storage.Pickers;
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace MediaExport;
@@ -26,6 +29,7 @@ public partial class App : Application
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddMediaExport(GetDataFolder());
         Services = serviceCollection.BuildServiceProvider();
+        IconView.SourceIcons = Services.GetServices<IMediaSearchProvider>().ToDictionary(source => source.Id, source => source.Icon);
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)

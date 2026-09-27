@@ -22,9 +22,6 @@
             <Color x:Key="SystemAccentColorDark2">#09675E</Color>
             <Color x:Key="SystemAccentColorDark3">#054A44</Color>
 
-            <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
-            <converters:IconImageConverter x:Key="IconImageConverter" />
-
             <!-- The widest pages get before they stop growing and centre instead. -->
             <x:Double x:Key="PageMaxWidth">1400</x:Double>
 
