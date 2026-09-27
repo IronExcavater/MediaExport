@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:converters="using:MediaExport.Converters"
     xmlns:media="using:MediaExport.Media.Controls"
+    xmlns:models="using:MediaExport.Core.Media.Models"
     xmlns:providers="using:MediaExport.Core.Media.Providers"
     xmlns:search="using:MediaExport.Search"
     Title="MediaExport">
@@ -14,6 +15,30 @@
     </Window.SystemBackdrop>
 
     <Grid x:Name="root" Loaded="Root_Loaded">
+        <Grid.Resources>
+            <!-- Its DataContext is the activity: the ring is the running exports' progress, the number how many. -->
+            <Style x:Key="ProgressBadgeStyle" TargetType="InfoBadge">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="InfoBadge">
+                            <Grid Width="24" Height="24">
+                                <ProgressRing
+                                    Width="24"
+                                    Height="24"
+                                    IsIndeterminate="{Binding IsRunningProgressUnknown}"
+                                    Value="{Binding RunningProgress}" />
+                                <TextBlock
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    FontWeight="SemiBold"
+                                    Text="{Binding RunningCount}" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -21,17 +46,31 @@
 
         <TitleBar
             x:Name="titleBar"
-            Title="MediaExport"
             IsBackButtonVisible="False"
             IsPaneToggleButtonVisible="True"
-            Loaded="TitleBar_Loaded"
             PaneToggleRequested="TitleBar_PaneToggleRequested">
             <TitleBar.Resources>
                 <HorizontalAlignment x:Key="TitleBarContentHorizontalAlignment">Stretch</HorizontalAlignment>
             </TitleBar.Resources>
-            <TitleBar.IconSource>
-                <ImageIconSource ImageSource="ms-appx:///Assets/App/Square44x44Logo.targetsize-24_altform-unplated.png" />
-            </TitleBar.IconSource>
+            <!-- The app's own icon and name, larger than the title bar's caption-sized title and centred together. -->
+            <TitleBar.LeftHeader>
+                <StackPanel
+                    Margin="4,0,8,0"
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="10">
+                    <Image
+                        Width="22"
+                        Height="22"
+                        VerticalAlignment="Center"
+                        Source="ms-appx:///Assets/App/Square44x44Logo.targetsize-24_altform-unplated.png" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="16"
+                        FontWeight="SemiBold"
+                        Text="MediaExport" />
+                </StackPanel>
+            </TitleBar.LeftHeader>
 
             <Grid
                 MaxWidth="640"
@@ -44,7 +83,7 @@
                 </Grid.ColumnDefinitions>
 
                 <ComboBox
-                    MinWidth="150"
+                    MinWidth="196"
                     VerticalAlignment="Center"
                     AutomationProperties.Name="Search source"
                     DropDownClosed="ProviderBox_DropDownClosed"
@@ -54,13 +93,27 @@
                     SelectionChanged="ProviderBox_SelectionChanged">
                     <ComboBox.ItemTemplate>
                         <DataTemplate x:DataType="providers:IMediaSearchProvider">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="24" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon
+                                    FontSize="18"
+                                    Glyph="&#xE774;"
+                                    Visibility="{x:Bind converters:IconImageConverter.ShowFallback(Id)}" />
                                 <Image
-                                    Width="20"
-                                    Height="20"
-                                    Source="{x:Bind converters:IconImageConverter.GetIcon(Id)}" />
-                                <TextBlock VerticalAlignment="Center" Text="{x:Bind DisplayName}" />
-                            </StackPanel>
+                                    Width="24"
+                                    Height="24"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Source="{x:Bind converters:IconImageConverter.GetIcon(Id)}"
+                                    Stretch="Uniform" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Text="{x:Bind DisplayName}" />
+                            </Grid>
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
                 </ComboBox>
@@ -155,8 +208,12 @@
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE81C;" />
                     </NavigationViewItem.Icon>
+                    <!-- How many are running, inside a ring showing how far they've got together. -->
                     <NavigationViewItem.InfoBadge>
-                        <InfoBadge Visibility="{x:Bind Activity.HasRunning, Mode=OneWay}" Value="{x:Bind Activity.RunningCount, Mode=OneWay}" />
+                        <InfoBadge
+                            DataContext="{x:Bind Activity}"
+                            Style="{StaticResource ProgressBadgeStyle}"
+                            Visibility="{x:Bind Activity.HasRunning, Mode=OneWay}" />
                     </NavigationViewItem.InfoBadge>
                     <NavigationViewItem.KeyboardAccelerators>
                         <KeyboardAccelerator
@@ -166,6 +223,7 @@
                     </NavigationViewItem.KeyboardAccelerators>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
+
 
             <Grid>
                 <Grid.RowDefinitions>
