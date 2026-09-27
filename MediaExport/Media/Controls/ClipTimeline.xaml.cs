@@ -22,7 +22,7 @@ namespace MediaExport.Media.Controls;
 /// <summary>
 /// The media's length, from left to right. Clips are the parts kept: drag across the track to add one,
 /// drag a clip to move it and its ends to trim it. Chapters sit above; click one to keep it.
-/// The ruler below moves the player. Delete removes the selected clip, Escape lets go of it.
+/// The ruler below moves the player, as do the arrow keys. Delete removes the selected clip, Escape lets go of it.
 /// </summary>
 public sealed partial class ClipTimeline : UserControl
 {
@@ -31,6 +31,7 @@ public sealed partial class ClipTimeline : UserControl
     private const double RulerHeight = 22;
     private const double EdgeReach = 8;
     private const double DragThreshold = 4;
+    private const double SeekStep = 5;
     private static readonly TimeSpan MinimumClip = TimeSpan.FromSeconds(1);
 
     public static readonly DependencyProperty DurationProperty = Register(nameof(Duration), typeof(TimeSpan), TimeSpan.Zero);
@@ -226,7 +227,7 @@ public sealed partial class ClipTimeline : UserControl
         if (point.Y < TrackTop)
         {
             TimeSpan at = ToTime(point.X);
-            int chapter = Chapters?.Select((item, index) => (item, index)).FirstOrDefault(pair => pair.item.Start <= at && at < pair.item.End, (default!, -1)).index ?? -1;
+            int chapter = Chapters?.ToList().FindIndex(item => item.Start <= at && at < item.End) ?? -1;
             return chapter >= 0 ? (Part.Chapter, chapter) : (Part.None, -1);
         }
 
@@ -434,6 +435,12 @@ public sealed partial class ClipTimeline : UserControl
         else if (args.Key == VirtualKey.Escape && SelectedIndex >= 0)
         {
             SelectedIndex = -1;
+            args.Handled = true;
+        }
+        else if (args.Key is VirtualKey.Left or VirtualKey.Right && Duration > TimeSpan.Zero)
+        {
+            TimeSpan step = TimeSpan.FromSeconds(args.Key == VirtualKey.Left ? -SeekStep : SeekStep);
+            SeekRequested?.Invoke(this, Clamp(Position + step, TimeSpan.Zero, Duration));
             args.Handled = true;
         }
     }
