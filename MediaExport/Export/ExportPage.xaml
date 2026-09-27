@@ -87,7 +87,7 @@
                     </Grid>
                 </Border>
 
-                <StackPanel Spacing="12" Visibility="{x:Bind HasRecents, Mode=OneWay}">
+                <StackPanel Spacing="12" Visibility="{x:Bind Search.HasRecents, Mode=OneWay}">
                     <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Jump back in" />
                     <GridView
                         IsItemClickEnabled="True"
@@ -241,7 +241,7 @@
                     Margin="0,64,0,0"
                     HorizontalAlignment="Center"
                     Spacing="12"
-                    Visibility="{x:Bind converters:Show.WhenNone(HasRecents, Activity.HasJobs), Mode=OneWay}">
+                    Visibility="{x:Bind converters:Show.WhenNone(Search.HasRecents, Activity.HasJobs), Mode=OneWay}">
                     <Image
                         Width="72"
                         Height="72"
@@ -305,7 +305,7 @@
 
                     <media:PlayerView
                         x:Name="player"
-                        IsPlayerHidden="{x:Bind IsPlayerObscured, Mode=OneWay}"
+                        IsPlayerHidden="{x:Bind Search.IsPlayerObscured, Mode=OneWay}"
                         Media="{x:Bind ViewModel.Media, Mode=OneWay}" />
 
                     <!-- What it is and who made it; the timeline below already says how long it is. -->

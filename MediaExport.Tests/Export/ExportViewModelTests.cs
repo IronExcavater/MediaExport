@@ -45,6 +45,23 @@ public sealed class ExportViewModelTests
     }
 
     [Test]
+    public void Clip_times_stay_clear_of_the_clips_beside_them()
+    {
+        ExportViewModel viewModel = Create(new FakeDownloader());
+        viewModel.Open(Video);
+        viewModel.AddClip(new Clip(TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(90)));
+        viewModel.AddClip(new Clip(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(20)));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.TrySetSelectedClip(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(70)), Is.False, "runs into the next clip");
+            Assert.That(viewModel.TrySetSelectedClip(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5.5)), Is.False, "under a second");
+            Assert.That(viewModel.TrySetSelectedClip(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60)), Is.True);
+            Assert.That(viewModel.Clips[0], Is.EqualTo(new Clip(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60))));
+        });
+    }
+
+    [Test]
     public void Media_that_cant_be_exported_says_why()
     {
         var downloader = new FakeDownloader();
@@ -230,7 +247,7 @@ public sealed class ExportViewModelTests
     private static ExportViewModel Create(FakeDownloader downloader, SettingsStore? settings = null)
     {
         settings ??= new SettingsStore(null);
-        return new ExportViewModel(downloader, new ActivityViewModel(downloader, settings), settings);
+        return new ExportViewModel(downloader, new ActivityViewModel(downloader, settings), settings, []);
     }
 
     internal sealed class FakeDownloader : IMediaDownloader
