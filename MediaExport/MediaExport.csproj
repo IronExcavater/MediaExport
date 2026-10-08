@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <Content Include="Assets\App\*" />
+    <Content Include="Assets\Icons\*" />
   </ItemGroup>
 
   <ItemGroup>
