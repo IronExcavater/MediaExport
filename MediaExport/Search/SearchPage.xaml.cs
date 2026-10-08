@@ -33,6 +33,13 @@ public sealed partial class SearchPage : Page
         feed.MinItemHeight = (card - 16) * 9 / 16 + CardText;
     }
 
+    // Clicking it while it's lit would unlight it, though with no source picked everywhere is still what's searched.
+    private void EverySource_Click(object sender, RoutedEventArgs args)
+    {
+        ViewModel.SearchEverySourceCommand.Execute(null);
+        ((Microsoft.UI.Xaml.Controls.Primitives.ToggleButton)sender).IsChecked = ViewModel.IsEverySource;
+    }
+
     private void Result_Click(object sender, RoutedEventArgs args) =>
         ((MainWindow)App.Current.MainWindow).Open((MediaSearchResult)((FrameworkElement)sender).Tag);
 }

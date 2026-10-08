@@ -40,7 +40,7 @@ public sealed partial class SearchViewModel : ObservableObject
     private readonly Dictionary<string, MediaDetails> _linkDetails = [];
 
     // Each source's last results, so switching sources back and forth doesn't search again.
-    private readonly Dictionary<string, (string Query, IReadOnlyList<MediaSearchResult> Results)> _results = [];
+    private readonly Dictionary<string, (string Query, SearchSort Sort, bool Ascending, IReadOnlyList<MediaSearchResult> Results)> _results = [];
     private CancellationTokenSource? _search;
     private string? _shownQuery;
 
@@ -50,6 +50,8 @@ public sealed partial class SearchViewModel : ObservableObject
         _ytdlp = ytdlp;
         Providers = providers.ToArray();
         SelectedProvider = Providers.FirstOrDefault(provider => provider.Id == settings.Current.ProviderId) ?? Providers[0];
+        Sort = settings.Current.Sort;
+        IsAscending = settings.Current.SortAscending;
         // Recent picks saved before sources were recorded get theirs from the link.
         List<MediaSearchResult> recents = settings.Current.RecentResults;
         for (int i = 0; i < recents.Count; i++)
@@ -72,6 +74,30 @@ public sealed partial class SearchViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Placeholder))]
     public partial IMediaSearchProvider SelectedProvider { get; set; }
+
+    /// <summary>
+    /// Which results come first, here and on the Search page: asked of the sources that can order their own,
+    /// and applied to what comes back.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SortLabel))]
+    public partial SearchSort Sort { get; set; }
+
+    /// <summary>The order turned round: least played, oldest or loosest match first.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DirectionGlyph), nameof(DirectionLabel))]
+    public partial bool IsAscending { get; set; }
+
+    public string SortLabel => Sort switch
+    {
+        SearchSort.Popularity => "Most played",
+        SearchSort.Recency => "Newest",
+        _ => "Best match"
+    };
+
+    /// <summary>An arrow pointing the way the order runs.</summary>
+    public string DirectionGlyph => IsAscending ? "\uE74A" : "\uE74B";
+    public string DirectionLabel => IsAscending ? "Reversed order. Click for the usual order." : "Usual order. Click to reverse it.";
 
     [ObservableProperty]
     public partial bool IsSearching { get; set; }
@@ -178,16 +204,33 @@ public sealed partial class SearchViewModel : ObservableObject
         Suggestions.Clear();
 
         string query = SearchText.Trim();
-        if (query.Length > 0 && !IsLink(query) && _results.TryGetValue(value.Id, out var cached) && cached.Query == query)
+        if (query.Length > 0 && !IsLink(query) && _results.TryGetValue(value.Id, out var cached) && cached.Query == query && cached.Sort == Sort && cached.Ascending == IsAscending)
         {
             Show(MatchingRecents(query, RecentMatchLimit), cached.Results, query);
             _shownQuery = query;
         }
     }
 
+    partial void OnSortChanged(SearchSort value) => OnOrderChanged();
+
+    partial void OnIsAscendingChanged(bool value) => OnOrderChanged();
+
+    private void OnOrderChanged()
+    {
+        if (_settings.Current.Sort == Sort && _settings.Current.SortAscending == IsAscending)
+            return;
+
+        _settings.Current.Sort = Sort;
+        _settings.Current.SortAscending = IsAscending;
+        _settings.Save();
+        if (!IsPageSearch && SearchText.Trim().Length > 0)
+            _ = SearchAsync(debounce: false);
+    }
+
     private async Task RunSearchAsync(string query, bool debounce)
     {
         IMediaSearchProvider provider = SelectedProvider;
+        (SearchSort sort, bool ascending) = (Sort, IsAscending);
         CancellationTokenSource search = Restart();
         CancellationToken token = search.Token;
         IsSearching = true;
@@ -202,11 +245,11 @@ public sealed partial class SearchViewModel : ObservableObject
 
             IReadOnlyList<MediaSearchResult> results = IsLink(query)
                 ? [await OpenLinkAsync(query, token)]
-                : await provider.SearchAsync(query, cancellationToken: token);
+                : SearchRanking.Order([await provider.SearchAsync(query, sort, token)], query, sort, ascending);
             token.ThrowIfCancellationRequested();
 
             if (!IsLink(query))
-                _results[provider.Id] = (query, results);
+                _results[provider.Id] = (query, sort, ascending, results);
             Show(MatchingRecents(query, RecentMatchLimit), results, query);
             if (Suggestions.Count == 0)
                 Suggestions.Add(new SearchSuggestion(null, Message: $"No results for \"{query}\"", Query: query));

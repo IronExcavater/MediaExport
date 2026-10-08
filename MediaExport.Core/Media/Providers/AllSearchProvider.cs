@@ -9,7 +9,8 @@ namespace MediaExport.Core.Media.Providers;
 
 /// <summary>Every source searched at once, their best results put into one order.</summary>
 /// <param name="perSource">How many of each source's results are kept, so one source's don't crowd out the rest.</param>
-public sealed class AllSearchProvider(IReadOnlyList<IMediaSearchProvider> sources, int perSource = 5) : IMediaSearchProvider
+/// <param name="ascending">Turns the order round: least played, oldest or loosest match first.</param>
+public sealed class AllSearchProvider(IReadOnlyList<IMediaSearchProvider> sources, int perSource = 5, bool ascending = false) : IMediaSearchProvider
 {
     public string Id => "all";
     public string DisplayName => "All sources";
@@ -49,7 +50,7 @@ public sealed class AllSearchProvider(IReadOnlyList<IMediaSearchProvider> source
                 continue;
 
             answers.Add(search.Result.Take(perSource).ToArray());
-            yield return SearchRanking.Order(answers, query, sort);
+            yield return SearchRanking.Order(answers, query, sort, ascending);
         }
 
         cancellationToken.ThrowIfCancellationRequested();

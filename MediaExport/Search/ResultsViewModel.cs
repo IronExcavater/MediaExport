@@ -5,7 +5,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MediaExport.Core.Media.Models;
 using MediaExport.Core.Media.Providers;
-using MediaExport.Core.Settings;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -15,18 +14,23 @@ using System.Threading.Tasks;
 
 namespace MediaExport.Search;
 
-/// <summary>A source that can be left out of a search.</summary>
+/// <summary>A source on the Search page: picked to narrow the search to it, with how much it found.</summary>
 public sealed partial class SourceFilter(IMediaSearchProvider provider) : ObservableObject
 {
     public IMediaSearchProvider Provider => provider;
 
+    /// <summary>Picked sources are the only ones asked; with none picked, every source is.</summary>
     [ObservableProperty]
-    public partial bool IsOn { get; set; } = true;
+    public partial bool IsPicked { get; set; }
+
+    /// <summary>How many of the results on the page are its; nothing while there are none to count.</summary>
+    [ObservableProperty]
+    public partial string Count { get; set; } = string.Empty;
 }
 
 /// <summary>
-/// The Search page: one search asked of every source at once, its results filling in as each answers.
-/// The page's own controls say which sources are asked, what kind of media is shown and in what order.
+/// The Search page: one search asked of several sources at once, its results filling in as each answers.
+/// The page chooses the sources; the order comes from the title bar's sort, the same one its own suggestions use.
 /// </summary>
 public sealed partial class ResultsViewModel : ObservableObject
 {
@@ -34,42 +38,43 @@ public sealed partial class ResultsViewModel : ObservableObject
     private const int PerSource = 10;
     private static readonly TimeSpan TypingPause = TimeSpan.FromMilliseconds(500);
 
-    private readonly SettingsStore _settings;
-    private IReadOnlyList<MediaSearchResult> _found = [];
-    private CancellationTokenSource? _search;
-    private bool _isChangingSources;
+    private readonly SearchViewModel _search;
+    private CancellationTokenSource? _running;
+    private bool _isClearingPicks;
 
-    public ResultsViewModel(IEnumerable<IMediaSearchProvider> providers, SettingsStore settings)
+    public ResultsViewModel(IEnumerable<IMediaSearchProvider> providers, SearchViewModel search)
     {
-        _settings = settings;
+        _search = search;
         Sources = providers.Select(provider => new SourceFilter(provider)).ToArray();
         foreach (SourceFilter source in Sources)
         {
-            source.PropertyChanged += (_, _) =>
+            source.PropertyChanged += (_, args) =>
             {
-                if (!_isChangingSources)
-                    _ = SearchAsync(Query);
+                if (args.PropertyName != nameof(SourceFilter.IsPicked) || _isClearingPicks)
+                    return;
+
+                OnPropertyChanged(nameof(IsEverySource));
+                _ = SearchAsync(Query);
             };
         }
 
-        SortIndex = (int)settings.Current.Sort;
+        search.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName is nameof(SearchViewModel.Sort) or nameof(SearchViewModel.IsAscending))
+                _ = SearchAsync(Query);
+        };
     }
 
     public IReadOnlyList<SourceFilter> Sources { get; }
     public ObservableCollection<MediaSearchResult> Results { get; } = [];
 
+    /// <summary>True while no source is picked, which is how every source gets searched.</summary>
+    public bool IsEverySource => Sources.All(source => !source.IsPicked);
+
     /// <summary>What was last searched for.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Heading))]
     public partial string Query { get; private set; } = string.Empty;
-
-    /// <summary>Which results come first, as a position in <see cref="SearchSort"/>.</summary>
-    [ObservableProperty]
-    public partial int SortIndex { get; set; }
-
-    /// <summary>What's shown of what was found: everything, only video, or only audio.</summary>
-    [ObservableProperty]
-    public partial int KindIndex { get; set; }
 
     [ObservableProperty]
     public partial bool IsSearching { get; private set; }
@@ -86,96 +91,81 @@ public sealed partial class ResultsViewModel : ObservableObject
     public bool HasMessage => Message is not null;
     public string Heading => Query.Length > 0 ? $"Results for “{Query}”" : "Search every source";
 
-    /// <summary>Asks every source that's switched on; a newer search replaces one still under way.</summary>
+    /// <summary>Asks the picked sources, or every source if none is picked; a newer search replaces one still under way.</summary>
     /// <param name="afterPause">Waits for typing to stop first, so each keystroke doesn't ask every source.</param>
     public async Task SearchAsync(string query, bool afterPause = false)
     {
         query = query.Trim();
-        _search?.Cancel();
+        _running?.Cancel();
         if (query.Length == 0)
             return;
 
-        var search = _search = new CancellationTokenSource();
+        var running = _running = new CancellationTokenSource();
         try
         {
             if (afterPause)
-                await Task.Delay(TypingPause, search.Token);
+                await Task.Delay(TypingPause, running.Token);
 
-            var sort = (SearchSort)SortIndex;
             Query = query;
-            _found = [];
-            Show();
+            Show([]);
             Message = null;
             IsSearching = true;
 
-            IMediaSearchProvider[] sources = Sources.Where(source => source.IsOn).Select(source => source.Provider).ToArray();
-            await foreach (IReadOnlyList<MediaSearchResult> soFar in new AllSearchProvider(sources, PerSource).SearchEachAsync(query, sort, search.Token))
-            {
-                _found = soFar;
-                Show();
-            }
+            IMediaSearchProvider[] asked = Sources.Where(source => IsEverySource || source.IsPicked).Select(source => source.Provider).ToArray();
+            var everything = new AllSearchProvider(asked, PerSource, _search.IsAscending);
+            await foreach (IReadOnlyList<MediaSearchResult> soFar in everything.SearchEachAsync(query, _search.Sort, running.Token))
+                Show(soFar);
 
-            if (_found.Count == 0)
-                Message = sources.Length == 0 ? "Every source is switched off. Switch one on above to search it." : $"Nothing found for “{query}”.";
+            if (Results.Count == 0)
+                Message = $"Nothing found for “{query}”.";
         }
         catch (OperationCanceledException) { }
-        catch (Exception exception) when (!search.IsCancellationRequested)
+        catch (Exception exception) when (!running.IsCancellationRequested)
         {
             Message = $"Couldn't search. {exception.Message}";
         }
         finally
         {
-            if (ReferenceEquals(_search, search))
+            if (ReferenceEquals(_running, running))
                 IsSearching = false;
         }
     }
 
-    /// <summary>Switches every source on or off in one go, searching once afterwards rather than once per source.</summary>
+    /// <summary>Goes back to searching every source, searching once rather than once per source let go of.</summary>
     [RelayCommand]
-    private void SetAllSources(string on)
+    private void SearchEverySource()
     {
-        _isChangingSources = true;
+        _isClearingPicks = true;
         foreach (SourceFilter source in Sources)
-            source.IsOn = bool.Parse(on);
-        _isChangingSources = false;
+            source.IsPicked = false;
+        _isClearingPicks = false;
+        OnPropertyChanged(nameof(IsEverySource));
         _ = SearchAsync(Query);
     }
-
-    partial void OnSortIndexChanged(int value)
-    {
-        if (_settings.Current.Sort == (SearchSort)value)
-            return;
-
-        _settings.Current.Sort = (SearchSort)value;
-        _settings.Save();
-        _ = SearchAsync(Query);
-    }
-
-    // Narrowing by kind only changes what's shown of what was found; nothing is asked again.
-    partial void OnKindIndexChanged(int value) => Show();
 
     // Results are moved into their new order in place, so those already on screen aren't all redrawn as more arrive.
-    private void Show()
+    private void Show(IReadOnlyList<MediaSearchResult> found)
     {
-        MediaSearchResult[] shown = _found
-            .Where(result => KindIndex == 0 || result.Kind == (KindIndex == 1 ? MediaKind.Video : MediaKind.Audio))
-            .ToArray();
-        for (int index = 0; index < shown.Length; index++)
+        for (int index = 0; index < found.Count; index++)
         {
-            int existing = Results.IndexOf(shown[index]);
+            int existing = Results.IndexOf(found[index]);
             if (existing < 0)
-                Results.Insert(index, shown[index]);
+                Results.Insert(index, found[index]);
             else if (existing != index)
                 Results.Move(existing, index);
         }
 
-        while (Results.Count > shown.Length)
+        while (Results.Count > found.Count)
             Results.RemoveAt(Results.Count - 1);
 
-        int sources = shown.Select(result => result.ProviderId).Distinct().Count();
-        Summary = shown.Length == 0 ? string.Empty
-            : $"{shown.Length} {(shown.Length == 1 ? "result" : "results")} from {sources} {(sources == 1 ? "source" : "sources")}";
-        if (_found.Count > 0 && Query.Length > 0)
-            Message = shown.Length == 0 ? "Nothing of that kind was found. Show everything to see the rest." : null;
+        foreach (SourceFilter source in Sources)
+        {
+            int count = found.Count(result => result.ProviderId == source.Provider.Id);
+            source.Count = count > 0 ? $"{count}" : string.Empty;
+        }
+
+        int sources = found.Select(result => result.ProviderId).Distinct().Count();
+        Summary = found.Count == 0 ? string.Empty
+            : $"{found.Count} {(found.Count == 1 ? "result" : "results")} from {sources} {(sources == 1 ? "source" : "sources")}";
     }
 }

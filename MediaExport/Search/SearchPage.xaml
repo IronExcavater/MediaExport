@@ -20,101 +20,168 @@
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Top" />
         </Style>
+
+        <!--
+            A source to search: quiet until picked, then tinted and ringed in the accent colour. A solid accent
+            fill would drown the sources' own icons, and a row of nine of them would shout.
+        -->
+        <Style x:Key="SourcePillStyle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="{ThemeResource ControlFillColorDefaultBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="12,0,8,0" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="CornerRadius" Value="17" />
+            <Setter Property="FocusVisualMargin" Value="-3" />
+            <Setter Property="UseSystemFocusVisuals" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid>
+                            <Border
+                                x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{TemplateBinding CornerRadius}" />
+                            <Border
+                                x:Name="Tint"
+                                Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                Opacity="0" />
+                            <ContentPresenter
+                                Padding="{TemplateBinding Padding}"
+                                VerticalContentAlignment="Center"
+                                Content="{TemplateBinding Content}"
+                                Foreground="{TemplateBinding Foreground}" />
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="Root.Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="Root.Background" Value="{ThemeResource ControlFillColorTertiaryBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Checked">
+                                        <VisualState.Setters>
+                                            <Setter Target="Tint.Opacity" Value="0.2" />
+                                            <Setter Target="Root.BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedPointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="Tint.Opacity" Value="0.28" />
+                                            <Setter Target="Root.BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="CheckedPressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="Tint.Opacity" Value="0.14" />
+                                            <Setter Target="Root.BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Page.Resources>
 
     <Grid
         MaxWidth="{StaticResource PageMaxWidth}"
         Padding="24,16,24,0"
-        RowSpacing="12">
+        RowSpacing="14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- What was searched and how much came back, then what's shown of it and in what order. -->
-        <Grid ColumnSpacing="12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel VerticalAlignment="Center">
-                <TextBlock
-                    Style="{StaticResource SubtitleTextBlockStyle}"
-                    Text="{x:Bind ViewModel.Heading, Mode=OneWay}"
-                    TextTrimming="CharacterEllipsis" />
-                <TextBlock
-                    Style="{StaticResource SecondaryTextStyle}"
-                    Text="{x:Bind ViewModel.Summary, Mode=OneWay}"
-                    Visibility="{x:Bind converters:Show.WhenText(ViewModel.Summary), Mode=OneWay}" />
-            </StackPanel>
-            <ComboBox
-                Grid.Column="1"
-                MinWidth="140"
-                VerticalAlignment="Center"
-                AutomationProperties.Name="Show"
-                Header="Show"
-                SelectedIndex="{x:Bind ViewModel.KindIndex, Mode=TwoWay}">
-                <x:String>Everything</x:String>
-                <x:String>Video</x:String>
-                <x:String>Audio</x:String>
-            </ComboBox>
-            <ComboBox
-                Grid.Column="2"
-                MinWidth="150"
-                VerticalAlignment="Center"
-                AutomationProperties.Name="Sort results"
-                Header="Sort by"
-                SelectedIndex="{x:Bind ViewModel.SortIndex, Mode=TwoWay}">
-                <x:String>Best match</x:String>
-                <x:String>Most played</x:String>
-                <x:String>Newest</x:String>
-            </ComboBox>
-        </Grid>
+        <!-- What was searched, and how much came back. The order is the title bar's to set. -->
+        <StackPanel Orientation="Horizontal" Spacing="12">
+            <TextBlock
+                VerticalAlignment="Bottom"
+                Style="{StaticResource SubtitleTextBlockStyle}"
+                Text="{x:Bind ViewModel.Heading, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis" />
+            <TextBlock
+                Margin="0,0,0,3"
+                VerticalAlignment="Bottom"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="{x:Bind ViewModel.Summary, Mode=OneWay}" />
+        </StackPanel>
 
-        <!-- Which sources are asked; switching one off searches again without it. -->
-        <Grid Grid.Row="1" ColumnSpacing="8">
+        <!--
+            Where to look, in place of the title bar's one source: everywhere, or just the sources picked.
+            They wrap onto another line when the window's too narrow for one. Each keeps room for its count,
+            so the row doesn't reflow as results arrive.
+        -->
+        <Grid Grid.Row="1" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <StackPanel
-                Grid.Column="1"
+            <ToggleButton
                 VerticalAlignment="Top"
-                Orientation="Horizontal">
-                <HyperlinkButton
-                    Command="{x:Bind ViewModel.SetAllSourcesCommand}"
-                    CommandParameter="True"
-                    Content="All"
-                    ToolTipService.ToolTip="Search every source" />
-                <HyperlinkButton
-                    Command="{x:Bind ViewModel.SetAllSourcesCommand}"
-                    CommandParameter="False"
-                    Content="None"
-                    ToolTipService.ToolTip="Switch every source off, to pick just the ones wanted" />
-            </StackPanel>
-        <ItemsControl
-            ItemsPanel="{StaticResource WrapPanelTemplate}"
-            ItemsSource="{x:Bind ViewModel.Sources}">
-            <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="local:SourceFilter">
-                    <ToggleButton
-                        Margin="0,0,8,8"
-                        AutomationProperties.Name="{x:Bind Provider.DisplayName}"
-                        IsChecked="{x:Bind IsOn, Mode=TwoWay}"
-                        Style="{StaticResource ChipToggleButtonStyle}">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <controls:IconView
-                                Width="16"
-                                Height="16"
-                                Icon="{x:Bind Provider.Icon}" />
-                            <TextBlock Text="{x:Bind Provider.DisplayName}" />
-                        </StackPanel>
-                    </ToggleButton>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+                AutomationProperties.Name="Every source"
+                Click="EverySource_Click"
+                IsChecked="{x:Bind ViewModel.IsEverySource, Mode=OneWay}"
+                Style="{StaticResource SourcePillStyle}"
+                ToolTipService.ToolTip="Search every source">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon FontSize="14" Glyph="&#xE774;" />
+                    <TextBlock Text="Everywhere" />
+                </StackPanel>
+            </ToggleButton>
+            <Rectangle
+                Grid.Column="1"
+                Width="1"
+                Height="22"
+                Margin="0,6"
+                VerticalAlignment="Top"
+                Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+            <Grid Grid.Column="2">
+                <ItemsControl
+                    Margin="0,0,0,-8"
+                    ItemsPanel="{StaticResource WrapPanelTemplate}"
+                    ItemsSource="{x:Bind ViewModel.Sources}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="local:SourceFilter">
+                            <ToggleButton
+                                Margin="0,0,8,8"
+                                AutomationProperties.Name="{x:Bind Provider.DisplayName}"
+                                IsChecked="{x:Bind IsPicked, Mode=TwoWay}"
+                                Style="{StaticResource SourcePillStyle}"
+                                ToolTipService.ToolTip="Search just the sources picked">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <controls:IconView
+                                        Width="18"
+                                        Height="18"
+                                        VerticalAlignment="Center"
+                                        Icon="{x:Bind Provider.Icon}" />
+                                    <TextBlock VerticalAlignment="Center" Text="{x:Bind Provider.DisplayName}" />
+                                    <!-- How many of the results on the page are this source's. -->
+                                    <TextBlock
+                                        MinWidth="14"
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        Text="{x:Bind Count, Mode=OneWay}" />
+                                </StackPanel>
+                            </ToggleButton>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
         </Grid>
 
         <ProgressBar

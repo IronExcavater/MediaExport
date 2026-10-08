@@ -73,6 +73,8 @@ public sealed class AllSearchProviderTests
             Assert.That(SearchRanking.Order(sources, "x", SearchSort.Popularity), Is.EqualTo(new[] { old, recent, unknown }));
             Assert.That(SearchRanking.Order(sources, "x", SearchSort.Recency), Is.EqualTo(new[] { recent, old, unknown }));
             Assert.That(SearchRanking.Order([[recent, old]], "old", SearchSort.Relevance), Is.EqualTo(new[] { recent, old }));
+            Assert.That(SearchRanking.Order(sources, "x", SearchSort.Recency, ascending: true), Is.EqualTo(new[] { old, recent, unknown }), "turned round, the undated still last");
+            Assert.That(SearchRanking.Order([[recent, old]], "old", SearchSort.Relevance, ascending: true), Is.EqualTo(new[] { old, recent }));
         });
     }
 

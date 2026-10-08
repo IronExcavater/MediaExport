@@ -37,6 +37,7 @@ public sealed class AppSettings
     // The export page's choices, so the next export starts from the last one.
     public string? ProviderId { get; set; }
     public SearchSort Sort { get; set; }
+    public bool SortAscending { get; set; }
     public string? OutputFolder { get; set; }
     public bool IncludeVideo { get; set; } = true;
     public bool IncludeAudio { get; set; } = true;

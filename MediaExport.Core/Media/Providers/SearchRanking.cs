@@ -34,7 +34,12 @@ public static class SearchRanking
     /// One list from each source's results. By relevance a single source keeps its own order; results
     /// without a play count or a date go last when sorting by those, in the order they came.
     /// </summary>
-    public static IReadOnlyList<MediaSearchResult> Order(IReadOnlyList<IReadOnlyList<MediaSearchResult>> sources, string query, SearchSort sort)
+    /// <param name="ascending">Turns the order round (least played, oldest, loosest match first); what has no count or date still goes last.</param>
+    public static IReadOnlyList<MediaSearchResult> Order(
+        IReadOnlyList<IReadOnlyList<MediaSearchResult>> sources,
+        string query,
+        SearchSort sort,
+        bool ascending = false)
     {
         var placed = sources.SelectMany(source => source.Select((result, place) => (Result: result, Place: place, Of: source.Count)));
         var ordered = sort switch
@@ -45,7 +50,19 @@ public static class SearchRanking
             _ => placed.OrderByDescending(item => Relevance(item.Result, query, item.Place, item.Of))
         };
 
-        return ordered.ThenBy(item => item.Place).Select(item => item.Result).DistinctBy(result => result.SourceUrl).ToArray();
+        MediaSearchResult[] results = ordered.ThenBy(item => item.Place).Select(item => item.Result).DistinctBy(result => result.SourceUrl).ToArray();
+        if (!ascending)
+            return results;
+
+        // Only what could be compared is turned round; the rest keeps its place at the end.
+        int known = sort switch
+        {
+            SearchSort.Popularity => results.Count(result => result.Views is not null),
+            SearchSort.Recency => results.Count(result => result.Published is not null),
+            _ => results.Length
+        };
+        Array.Reverse(results, 0, known);
+        return results;
     }
 
     private static bool Says(string? text, string words) =>

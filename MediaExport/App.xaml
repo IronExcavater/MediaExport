@@ -202,15 +202,6 @@
                 </Setter>
             </Style>
 
-            <!-- Pills that switch on and off independently, e.g. subtitle languages. -->
-            <Style
-                x:Key="ChipToggleButtonStyle"
-                BasedOn="{StaticResource DefaultToggleButtonStyle}"
-                TargetType="ToggleButton">
-                <Setter Property="Padding" Value="14,5,14,6" />
-                <Setter Property="CornerRadius" Value="15" />
-            </Style>
-
             <!-- Pills wrap onto more lines when there are many. -->
             <ItemsPanelTemplate x:Key="WrapPanelTemplate">
                 <controls:WrapPanel />
