@@ -211,6 +211,7 @@ public sealed partial class MainWindow : Window
         _paneAnimationStart = null;
         _settings.Save();
         UpdatePaneToolTips();
+        ShowRecentsInPane();
 
         CompositionTarget.Rendering -= AnimatePane;
         CompositionTarget.Rendering += AnimatePane;
@@ -354,12 +355,12 @@ public sealed partial class MainWindow : Window
         });
     }
 
-    // The pane's spare room lists the latest picks under the pages; narrowed, their thumbnails still show.
+    // The pane's spare room lists the latest picks under the pages; narrowed, there's no room to say what they are, so they go.
     private void ShowRecentsInPane()
     {
         while (navView.MenuItems.Count > 2)
             navView.MenuItems.RemoveAt(2);
-        if (Search.Recents.Count == 0)
+        if (Search.Recents.Count == 0 || !_settings.Current.IsPaneOpen)
             return;
 
         navView.MenuItems.Add(new NavigationViewItemHeader { Content = "Recent" });

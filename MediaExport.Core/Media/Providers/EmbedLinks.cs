@@ -35,6 +35,9 @@ public static class EmbedLinks
         _ => null
     };
 
+    /// <summary>Whether a site's player says where it is and can be moved, so the app's timeline can follow and steer it.</summary>
+    public static bool FollowsPlayhead(string? providerId) => providerId is "youtube" or "youtubemusic" or "soundcloud";
+
     /// <summary>How tall a site's player is when it's a strip rather than a picture; <c>null</c> for players that are 16:9.</summary>
     public static double? HeightFor(string? providerId) => providerId switch
     {

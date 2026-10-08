@@ -169,7 +169,7 @@ public sealed partial class ExportViewModel : ObservableObject
     public partial ExportJob? Job { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsDone), nameof(IsFailed), nameof(IsBlocked), nameof(CanStart), nameof(IsBusy), nameof(ExportGlyph))]
+    [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsDone), nameof(IsFailed), nameof(IsBlocked), nameof(IsReady), nameof(CanStart), nameof(IsBusy), nameof(ExportGlyph))]
     public partial ExportState State { get; private set; }
 
     [ObservableProperty]
@@ -199,6 +199,7 @@ public sealed partial class ExportViewModel : ObservableObject
     public bool IsFailed => State == ExportState.Failed;
     public bool IsBlocked => State == ExportState.Blocked;
     public bool IsBusy => State is ExportState.Checking;
+    public bool IsReady => State is ExportState.Ready;
     public bool CanStart => State is ExportState.Ready or ExportState.Failed;
     public bool IsIndeterminate => IsRunning && Job?.IsIndeterminate == true;
     public string ExportGlyph => IsFailed ? "" : "";
@@ -235,6 +236,28 @@ public sealed partial class ExportViewModel : ObservableObject
         { Length: 1 } one => one[0],
         var several => $"{several.Length} languages"
     };
+
+    /// <summary>What pressing Export makes, in a line: its format and quality, how much of it, and roughly how big.</summary>
+    public string ExportSummary
+    {
+        get
+        {
+            string? format = (IncludeVideo ? VideoFormat : AudioFormat).SelectedKey?.ToUpperInvariant();
+            string? quality = (IncludeVideo ? VideoQuality : AudioQuality).Selected?.Label;
+            string?[] parts =
+            [
+                format,
+                quality == "Best" ? "Best quality" : quality,
+                IncludeVideo && !IncludeAudio ? "No sound" : null,
+                ClipsSummary,
+                EstimateSize() is long bytes ? $"About {Format.Size(bytes)}" : null
+            ];
+            return string.Join("  ·  ", parts.Where(part => part is not null));
+        }
+    }
+
+    /// <summary>A film frame or a note, for what's being made.</summary>
+    public string ExportKindGlyph => IncludeVideo ? "" : "";
 
     public string FileNamePreview
     {
@@ -562,6 +585,8 @@ public sealed partial class ExportViewModel : ObservableObject
     {
         (State, StatusText) = Evaluate();
         OnPropertyChanged(nameof(ExportLabel));
+        OnPropertyChanged(nameof(ExportSummary));
+        OnPropertyChanged(nameof(ExportKindGlyph));
         OnPropertyChanged(nameof(ProgressFraction));
         OnPropertyChanged(nameof(IsIndeterminate));
         OnPropertyChanged(nameof(JobStatus));
@@ -589,7 +614,7 @@ public sealed partial class ExportViewModel : ObservableObject
         if (Details is null)
             return (ExportState.Checking, "Checking what's available");
 
-        return (ExportState.Ready, EstimateSize() is long bytes ? $"About {Format.Size(bytes)}" : null);
+        return (ExportState.Ready, $"Saves to {FolderName(OutputFolder)}");
     }
 
     private long? EstimateSize()

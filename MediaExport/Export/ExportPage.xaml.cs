@@ -4,6 +4,7 @@
 using MediaExport.Activity;
 using MediaExport.Core.Exporting;
 using MediaExport.Core.Media.Models;
+using MediaExport.Core.Media.Providers;
 using MediaExport.Search;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
@@ -32,6 +33,8 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
         {
             if (args.PropertyName == nameof(ExportViewModel.SelectedClip))
                 ShowSelectedClipTimes();
+            if (args.PropertyName == nameof(ExportViewModel.Media))
+                Raise(nameof(FollowsPlayhead));
         };
         ViewModel.Clips.CollectionChanged += (_, _) => ShowSelectedClipTimes();
         Loaded += (_, _) => CheckClipboard();
@@ -45,6 +48,9 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
     public ActivityViewModel Activity { get; } = App.Current.Services.GetRequiredService<ActivityViewModel>();
 
     private static MainWindow Shell => (MainWindow)App.Current.MainWindow;
+
+    /// <summary>Whether the player says where it is and can be moved; the controls that rely on that hide otherwise.</summary>
+    public bool FollowsPlayhead => EmbedLinks.FollowsPlayhead(ViewModel.Media?.ProviderId);
 
     public bool HasSelectedClip => ViewModel.SelectedClip >= 0 && ViewModel.SelectedClip < ViewModel.Clips.Count;
 
@@ -149,15 +155,26 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
         player.Seek(ViewModel.Clips[index].Start);
     }
 
-    // With the panel beside it, the player gets the height the details and clips don't need, and the panel
-    // fits the window; stacked, everything scrolls instead.
+    // With the panel beside it, the left side is as tall as the window: the player gets the height the details
+    // and clips don't need, the clips sit at the bottom, and the panel fits too. Stacked, everything scrolls instead.
     private void Layout_SizeChanged(object sender, SizeChangedEventArgs args)
     {
         bool sideBySide = panelColumn.Width.Value > 0;
         double viewport = editorScroller.ViewportHeight - editor.Padding.Top - editor.Padding.Bottom;
-        double available = viewport - details.ActualHeight - clipsCard.ActualHeight - stage.RowSpacing * 2;
+        double available = viewport - details.ActualHeight - clipsCard.ActualHeight - stage.RowSpacing * 3;
         player.MaxHeight = sideBySide ? Math.Max(200, available) : double.PositiveInfinity;
+        stage.MinHeight = sideBySide ? Math.Max(0, viewport) : 0;
         panel.MaxHeight = sideBySide ? Math.Max(320, viewport) : double.PositiveInfinity;
+    }
+
+    private void SkipBack_Click(object sender, RoutedEventArgs args) => SeekBy(TimeSpan.FromSeconds(-10));
+
+    private void SkipForward_Click(object sender, RoutedEventArgs args) => SeekBy(TimeSpan.FromSeconds(30));
+
+    private void SeekBy(TimeSpan step)
+    {
+        TimeSpan time = player.Position + step;
+        player.Seek(time < TimeSpan.Zero ? TimeSpan.Zero : time > ViewModel.Duration ? ViewModel.Duration : time);
     }
 
     private void MarkStart_Click(object sender, RoutedEventArgs args)
