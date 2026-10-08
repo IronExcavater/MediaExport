@@ -15,6 +15,13 @@ public sealed class YtdlpServiceTests
     internal static YtdlpService CreateService() =>
         new(new ToolchainService(Path.Combine(Path.GetTempPath(), "mediaexport-no-tools")));
 
+    [TestCase("https://vimeo.com/1084537", "https://player.vimeo.com/video/1084537")]
+    [TestCase("https://www.vimeo.com/1084537?share=copy", "https://player.vimeo.com/video/1084537")]
+    [TestCase("https://vimeo.com/channels/staffpicks/1084537", "https://vimeo.com/channels/staffpicks/1084537")]
+    [TestCase("https://www.youtube.com/watch?v=aqz-KE-bpKQ", "https://www.youtube.com/watch?v=aqz-KE-bpKQ")]
+    public void Vimeo_videos_are_read_through_their_player(string url, string read) =>
+        Assert.That(YtdlpService.Reachable(url), Is.EqualTo(read));
+
     [Test]
     public void ReadSearchResults_maps_a_ytdlp_search_response()
     {

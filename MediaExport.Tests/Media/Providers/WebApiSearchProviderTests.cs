@@ -47,11 +47,38 @@ public sealed class WebApiSearchProviderTests
         });
     }
 
+    [Test]
+    public async Task Vimeo_searches_with_the_visitor_token()
+    {
+        var handler = new FixedResponse("""
+            {"token":"abc","data":[{"uri":"/videos/42","name":"Short","link":"https://vimeo.com/42","duration":90,"pictures":{"sizes":[{"width":100,"link":"https://example.test/small.jpg"},{"width":640,"link":"https://example.test/wide.jpg"}]},"user":{"name":"Maker","link":"https://vimeo.com/maker"}}]}
+            """);
+        var provider = new VimeoSearchProvider(new HttpClient(handler));
+
+        MediaSearchResult result = (await provider.SearchAsync("short")).Single();
+        await provider.SearchAsync("again");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(handler.Requests, Is.EqualTo(new[] { "vimeo.com ", "api.vimeo.com jwt abc", "api.vimeo.com jwt abc" }), "the token is asked for once");
+            Assert.That(result.Identity, Is.EqualTo("42"));
+            Assert.That(result.Creator, Is.EqualTo("Maker"));
+            Assert.That(result.ThumbnailUri, Is.EqualTo(new Uri("https://example.test/wide.jpg")));
+            Assert.That(result.EmbedUri, Is.EqualTo(new Uri("https://player.vimeo.com/video/42")));
+        });
+    }
+
     private static HttpClient Serve(string json) => new(new FixedResponse(json));
 
     private sealed class FixedResponse(string json) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") });
+        /// <summary>Each request's host and what it authorised with.</summary>
+        public List<string> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests.Add($"{request.RequestUri!.Host} {request.Headers.Authorization}");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") });
+        }
     }
 }

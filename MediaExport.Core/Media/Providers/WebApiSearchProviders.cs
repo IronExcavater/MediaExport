@@ -3,7 +3,7 @@
 
 using MediaExport.Core.Media.Models;
 using System.Net;
-using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using System.Text.Json;
 
 namespace MediaExport.Core.Media.Providers;
@@ -17,7 +17,13 @@ public abstract class WebApiSearchProvider(HttpClient http) : IMediaSearchProvid
     public abstract string DisplayName { get; }
     public abstract string Icon { get; }
 
+    protected HttpClient Http { get; } = http;
+
     protected abstract string GetSearchUrl(string query);
+
+    /// <summary>The search request; sources that want more than a link (a token, say) add it here.</summary>
+    protected virtual Task<HttpRequestMessage> CreateRequestAsync(string query, CancellationToken cancellationToken) =>
+        Task.FromResult(new HttpRequestMessage(HttpMethod.Get, GetSearchUrl(query)));
 
     protected abstract IEnumerable<MediaSearchResult> ReadResults(JsonElement root);
 
@@ -26,9 +32,17 @@ public abstract class WebApiSearchProvider(HttpClient http) : IMediaSearchProvid
         if (string.IsNullOrWhiteSpace(query))
             return [];
 
-        using JsonDocument document = await http.GetFromJsonAsync<JsonDocument>(GetSearchUrl(query.Trim()), cancellationToken)
-            ?? throw new InvalidOperationException("The search returned nothing.");
+        using HttpRequestMessage request = await CreateRequestAsync(query.Trim(), cancellationToken);
+        using JsonDocument document = await GetJsonAsync(request, cancellationToken);
         return ReadResults(document.RootElement).Take(ResultCount).ToArray();
+    }
+
+    protected async Task<JsonDocument> GetJsonAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        using HttpResponseMessage response = await Http.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
     }
 
     // Uploaders' text sometimes arrives HTML-encoded (&#34; for a quote).
@@ -74,6 +88,80 @@ public sealed class DailymotionSearchProvider(HttpClient http) : WebApiSearchPro
                 EmbedLinks.For(Id, id, url),
                 Id);
         }
+    }
+}
+
+/// <summary>Vimeo's search wants a token; this uses the short-lived one its site gives every visitor.</summary>
+public sealed class VimeoSearchProvider(HttpClient http) : WebApiSearchProvider(http)
+{
+    // Tokens last 15 minutes.
+    private static readonly TimeSpan TokenLife = TimeSpan.FromMinutes(10);
+
+    private string? _token;
+    private DateTime _tokenTime;
+
+    public override string Id => "vimeo";
+    public override string DisplayName => "Vimeo";
+    public override string Icon => "vimeo";
+
+    protected override string GetSearchUrl(string query) =>
+        $"https://api.vimeo.com/videos?query={Uri.EscapeDataString(query)}&per_page={ResultCount}"
+        + "&fields=uri,name,link,duration,pictures.sizes.link,pictures.sizes.width,user.name,user.link";
+
+    protected override async Task<HttpRequestMessage> CreateRequestAsync(string query, CancellationToken cancellationToken)
+    {
+        if (_token is null || DateTime.UtcNow - _tokenTime > TokenLife)
+        {
+            // Only handed out to requests that look like the site's own.
+            using var tokenRequest = new HttpRequestMessage(HttpMethod.Get, "https://vimeo.com/_next/jwt");
+            tokenRequest.Headers.Add("X-Requested-With", "XMLHttpRequest");
+            using JsonDocument document = await GetJsonAsync(tokenRequest, cancellationToken);
+            _token = Text(document.RootElement, "token") ?? throw new InvalidOperationException("Vimeo didn't allow a search.");
+            _tokenTime = DateTime.UtcNow;
+        }
+
+        HttpRequestMessage request = await base.CreateRequestAsync(query, cancellationToken);
+        request.Headers.Authorization = new AuthenticationHeaderValue("jwt", _token);
+        return request;
+    }
+
+    protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
+    {
+        if (!root.TryGetProperty("data", out JsonElement data))
+            yield break;
+
+        foreach (JsonElement video in data.EnumerateArray())
+        {
+            // Its id is the end of its uri: /videos/1084537.
+            if (Text(video, "uri")?.Split('/')[^1] is not { Length: > 0 } id || Text(video, "link") is not { } url)
+                continue;
+
+            bool hasUser = video.TryGetProperty("user", out JsonElement user) && user.ValueKind == JsonValueKind.Object;
+            yield return new MediaSearchResult(
+                id,
+                url,
+                ReadThumbnail(video),
+                Text(video, "name") ?? url,
+                hasUser ? Text(user, "name") : null,
+                video.TryGetProperty("duration", out JsonElement seconds) && seconds.TryGetDouble(out double length) ? TimeSpan.FromSeconds(length) : null,
+                MediaKind.Video,
+                hasUser ? Text(user, "link") : null,
+                EmbedLinks.For(Id, id, url),
+                Id);
+        }
+    }
+
+    // Sizes run from small to large: the first one wide enough for a result's picture, or else the largest.
+    private static Uri? ReadThumbnail(JsonElement video)
+    {
+        if (!video.TryGetProperty("pictures", out JsonElement pictures) || pictures.ValueKind != JsonValueKind.Object
+            || !pictures.TryGetProperty("sizes", out JsonElement sizes) || sizes.GetArrayLength() == 0)
+            return null;
+
+        JsonElement size = sizes.EnumerateArray().FirstOrDefault(size => size.TryGetProperty("width", out JsonElement width) && width.GetInt32() >= 480);
+        if (size.ValueKind != JsonValueKind.Object)
+            size = sizes[sizes.GetArrayLength() - 1];
+        return Uri.TryCreate(Text(size, "link"), UriKind.Absolute, out Uri? thumbnail) ? thumbnail : null;
     }
 }
 

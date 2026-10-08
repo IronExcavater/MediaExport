@@ -42,7 +42,8 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
 
         MediaDetails details = ReadDetails(root);
         string identity = GetString(root, "id") ?? url;
-        string sourceUrl = GetSourceUrl(root) ?? url;
+        // A link read by another address is still kept as it was given.
+        string sourceUrl = Reachable(url) != url ? url : GetSourceUrl(root) ?? url;
         string providerId = (GetString(root, "extractor_key") ?? "web").ToLowerInvariant() switch { "archiveorg" => "internetarchive", var key => key };
         var media = new MediaSearchResult(
             identity,
@@ -79,7 +80,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
     private async Task<string> ReadMetadataAsync(string target, string nothing, CancellationToken cancellationToken)
     {
         var errors = new ErrorLog();
-        string? json = await CreateClient(errors).GetMetadataRawAsync(target, cancellationToken);
+        string? json = await CreateClient(errors).GetMetadataRawAsync(Reachable(target), cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return string.IsNullOrWhiteSpace(json) ? throw new InvalidOperationException(errors.Last ?? nothing) : json;
     }
@@ -158,7 +159,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         download.OutputMessage += OnOutput;
         try
         {
-            await download.DownloadAsync(sourceUrl, cancellationToken);
+            await download.DownloadAsync(Reachable(sourceUrl), cancellationToken);
         }
         finally
         {
@@ -211,6 +212,12 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
 
     [GeneratedRegex(@" \[([\d.]+)\](?=\.[^.\\]+$)")]
     private static partial Regex ClipSuffix();
+
+    // yt-dlp reads a Vimeo video's page only when signed in, but its player without.
+    internal static string Reachable(string url) => VimeoPage().Replace(url, "https://player.vimeo.com/video/$1");
+
+    [GeneratedRegex(@"^https?://(?:www\.)?vimeo\.com/(\d+)/?(?:[?#].*)?$")]
+    private static partial Regex VimeoPage();
 
     internal static IReadOnlyList<(string Name, string? Value)> GetExportArguments(ExportOptions options)
     {

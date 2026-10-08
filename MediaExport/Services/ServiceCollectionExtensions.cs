@@ -34,6 +34,7 @@ public static class ServiceCollectionExtensions
         // In the order the title bar lists them.
         services.AddSingleton<IMediaSearchProvider, YouTubeSearchProvider>();
         services.AddSingleton<IMediaSearchProvider, SoundCloudSearchProvider>();
+        services.AddSingleton<IMediaSearchProvider, VimeoSearchProvider>();
         services.AddSingleton<IMediaSearchProvider, DailymotionSearchProvider>();
         services.AddSingleton<IMediaSearchProvider, InternetArchiveSearchProvider>();
         services.AddSingleton<SearchViewModel>();

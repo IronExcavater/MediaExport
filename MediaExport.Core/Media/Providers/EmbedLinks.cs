@@ -20,6 +20,8 @@ public static class EmbedLinks
 
         "dailymotion" => new Uri($"https://geo.dailymotion.com/player.html?video={Uri.EscapeDataString(identity)}"),
 
+        "vimeo" => new Uri($"https://player.vimeo.com/video/{Uri.EscapeDataString(identity)}"),
+
         "internetarchive" => new Uri($"https://archive.org/embed/{Uri.EscapeDataString(identity)}"),
 
         _ => null
