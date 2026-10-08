@@ -3,6 +3,7 @@
 
 using System;
 using System.Globalization;
+using System.Linq;
 
 namespace MediaExport.Converters;
 
@@ -21,5 +22,46 @@ public static class Format
         >= 1L << 30 => $"{bytes / (double)(1L << 30):0.0} GB",
         >= 1L << 20 => $"{bytes / (double)(1L << 20):0} MB",
         _ => $"{Math.Max(1, bytes / 1024)} KB"
+    };
+
+    /// <summary>A count written short: <c>812</c>, <c>4.2K</c>, <c>1.9M</c>, <c>2.8B</c>.</summary>
+    public static string Count(long count) => count switch
+    {
+        >= 1_000_000_000 => $"{count / 1e9:0.#}B",
+        >= 1_000_000 => $"{count / 1e6:0.#}M",
+        >= 1_000 => $"{count / 1e3:0.#}K",
+        _ => count.ToString(CultureInfo.InvariantCulture)
+    };
+
+    /// <summary>How long ago, in the largest unit that fits: <c>today</c>, <c>3 days ago</c>, <c>2 years ago</c>.</summary>
+    public static string Age(DateTimeOffset then, DateTimeOffset now)
+    {
+        double days = (now - then).TotalDays;
+        (double amount, string unit) = days switch
+        {
+            < 1 => (0, "day"),
+            < 30 => (days, "day"),
+            < 365 => (days / 30, "month"),
+            _ => (days / 365, "year")
+        };
+        int whole = (int)amount;
+        return whole == 0 ? "today" : whole == 1 ? $"1 {unit} ago" : $"{whole} {unit}s ago";
+    }
+
+    /// <summary>What's known of how much something's been played and when it went up: <c>1.9M plays · 2 years ago</c>.</summary>
+    public static string Meta(long? views, DateTimeOffset? published) => string.Join("  ·  ", new[]
+    {
+        views is { } count ? $"{Count(count)} plays" : null,
+        published is { } then ? Age(then, DateTimeOffset.Now) : null
+    }.Where(part => part is not null));
+
+    /// <summary>Time left, rounded to what's worth saying: <c>about 20 seconds left</c>, <c>about 3 minutes left</c>.</summary>
+    public static string Remaining(TimeSpan left) => left.TotalSeconds switch
+    {
+        < 10 => "a few seconds left",
+        < 60 => $"about {Math.Round(left.TotalSeconds / 10) * 10:0} seconds left",
+        < 90 => "about a minute left",
+        < 3600 => $"about {Math.Round(left.TotalMinutes):0} minutes left",
+        _ => $"about {left.TotalHours:0.#} hours left"
     };
 }

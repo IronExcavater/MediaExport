@@ -22,8 +22,6 @@ namespace MediaExport.Export;
 
 public sealed partial class ExportPage : Page, INotifyPropertyChanged
 {
-    private static readonly string[] TimeFormats = [@"%s", @"m\:ss", @"mm\:ss", @"h\:mm\:ss", @"m\:ss\.f", @"mm\:ss\.f", @"h\:mm\:ss\.f", @"%s\.f"];
-
     private string? _dismissedLink;
 
     public ExportPage()
@@ -31,12 +29,9 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
         InitializeComponent();
         ViewModel.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName == nameof(ExportViewModel.SelectedClip))
-                ShowSelectedClipTimes();
             if (args.PropertyName == nameof(ExportViewModel.Media))
                 Raise(nameof(FollowsPlayhead));
         };
-        ViewModel.Clips.CollectionChanged += (_, _) => ShowSelectedClipTimes();
         Loaded += (_, _) => CheckClipboard();
         App.Current.MainWindow.Activated += (_, _) => CheckClipboard();
     }
@@ -51,8 +46,6 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
 
     /// <summary>Whether the player says where it is and can be moved; the controls that rely on that hide otherwise.</summary>
     public bool FollowsPlayhead => EmbedLinks.FollowsPlayhead(ViewModel.Media?.ProviderId);
-
-    public bool HasSelectedClip => ViewModel.SelectedClip >= 0 && ViewModel.SelectedClip < ViewModel.Clips.Count;
 
     /// <summary>A link on the clipboard that could be exported, offered on the home page.</summary>
     public string? ClipboardLink { get; private set; }
@@ -146,15 +139,6 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
 
     private void Timeline_SeekRequested(object? sender, TimeSpan time) => player.Seek(time);
 
-    private void AddClip_Click(object sender, RoutedEventArgs args) => ViewModel.AddClipAtCommand.Execute(player.Position);
-
-    private void ClipItem_Click(object sender, RoutedEventArgs args)
-    {
-        int index = (int)((FrameworkElement)sender).Tag;
-        ViewModel.SelectedClip = index;
-        player.Seek(ViewModel.Clips[index].Start);
-    }
-
     // With the panel beside it, the left side is as tall as the window: the player gets the height the details
     // and clips don't need, the clips sit at the bottom, and the panel fits too. Stacked, everything scrolls instead.
     private void Layout_SizeChanged(object sender, SizeChangedEventArgs args)
@@ -177,55 +161,7 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
         player.Seek(time < TimeSpan.Zero ? TimeSpan.Zero : time > ViewModel.Duration ? ViewModel.Duration : time);
     }
 
-    private void MarkStart_Click(object sender, RoutedEventArgs args)
-    {
-        if (HasSelectedClip)
-            ViewModel.TrySetSelectedClip(player.Position, ViewModel.Clips[ViewModel.SelectedClip].End);
-    }
-
-    private void MarkEnd_Click(object sender, RoutedEventArgs args)
-    {
-        if (HasSelectedClip)
-            ViewModel.TrySetSelectedClip(ViewModel.Clips[ViewModel.SelectedClip].Start, player.Position);
-    }
-
     private void RemoveClip_Click(object sender, RoutedEventArgs args) => ViewModel.RemoveClipCommand.Execute(ViewModel.SelectedClip);
-
-    private void ClipTime_KeyDown(object sender, KeyRoutedEventArgs args)
-    {
-        if (args.Key == VirtualKey.Enter)
-        {
-            ApplyClipTimes();
-            args.Handled = true;
-        }
-    }
-
-    private void ClipTime_LostFocus(object sender, RoutedEventArgs args) => ApplyClipTimes();
-
-    // Typed times replace the clip's when they make sense; otherwise the boxes go back to what it was.
-    private void ApplyClipTimes()
-    {
-        if (ParseTime(clipStart.Text) is { } start && ParseTime(clipEnd.Text) is { } end)
-            ViewModel.TrySetSelectedClip(start, end);
-
-        ShowSelectedClipTimes();
-    }
-
-    private void ShowSelectedClipTimes()
-    {
-        Raise(nameof(HasSelectedClip));
-        if (!HasSelectedClip)
-            return;
-
-        clipStart.Text = FormatPrecise(ViewModel.Clips[ViewModel.SelectedClip].Start);
-        clipEnd.Text = FormatPrecise(ViewModel.Clips[ViewModel.SelectedClip].End);
-    }
-
-    private static string FormatPrecise(TimeSpan time) =>
-        time.ToString(time.TotalHours >= 1 ? @"h\:mm\:ss\.f" : @"m\:ss\.f", CultureInfo.InvariantCulture);
-
-    internal static TimeSpan? ParseTime(string text) =>
-        TimeSpan.TryParseExact(text.Trim(), TimeFormats, CultureInfo.InvariantCulture, out TimeSpan time) ? time : null;
 
     private void Raise([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

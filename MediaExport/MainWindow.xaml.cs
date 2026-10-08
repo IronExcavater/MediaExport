@@ -27,9 +27,10 @@ namespace MediaExport;
 
 public sealed partial class MainWindow : Window
 {
-    private const double CompactPaneLength = 48;
+    private const double CompactPaneLength = 56;
     private const double OpenPaneLength = 240;
     private const int PaneRecentCount = 6;
+    private const int PageCount = 3;
     // Closing gets out of the way a little quicker than opening draws the pane in.
     private static readonly TimeSpan PaneOpenLength = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan PaneCloseLength = TimeSpan.FromMilliseconds(180);
@@ -70,6 +71,7 @@ public sealed partial class MainWindow : Window
     }
 
     public SearchViewModel Search { get; } = App.Current.Services.GetRequiredService<SearchViewModel>();
+    public ResultsViewModel Results { get; } = App.Current.Services.GetRequiredService<ResultsViewModel>();
     public ActivityViewModel Activity { get; } = App.Current.Services.GetRequiredService<ActivityViewModel>();
     public SettingsViewModel Settings { get; } = App.Current.Services.GetRequiredService<SettingsViewModel>();
 
@@ -79,7 +81,7 @@ public sealed partial class MainWindow : Window
         details ??= Search.TakeLinkDetails(media);
         Search.Remember(media);
         _export.Open(media, details);
-        GoTo(0);
+        GoTo("Export");
     }
 
     /// <summary>Opens a pasted link; if it can't be opened, the search box says why.</summary>
@@ -106,14 +108,23 @@ public sealed partial class MainWindow : Window
     {
         Search.Remember(job.Media);
         _export.OpenAgain(job);
-        GoTo(0);
+        GoTo("Export");
     }
 
-    public void GoToActivity() => GoTo(1);
+    /// <summary>Asks every source for <paramref name="query"/> and shows what they have on the Search page.</summary>
+    public void ShowResults(string query)
+    {
+        Search.IsSuggestionListOpen = false;
+        GoTo("Search");
+        _ = Results.SearchAsync(query);
+    }
+
+    public void GoToActivity() => GoTo("Activity");
 
     public void FocusSearch() => searchBox.Focus(FocusState.Keyboard);
 
-    private void GoTo(int index) => navView.SelectedItem = navView.MenuItems[index];
+    private void GoTo(string page) =>
+        navView.SelectedItem = navView.MenuItems.OfType<NavigationViewItem>().First(item => item.Tag as string == page);
 
     private void ProviderBox_SelectionChanged(object sender, SelectionChangedEventArgs args)
     {
@@ -251,21 +262,6 @@ public sealed partial class MainWindow : Window
         searchBox.Focus(FocusState.Programmatic);
     }
 
-    private void SortMenu_Opening(object? sender, object args)
-    {
-        Search.IsMenuOpen = true;
-        foreach (RadioMenuFlyoutItem item in ((MenuFlyout)sender!).Items.OfType<RadioMenuFlyoutItem>())
-            item.IsChecked = (string)item.Tag == Search.Sort.ToString();
-    }
-
-    private void SortMenu_Closed(object? sender, object args) => Search.IsMenuOpen = false;
-
-    private void Sort_Click(object sender, RoutedEventArgs args)
-    {
-        Search.Sort = Enum.Parse<SearchSort>((string)((FrameworkElement)sender).Tag);
-        FocusSearch();
-    }
-
     // The box only shows its clear button while focused; this keeps it whenever there's text to clear.
     private void SearchBox_Loaded(object sender, RoutedEventArgs args)
     {
@@ -306,11 +302,15 @@ public sealed partial class MainWindow : Window
 
     private void GoTo_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        GoTo(sender.Key == VirtualKey.Number1 ? 0 : 1);
+        GoTo(sender.Key switch { VirtualKey.Number1 => "Export", VirtualKey.Number2 => "Search", _ => "Activity" });
         args.Handled = true;
     }
 
-    private void SearchBox_GotFocus(object sender, RoutedEventArgs args) => Search.ShowSuggestions();
+    private void SearchBox_GotFocus(object sender, RoutedEventArgs args)
+    {
+        if (!Search.IsPageSearch)
+            Search.ShowSuggestions();
+    }
 
     private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
@@ -318,7 +318,11 @@ public sealed partial class MainWindow : Window
             return;
 
         Search.SearchText = sender.Text;
-        _ = Search.SearchAsync();
+        // On the Search page what's typed fills the page (links aside, which still open from the list).
+        if (Search.IsPageSearch && !SearchViewModel.IsLink(sender.Text.Trim()))
+            _ = Results.SearchAsync(sender.Text, afterPause: true);
+        else
+            _ = Search.SearchAsync();
     }
 
     // Only a click or Enter opens something; arrowing through suggestions shouldn't load each one.
@@ -331,14 +335,18 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // A link opens; anything else is searched for everywhere, on the Search page.
         Search.SearchText = sender.Text;
-        _ = Search.SearchAsync(debounce: false);
+        if (SearchViewModel.IsLink(sender.Text.Trim()))
+            _ = Search.SearchAsync(debounce: false);
+        else if (sender.Text.Trim().Length > 0)
+            ShowResults(sender.Text);
     }
 
     private void NavView_Loaded(object sender, RoutedEventArgs args)
     {
         UpdatePaneToolTips();
-        GoTo(0);
+        GoTo("Export");
     }
 
     // A pick changes the recents a few times over (moved up, the oldest dropped); the pane is rebuilt once after.
@@ -358,8 +366,8 @@ public sealed partial class MainWindow : Window
     // The pane's spare room lists the latest picks under the pages; narrowed, there's no room to say what they are, so they go.
     private void ShowRecentsInPane()
     {
-        while (navView.MenuItems.Count > 2)
-            navView.MenuItems.RemoveAt(2);
+        while (navView.MenuItems.Count > PageCount)
+            navView.MenuItems.RemoveAt(PageCount);
         if (Search.Recents.Count == 0 || !_settings.Current.IsPaneOpen)
             return;
 
@@ -391,11 +399,15 @@ public sealed partial class MainWindow : Window
             : ((args.SelectedItemContainer as NavigationViewItem)?.Tag as string) switch
             {
                 "Export" => typeof(ExportPage),
+                "Search" => typeof(SearchPage),
                 "Activity" => typeof(ActivityPage),
                 _ => null
             };
 
-        if (pageType is not null && navFrame.CurrentSourcePageType != pageType)
-            navFrame.Navigate(pageType);
+        if (pageType is null || navFrame.CurrentSourcePageType == pageType)
+            return;
+
+        Search.IsPageSearch = pageType == typeof(SearchPage);
+        navFrame.Navigate(pageType);
     }
 }

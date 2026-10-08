@@ -3,6 +3,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MediaExport.Converters;
 using MediaExport.Core.Exporting;
 using MediaExport.Core.Media.Models;
 using MediaExport.Core.Settings;
@@ -18,22 +19,25 @@ namespace MediaExport.Activity;
 
 public enum ExportJobState
 {
+    /// <summary>Waiting its turn behind the exports already running.</summary>
+    Queued,
     Running,
     Completed,
     Failed,
     Cancelled
 }
 
-/// <summary>One export: running now, or finished (this session or an earlier one).</summary>
+/// <summary>One export: waiting its turn, running now, or finished (this session or an earlier one).</summary>
 public sealed partial class ExportJob : ObservableObject
 {
     private readonly CancellationTokenSource _cancellation = new();
+    private readonly Stopwatch _downloading = new();
 
     public ExportJob(MediaSearchResult media, ExportOptions options)
     {
         Media = media;
         Options = options;
-        Status = "Looking it up";
+        Status = "Up next";
     }
 
     public ExportJob(ExportRecord record)
@@ -76,7 +80,7 @@ public sealed partial class ExportJob : ObservableObject
     }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsCompleted), nameof(IsFailed), nameof(IsFinished))]
+    [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsQueued), nameof(IsCompleted), nameof(IsFailed), nameof(IsFinished))]
     [NotifyPropertyChangedFor(nameof(IsIndeterminate), nameof(ShowsProgress), nameof(DisplayProgress))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand), nameof(OpenCommand), nameof(ShowInFolderCommand))]
     public partial ExportJobState State { get; private set; }
@@ -94,16 +98,18 @@ public sealed partial class ExportJob : ObservableObject
 
     public string? OutputPath => Files.FirstOrDefault();
 
-    public bool IsRunning => State == ExportJobState.Running;
+    /// <summary>Under way or waiting to be: not finished yet.</summary>
+    public bool IsRunning => State is ExportJobState.Queued or ExportJobState.Running;
+    public bool IsQueued => State == ExportJobState.Queued;
     public bool IsCompleted => State == ExportJobState.Completed;
     public bool IsFailed => State == ExportJobState.Failed;
     public bool IsFinished => !IsRunning;
 
     // yt-dlp reports nothing while it looks the media up or post-processes it.
-    public bool IsIndeterminate => IsRunning && (Progress <= 0 || Progress >= 100);
+    public bool IsIndeterminate => State == ExportJobState.Running && (Progress <= 0 || Progress >= 100);
 
-    /// <summary>A failed export keeps its bar, in the error colour.</summary>
-    public bool ShowsProgress => IsRunning || IsFailed;
+    /// <summary>A failed export keeps its bar, in the error colour; one that's waiting has none yet.</summary>
+    public bool ShowsProgress => State == ExportJobState.Running || IsFailed;
     public double DisplayProgress => IsFailed ? 100 : Progress;
 
     // Activity rows are announced by screen readers using ToString.
@@ -119,6 +125,11 @@ public sealed partial class ExportJob : ObservableObject
 
     public async Task RunAsync(IMediaDownloader downloader)
     {
+        if (!IsQueued)
+            return; // Cancelled while it waited.
+
+        State = ExportJobState.Running;
+        Status = "Looking it up";
         var progress = new Progress<ExportProgress>(Report);
         try
         {
@@ -150,19 +161,38 @@ public sealed partial class ExportJob : ObservableObject
 
     private void Report(ExportProgress value)
     {
-        if (!IsRunning)
+        if (State != ExportJobState.Running)
             return; // Progress is posted asynchronously and can arrive after completion.
 
         // Video downloads fetch video then audio; the bar never runs backwards.
         Progress = value.IsProcessing ? 100 : Math.Max(Progress, value.Percent);
-        Status = value.Step
-            ?? (Progress >= 100 ? "Finishing up"
-                : value.Speed is { } speed && !speed.StartsWith("0.00", StringComparison.Ordinal) ? $"{Progress:0}% at {speed}"
-                : $"{Progress:0}%");
+        if (Progress > 0)
+            _downloading.Start();
+
+        Status = value.Step ?? (Progress >= 100 ? "Finishing up" : DescribeProgress(Progress, _downloading.Elapsed));
     }
 
+    /// <summary>
+    /// How far along, and roughly how long is left: the time taken so far, scaled up to the part still to do.
+    /// The estimate waits until there's enough to go on, as the first seconds say little about the rest.
+    /// </summary>
+    internal static string DescribeProgress(double percent, TimeSpan elapsed) =>
+        percent >= 5 && elapsed >= TimeSpan.FromSeconds(3)
+            ? $"{percent:0}%  ·  {Format.Remaining(elapsed * ((100 - percent) / percent))}"
+            : $"{percent:0}%";
+
     [RelayCommand(CanExecute = nameof(IsRunning))]
-    private void Cancel() => _cancellation.Cancel();
+    private void Cancel()
+    {
+        _cancellation.Cancel();
+        if (!IsQueued)
+            return;
+
+        // Nothing's running to notice the cancellation, so it's finished here.
+        Status = "Cancelled";
+        FinishedAt = DateTimeOffset.Now;
+        State = ExportJobState.Cancelled;
+    }
 
     // Several files open their folder instead; opening each would be a surprise.
     [RelayCommand(CanExecute = nameof(IsCompleted))]

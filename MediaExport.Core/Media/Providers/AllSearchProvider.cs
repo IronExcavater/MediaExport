@@ -8,11 +8,9 @@ using System.Runtime.ExceptionServices;
 namespace MediaExport.Core.Media.Providers;
 
 /// <summary>Every source searched at once, their best results put into one order.</summary>
-public sealed class AllSearchProvider(IReadOnlyList<IMediaSearchProvider> sources) : IMediaSearchProvider
+/// <param name="perSource">How many of each source's results are kept, so one source's don't crowd out the rest.</param>
+public sealed class AllSearchProvider(IReadOnlyList<IMediaSearchProvider> sources, int perSource = 5) : IMediaSearchProvider
 {
-    // A few from each, so one source's ten don't crowd out the rest.
-    private const int PerSource = 5;
-
     public string Id => "all";
     public string DisplayName => "All sources";
     public string Icon => "all";
@@ -50,7 +48,7 @@ public sealed class AllSearchProvider(IReadOnlyList<IMediaSearchProvider> source
             if (!search.IsCompletedSuccessfully || search.Result.Count == 0)
                 continue;
 
-            answers.Add(search.Result.Take(PerSource).ToArray());
+            answers.Add(search.Result.Take(perSource).ToArray());
             yield return SearchRanking.Order(answers, query, sort);
         }
 

@@ -401,7 +401,10 @@
                         </StackPanel>
                     </Grid>
 
-                    <!-- Clips: which parts to keep. -->
+                    <!--
+                        Clips: which parts to keep. It's all done on the timeline: drag across it for a clip,
+                        drag a clip to move it or its ends to trim it.
+                    -->
                     <Border
                         x:Name="clipsCard"
                         Grid.Row="3"
@@ -412,6 +415,7 @@
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
@@ -420,16 +424,17 @@
                                     VerticalAlignment="Center"
                                     Style="{StaticResource BodyStrongTextBlockStyle}"
                                     Text="Clips" />
+                                <!-- What's kept, or with a clip picked, that clip. -->
                                 <TextBlock
                                     Grid.Column="1"
                                     VerticalAlignment="Center"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Text="{x:Bind ViewModel.ClipsSummary, Mode=OneWay}" />
+                                    Text="{x:Bind ViewModel.ClipsText, Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis" />
 
                                 <!-- Where the player is, with a step either way; only for players that say where they are. -->
                                 <StackPanel
                                     Grid.Column="2"
-                                    HorizontalAlignment="Center"
                                     Orientation="Horizontal"
                                     Spacing="4"
                                     Visibility="{x:Bind FollowsPlayhead, Mode=OneWay}">
@@ -442,8 +447,8 @@
                                     </Button>
                                     <StackPanel
                                         MinWidth="104"
-                                        VerticalAlignment="Center"
                                         HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
                                         Orientation="Horizontal"
                                         Spacing="6">
                                         <TextBlock FontWeight="SemiBold" Text="{x:Bind converters:Format.Time(player.Position), Mode=OneWay}" />
@@ -460,15 +465,18 @@
                                 </StackPanel>
 
                                 <StackPanel
-                                    Grid.Column="3"
+                                    Grid.Column="4"
                                     Orientation="Horizontal"
                                     Spacing="4">
-                                    <Button AutomationProperties.Name="Add clip" Click="AddClip_Click" ToolTipService.ToolTip="Add a clip where the player is">
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <FontIcon FontSize="14" Glyph="&#xE710;" />
-                                            <TextBlock Text="Add clip" />
-                                        </StackPanel>
-                                    </Button>
+                                    <ComboBox
+                                        MinWidth="130"
+                                        AutomationProperties.Name="Save the clips as"
+                                        SelectedIndex="{x:Bind local:ExportPage.JoinIndex(ViewModel.JoinClips), Mode=TwoWay, BindBack=SetJoinIndex}"
+                                        ToolTipService.ToolTip="Save the clips joined into one file, or as a file each"
+                                        Visibility="{x:Bind ViewModel.HasSeveralClips, Mode=OneWay}">
+                                        <x:String>As one file</x:String>
+                                        <x:String>As a file each</x:String>
+                                    </ComboBox>
                                     <Button
                                         AutomationProperties.Name="Clip each chapter"
                                         Command="{x:Bind ViewModel.ClipChaptersCommand}"
@@ -480,12 +488,24 @@
                                         </StackPanel>
                                     </Button>
                                     <Button
+                                        AutomationProperties.Name="Remove clip"
+                                        Click="RemoveClip_Click"
+                                        ToolTipService.ToolTip="Remove this clip (Delete)"
+                                        Visibility="{x:Bind ViewModel.HasSelectedClip, Mode=OneWay}">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon FontSize="14" Glyph="&#xE74D;" />
+                                            <TextBlock Text="Remove clip" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button
                                         AutomationProperties.Name="Keep all of it"
                                         Command="{x:Bind ViewModel.ClearClipsCommand}"
-                                        Style="{StaticResource SubtleButtonStyle}"
                                         ToolTipService.ToolTip="Remove every clip and keep all of it"
                                         Visibility="{x:Bind ViewModel.HasClips, Mode=OneWay}">
-                                        <FontIcon FontSize="14" Glyph="&#xE894;" />
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon FontSize="14" Glyph="&#xE894;" />
+                                            <TextBlock Text="Keep all" />
+                                        </StackPanel>
                                     </Button>
                                 </StackPanel>
                             </Grid>
@@ -498,110 +518,6 @@
                                 Position="{x:Bind player.Position, Mode=OneWay}"
                                 SeekRequested="Timeline_SeekRequested"
                                 SelectedIndex="{x:Bind ViewModel.SelectedClip, Mode=TwoWay}" />
-
-                            <!-- Every clip, numbered as on the timeline; picking one selects it and plays from its start. -->
-                            <ItemsControl
-                                ItemsPanel="{StaticResource WrapPanelTemplate}"
-                                ItemsSource="{x:Bind ViewModel.ClipItems}"
-                                Visibility="{x:Bind ViewModel.HasClips, Mode=OneWay}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="local:ClipItem">
-                                        <ToggleButton
-                                            Padding="6,4,12,5"
-                                            AutomationProperties.Name="{x:Bind}"
-                                            Click="ClipItem_Click"
-                                            CornerRadius="16"
-                                            IsChecked="{x:Bind IsSelected}"
-                                            Tag="{x:Bind Index}">
-                                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <Border
-                                                    MinWidth="22"
-                                                    Height="22"
-                                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
-                                                    CornerRadius="11">
-                                                    <TextBlock
-                                                        HorizontalAlignment="Center"
-                                                        VerticalAlignment="Center"
-                                                        FontSize="12"
-                                                        Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                                                        Text="{x:Bind Number}" />
-                                                </Border>
-                                                <TextBlock VerticalAlignment="Center" Text="{x:Bind Range}" />
-                                            </StackPanel>
-                                        </ToggleButton>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-
-                            <!-- The selected clip's exact times, and what to make of several clips. -->
-                            <Grid ColumnSpacing="12" Visibility="{x:Bind ViewModel.HasClips, Mode=OneWay}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel
-                                    Orientation="Horizontal"
-                                    Spacing="8"
-                                    Visibility="{x:Bind HasSelectedClip, Mode=OneWay}">
-                                    <TextBlock
-                                        VerticalAlignment="Center"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Text="From" />
-                                    <TextBox
-                                        x:Name="clipStart"
-                                        Width="88"
-                                        AutomationProperties.Name="Clip start"
-                                        KeyDown="ClipTime_KeyDown"
-                                        LostFocus="ClipTime_LostFocus" />
-                                    <TextBlock
-                                        VerticalAlignment="Center"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Text="to" />
-                                    <TextBox
-                                        x:Name="clipEnd"
-                                        Width="88"
-                                        AutomationProperties.Name="Clip end"
-                                        KeyDown="ClipTime_KeyDown"
-                                        LostFocus="ClipTime_LostFocus" />
-                                    <!-- Said in words: the two arrows these used to be were easy to mix up. -->
-                                    <Button
-                                        Margin="4,0,0,0"
-                                        Click="MarkStart_Click"
-                                        Content="Start here"
-                                        ToolTipService.ToolTip="Start the clip where the player is"
-                                        Visibility="{x:Bind FollowsPlayhead, Mode=OneWay}" />
-                                    <Button
-                                        Click="MarkEnd_Click"
-                                        Content="End here"
-                                        ToolTipService.ToolTip="End the clip where the player is"
-                                        Visibility="{x:Bind FollowsPlayhead, Mode=OneWay}" />
-                                    <Button
-                                        AutomationProperties.Name="Remove clip"
-                                        Click="RemoveClip_Click"
-                                        Style="{StaticResource SubtleButtonStyle}"
-                                        ToolTipService.ToolTip="Remove clip (Delete)">
-                                        <FontIcon FontSize="14" Glyph="&#xE74D;" />
-                                    </Button>
-                                </StackPanel>
-                                <StackPanel
-                                    Grid.Column="2"
-                                    Orientation="Horizontal"
-                                    Spacing="8"
-                                    Visibility="{x:Bind ViewModel.HasSeveralClips, Mode=OneWay}">
-                                    <TextBlock
-                                        VerticalAlignment="Center"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Text="Save as" />
-                                    <ComboBox
-                                        MinWidth="130"
-                                        AutomationProperties.Name="Save the clips as"
-                                        SelectedIndex="{x:Bind local:ExportPage.JoinIndex(ViewModel.JoinClips), Mode=TwoWay, BindBack=SetJoinIndex}">
-                                        <x:String>One file</x:String>
-                                        <x:String>A file each</x:String>
-                                    </ComboBox>
-                                </StackPanel>
-                            </Grid>
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -722,39 +638,8 @@
                                     Style="{StaticResource OptionSwitchStyle}" />
                             </Grid>
 
-                            <TextBlock Margin="0,16,0,8" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Save to" />
-                            <Grid ColumnSpacing="4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <Button
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Stretch"
-                                    AutomationProperties.Name="Change folder"
-                                    Click="ChangeFolder_Click"
-                                    ToolTipService.ToolTip="{x:Bind ViewModel.OutputFolder, Mode=OneWay}">
-                                    <Grid ColumnSpacing="8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <FontIcon FontSize="16" Glyph="&#xE8B7;" />
-                                        <TextBlock
-                                            Grid.Column="1"
-                                            Text="{x:Bind ViewModel.OutputFolder, Mode=OneWay}"
-                                            TextTrimming="CharacterEllipsis" />
-                                    </Grid>
-                                </Button>
-                                <Button
-                                    Grid.Column="1"
-                                    AutomationProperties.Name="Open folder"
-                                    Command="{x:Bind ViewModel.OpenFolderCommand}"
-                                    ToolTipService.ToolTip="Open folder">
-                                    <FontIcon FontSize="16" Glyph="&#xE838;" />
-                                </Button>
-                            </Grid>
-                            <Grid Margin="0,4,0,0" Style="{StaticResource OptionRowStyle}">
+                            <TextBlock Margin="0,16,0,4" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Save as" />
+                            <Grid Style="{StaticResource OptionRowStyle}">
                                 <TextBlock Text="File name" VerticalAlignment="Center" />
                                 <ComboBox
                                     AutomationProperties.Name="File name"
@@ -766,10 +651,10 @@
                         </StackPanel>
                     </ScrollViewer>
 
-                    <!-- What's about to be made, the one button that makes it, and a line on where things stand. -->
+                    <!-- The export in particulars (its name, where it goes, about how big), then the one button that makes it. -->
                     <StackPanel
                         Grid.Row="1"
-                        Padding="16,14,16,12"
+                        Padding="16,12,16,14"
                         Background="{ThemeResource LayerFillColorAltBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="0,1,0,0"
@@ -779,28 +664,65 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Border
-                                Width="40"
-                                Height="40"
-                                Background="{ThemeResource ControlFillColorSecondaryBrush}"
-                                CornerRadius="6">
-                                <FontIcon FontSize="18" Glyph="{x:Bind ViewModel.ExportKindGlyph, Mode=OneWay}" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                                <TextBlock
-                                    Style="{StaticResource BodyStrongTextBlockStyle}"
-                                    Text="{x:Bind ViewModel.FileNamePreview, Mode=OneWay}"
-                                    TextTrimming="CharacterEllipsis"
-                                    TextWrapping="NoWrap"
-                                    ToolTipService.ToolTip="{x:Bind ViewModel.FileNamePreview, Mode=OneWay}" />
-                                <TextBlock
-                                    Style="{StaticResource SecondaryTextStyle}"
-                                    Text="{x:Bind ViewModel.ExportSummary, Mode=OneWay}"
-                                    TextTrimming="CharacterEllipsis"
-                                    TextWrapping="NoWrap"
-                                    ToolTipService.ToolTip="{x:Bind ViewModel.ExportSummary, Mode=OneWay}" />
-                            </StackPanel>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="30" />
+                                <RowDefinition Height="30" />
+                                <RowDefinition Height="30" />
+                            </Grid.RowDefinitions>
+
+                            <FontIcon
+                                FontSize="16"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Glyph="&#xE8A5;" />
+                            <TextBlock
+                                Grid.Column="1"
+                                Grid.ColumnSpan="2"
+                                VerticalAlignment="Center"
+                                Text="{x:Bind ViewModel.FileNamePreview, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis"
+                                ToolTipService.ToolTip="{x:Bind ViewModel.FileNamePreview, Mode=OneWay}" />
+
+                            <FontIcon
+                                Grid.Row="1"
+                                FontSize="16"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Glyph="&#xE8B7;" />
+                            <HyperlinkButton
+                                Grid.Row="1"
+                                Grid.Column="1"
+                                Padding="0"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="Change folder"
+                                Click="ChangeFolder_Click"
+                                ToolTipService.ToolTip="Change folder">
+                                <TextBlock Text="{x:Bind ViewModel.OutputFolder, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                            </HyperlinkButton>
+                            <Button
+                                Grid.Row="1"
+                                Grid.Column="2"
+                                Margin="0,0,-6,0"
+                                AutomationProperties.Name="Open folder"
+                                Command="{x:Bind ViewModel.OpenFolderCommand}"
+                                Style="{StaticResource SubtleButtonStyle}"
+                                ToolTipService.ToolTip="Open folder">
+                                <FontIcon FontSize="14" Glyph="&#xE8A7;" />
+                            </Button>
+
+                            <FontIcon
+                                Grid.Row="2"
+                                FontSize="16"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Glyph="&#xEDA2;" />
+                            <TextBlock
+                                Grid.Row="2"
+                                Grid.Column="1"
+                                Grid.ColumnSpan="2"
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{x:Bind ViewModel.SizeText, Mode=OneWay}" />
                         </Grid>
 
                         <Grid Height="44">
@@ -901,18 +823,13 @@
                                 Value="100" />
                         </Grid>
 
-                        <!-- Two lines are always kept for this, so nothing moves when it changes. -->
-                        <Grid Height="36" ColumnSpacing="8">
+                        <!-- Said only when there's something to say: it's checking, it can't be exported, it failed, it's saved. -->
+                        <Grid ColumnSpacing="8" Visibility="{x:Bind converters:Show.WhenText(ViewModel.StatusText), Mode=OneWay}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <Grid Width="16" VerticalAlignment="Top">
-                                <FontIcon
-                                    FontSize="14"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Glyph="&#xE8B7;"
-                                    Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay}" />
                                 <ProgressRing
                                     Width="14"
                                     Height="14"
@@ -936,7 +853,7 @@
                             </Grid>
                             <TextBlock
                                 Grid.Column="1"
-                                MaxLines="2"
+                                MaxLines="3"
                                 Style="{StaticResource SecondaryTextStyle}"
                                 Text="{x:Bind ViewModel.StatusText, Mode=OneWay}"
                                 TextTrimming="CharacterEllipsis"

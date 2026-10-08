@@ -44,14 +44,6 @@ public sealed partial class SubtitleChoice(SubtitleTrack track) : ObservableObje
     public override string ToString() => Track.Name;
 }
 
-/// <summary>A clip as listed under the timeline: its number, its times, and whether it's the one being edited.</summary>
-public sealed record ClipItem(int Index, Clip Clip, bool IsSelected)
-{
-    public int Number => Index + 1;
-    public string Range => $"{Format.Time(Clip.Start)} – {Format.Time(Clip.End)}";
-    public override string ToString() => $"Clip {Number}, {Range}";
-}
-
 /// <summary>The media being exported and every choice about how.</summary>
 public sealed partial class ExportViewModel : ObservableObject
 {
@@ -128,7 +120,6 @@ public sealed partial class ExportViewModel : ObservableObject
     public ObservableCollection<Clip> Clips { get; } = [];
 
     /// <summary>The clips as listed under the timeline.</summary>
-    public ObservableCollection<ClipItem> ClipItems { get; } = [];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasMedia), nameof(Duration), nameof(HasCreatorLink), nameof(ProviderName))]
@@ -169,7 +160,7 @@ public sealed partial class ExportViewModel : ObservableObject
     public partial ExportJob? Job { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsDone), nameof(IsFailed), nameof(IsBlocked), nameof(IsReady), nameof(CanStart), nameof(IsBusy), nameof(ExportGlyph))]
+    [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsDone), nameof(IsFailed), nameof(IsBlocked), nameof(CanStart), nameof(IsBusy), nameof(ExportGlyph))]
     public partial ExportState State { get; private set; }
 
     [ObservableProperty]
@@ -199,7 +190,6 @@ public sealed partial class ExportViewModel : ObservableObject
     public bool IsFailed => State == ExportState.Failed;
     public bool IsBlocked => State == ExportState.Blocked;
     public bool IsBusy => State is ExportState.Checking;
-    public bool IsReady => State is ExportState.Ready;
     public bool CanStart => State is ExportState.Ready or ExportState.Failed;
     public bool IsIndeterminate => IsRunning && Job?.IsIndeterminate == true;
     public string ExportGlyph => IsFailed ? "" : "";
@@ -237,27 +227,16 @@ public sealed partial class ExportViewModel : ObservableObject
         var several => $"{several.Length} languages"
     };
 
-    /// <summary>What pressing Export makes, in a line: its format and quality, how much of it, and roughly how big.</summary>
-    public string ExportSummary
-    {
-        get
-        {
-            string? format = (IncludeVideo ? VideoFormat : AudioFormat).SelectedKey?.ToUpperInvariant();
-            string? quality = (IncludeVideo ? VideoQuality : AudioQuality).Selected?.Label;
-            string?[] parts =
-            [
-                format,
-                quality == "Best" ? "Best quality" : quality,
-                IncludeVideo && !IncludeAudio ? "No sound" : null,
-                ClipsSummary,
-                EstimateSize() is long bytes ? $"About {Format.Size(bytes)}" : null
-            ];
-            return string.Join("  ·  ", parts.Where(part => part is not null));
-        }
-    }
+    /// <summary>Roughly how big the export will be, as far as that's known.</summary>
+    public string SizeText => EstimateSize() is long bytes ? $"About {Format.Size(bytes)}"
+        : Details is null ? "Working out the size" : "Size not known";
 
-    /// <summary>A film frame or a note, for what's being made.</summary>
-    public string ExportKindGlyph => IncludeVideo ? "" : "";
+    public bool HasSelectedClip => SelectedClip >= 0 && SelectedClip < Clips.Count;
+
+    /// <summary>The clip that's picked, or with none picked what's kept overall.</summary>
+    public string ClipsText => HasSelectedClip
+        ? $"Clip {SelectedClip + 1}  ·  {Format.Time(Clips[SelectedClip].Start)} – {Format.Time(Clips[SelectedClip].End)}  ·  {Format.Time(Clips[SelectedClip].Length)} long"
+        : ClipsSummary;
 
     public string FileNamePreview
     {
@@ -437,7 +416,11 @@ public sealed partial class ExportViewModel : ObservableObject
             IncludeVideo = true;
     }
 
-    partial void OnSelectedClipChanged(int value) => SyncClipItems();
+    partial void OnSelectedClipChanged(int value)
+    {
+        OnPropertyChanged(nameof(HasSelectedClip));
+        OnPropertyChanged(nameof(ClipsText));
+    }
 
     partial void OnJobChanged(ExportJob? oldValue, ExportJob? newValue)
     {
@@ -566,27 +549,16 @@ public sealed partial class ExportViewModel : ObservableObject
         if (Details is not null && !HasVideo && IncludeVideo)
             IncludeVideo = false;
 
-        SyncClipItems();
         RefreshState();
-    }
-
-    private void SyncClipItems()
-    {
-        ClipItem[] items = Clips.Select((clip, index) => new ClipItem(index, clip, index == SelectedClip)).ToArray();
-        if (items.SequenceEqual(ClipItems))
-            return;
-
-        ClipItems.Clear();
-        foreach (ClipItem item in items)
-            ClipItems.Add(item);
     }
 
     private void RefreshState()
     {
         (State, StatusText) = Evaluate();
         OnPropertyChanged(nameof(ExportLabel));
-        OnPropertyChanged(nameof(ExportSummary));
-        OnPropertyChanged(nameof(ExportKindGlyph));
+        OnPropertyChanged(nameof(SizeText));
+        OnPropertyChanged(nameof(HasSelectedClip));
+        OnPropertyChanged(nameof(ClipsText));
         OnPropertyChanged(nameof(ProgressFraction));
         OnPropertyChanged(nameof(IsIndeterminate));
         OnPropertyChanged(nameof(JobStatus));
@@ -598,7 +570,7 @@ public sealed partial class ExportViewModel : ObservableObject
             return (ExportState.Empty, null);
 
         if (Job is { IsRunning: true })
-            return (ExportState.Running, $"Saving to {FolderName(OutputFolder)}");
+            return (ExportState.Running, null);
 
         if (Details is { IsExportable: false } unavailable)
             return (ExportState.Blocked, unavailable.Problem);
@@ -614,7 +586,7 @@ public sealed partial class ExportViewModel : ObservableObject
         if (Details is null)
             return (ExportState.Checking, "Checking what's available");
 
-        return (ExportState.Ready, $"Saves to {FolderName(OutputFolder)}");
+        return (ExportState.Ready, null);
     }
 
     private long? EstimateSize()
@@ -644,9 +616,4 @@ public sealed partial class ExportViewModel : ObservableObject
 
     private static int? ParseNumber(string? text) =>
         int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number) ? number : null;
-
-    private static string FolderName(string folder) =>
-        Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar)) is { Length: > 0 } name ? name : folder;
-
-
 }

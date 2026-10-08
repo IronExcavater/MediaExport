@@ -154,6 +154,14 @@ public sealed partial class ClipTimeline : UserControl
         for (int index = 0; index < clips.Count; index++)
             DrawClip(clips[index], index, index == SelectedIndex);
 
+        // Until there's a clip, the track says how one's made.
+        if (clips.Count == 0 && Duration > TimeSpan.Zero && _drag == Part.None)
+        {
+            var hint = new TextBlock { Style = StyleOf("HintTextStyle"), Text = "Drag here to keep just a part" };
+            hint.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            Add(hint, Math.Max(0, (width - hint.DesiredSize.Width) / 2), TrackTop + (TrackHeight - hint.DesiredSize.Height) / 2);
+        }
+
         DrawRuler(width);
 
         _hoverLine.Height = RulerTop + 6 - TrackTop;

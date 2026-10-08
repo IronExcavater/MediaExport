@@ -42,6 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IMediaSearchProvider, NiconicoSearchProvider>();
         services.AddSingleton<IMediaSearchProvider, InternetArchiveSearchProvider>();
         services.AddSingleton<SearchViewModel>();
+        services.AddSingleton<ResultsViewModel>();
         services.AddSingleton<ActivityViewModel>();
         services.AddSingleton<ExportViewModel>();
         services.AddSingleton<SettingsViewModel>();

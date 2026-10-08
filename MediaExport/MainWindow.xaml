@@ -85,13 +85,13 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <ComboBox
                     MinWidth="196"
                     VerticalAlignment="Center"
                     AutomationProperties.Name="Search source"
+                    Visibility="{x:Bind converters:Show.Unless(Search.IsPageSearch), Mode=OneWay}"
                     DropDownClosed="ProviderBox_DropDownClosed"
                     DropDownOpened="ProviderBox_DropDownOpened"
                     ItemsSource="{x:Bind Search.Providers}"
@@ -156,24 +156,13 @@
                                         Text="{x:Bind Message}"
                                         TextWrapping="Wrap"
                                         Visibility="{x:Bind IsMessage}" />
-                                    <StackPanel
+                                    <FontIcon
                                         Grid.Column="1"
-                                        VerticalAlignment="Center"
-                                        Orientation="Horizontal"
-                                        Spacing="8">
-                                        <FontIcon
-                                            FontSize="14"
-                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                            Glyph="&#xE81C;"
-                                            ToolTipService.ToolTip="Picked recently"
-                                            Visibility="{x:Bind IsRecent}" />
-                                        <!-- Where it's from, when every source is searched together. -->
-                                        <controls:IconView
-                                            Width="18"
-                                            Height="18"
-                                            Source="{x:Bind Media.ProviderId}"
-                                            Visibility="{x:Bind ShowSource}" />
-                                    </StackPanel>
+                                        FontSize="14"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        Glyph="&#xE81C;"
+                                        ToolTipService.ToolTip="Picked recently"
+                                        Visibility="{x:Bind IsRecent}" />
                                 </Grid>
                             </DataTemplate>
                         </AutoSuggestBox.ItemTemplate>
@@ -185,41 +174,9 @@
                         VerticalAlignment="Bottom"
                         CornerRadius="0,0,4,4"
                         IsHitTestVisible="False"
-                        IsIndeterminate="{x:Bind Search.IsSearching, Mode=OneWay}"
-                        Visibility="{x:Bind Search.IsSearching, Mode=OneWay}" />
+                        IsIndeterminate="True"
+                        Visibility="{x:Bind converters:Show.WhenAny(Search.IsSearching, Results.IsSearching), Mode=OneWay}" />
                 </Grid>
-
-                <Button
-                    Grid.Column="2"
-                    Height="32"
-                    Padding="8,0"
-                    VerticalAlignment="Center"
-                    AutomationProperties.Name="Sort results"
-                    ToolTipService.ToolTip="Sort results">
-                    <FontIcon FontSize="16" Glyph="&#xE8CB;" />
-                    <Button.Flyout>
-                        <MenuFlyout
-                            Closed="SortMenu_Closed"
-                            Opening="SortMenu_Opening"
-                            Placement="BottomEdgeAlignedRight">
-                            <RadioMenuFlyoutItem
-                                Click="Sort_Click"
-                                GroupName="Sort"
-                                Tag="Relevance"
-                                Text="Best match" />
-                            <RadioMenuFlyoutItem
-                                Click="Sort_Click"
-                                GroupName="Sort"
-                                Tag="Popularity"
-                                Text="Most played" />
-                            <RadioMenuFlyoutItem
-                                Click="Sort_Click"
-                                GroupName="Sort"
-                                Tag="Recency"
-                                Text="Newest" />
-                        </MenuFlyout>
-                    </Button.Flyout>
-                </Button>
             </Grid>
         </TitleBar>
 
@@ -246,6 +203,17 @@
                             Modifiers="Control" />
                     </NavigationViewItem.KeyboardAccelerators>
                 </NavigationViewItem>
+                <NavigationViewItem Content="Search" Tag="Search">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE721;" />
+                    </NavigationViewItem.Icon>
+                    <NavigationViewItem.KeyboardAccelerators>
+                        <KeyboardAccelerator
+                            Key="Number2"
+                            Invoked="GoTo_Invoked"
+                            Modifiers="Control" />
+                    </NavigationViewItem.KeyboardAccelerators>
+                </NavigationViewItem>
                 <NavigationViewItem Content="Activity" Tag="Activity">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE81C;" />
@@ -259,7 +227,7 @@
                     </NavigationViewItem.InfoBadge>
                     <NavigationViewItem.KeyboardAccelerators>
                         <KeyboardAccelerator
-                            Key="Number2"
+                            Key="Number3"
                             Invoked="GoTo_Invoked"
                             Modifiers="Control" />
                     </NavigationViewItem.KeyboardAccelerators>

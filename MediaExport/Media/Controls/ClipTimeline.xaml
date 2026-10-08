@@ -61,6 +61,9 @@
             <Setter Property="TextWrapping" Value="NoWrap" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
+        <Style x:Key="HintTextStyle" BasedOn="{StaticResource CaptionTextBlockStyle}" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+        </Style>
         <Style x:Key="GripStyle" TargetType="Border">
             <Setter Property="Background" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
             <Setter Property="CornerRadius" Value="2" />

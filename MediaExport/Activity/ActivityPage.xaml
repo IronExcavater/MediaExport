@@ -8,6 +8,14 @@
     Background="Transparent"
     NavigationCacheMode="Required">
 
+    <Page.Resources>
+        <!-- The exports under their headings: what's exporting, what's up next, then by when they finished. -->
+        <CollectionViewSource
+            x:Name="groupedJobs"
+            IsSourceGrouped="True"
+            Source="{x:Bind ViewModel.Groups}" />
+    </Page.Resources>
+
     <Grid>
         <StackPanel
             MaxWidth="420"
@@ -25,11 +33,17 @@
                 HorizontalAlignment="Center"
                 Style="{StaticResource SubtitleTextBlockStyle}"
                 Text="Nothing exported yet" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="Exports show up here: the ones waiting, the ones running and the ones done."
+                TextAlignment="Center"
+                TextWrapping="Wrap" />
         </StackPanel>
 
         <Grid
             MaxWidth="{StaticResource PageMaxWidth}"
-            Padding="24,12,24,0"
+            Padding="24,16,24,0"
             RowSpacing="8"
             Visibility="{x:Bind ViewModel.HasJobs, Mode=OneWay}">
             <Grid.RowDefinitions>
@@ -37,53 +51,92 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <StackPanel
-                HorizontalAlignment="Right"
-                Orientation="Horizontal"
-                Spacing="8">
-                <Button
-                    x:Name="removeButton"
-                    Click="Remove_Click"
-                    IsEnabled="False"
-                    ToolTipService.ToolTip="Remove the selected exports from this list. Their files stay where they are.">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon FontSize="14" Glyph="&#xE74D;" />
-                        <TextBlock Text="Remove" />
-                    </StackPanel>
-                    <Button.KeyboardAccelerators>
-                        <KeyboardAccelerator Key="Delete" ScopeOwner="{x:Bind jobList}" />
-                    </Button.KeyboardAccelerators>
-                </Button>
-                <Button Command="{x:Bind ViewModel.ClearFinishedCommand}" ToolTipService.ToolTip="Remove every finished export from this list. Their files stay where they are.">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon FontSize="14" Glyph="&#xE894;" />
-                        <TextBlock Text="Clear finished" />
-                    </StackPanel>
-                </Button>
-            </StackPanel>
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MaxWidth="420" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <AutoSuggestBox
+                    AutomationProperties.Name="Search your exports"
+                    PlaceholderText="Search your exports"
+                    QueryIcon="Find"
+                    Text="{x:Bind ViewModel.Filter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                <StackPanel
+                    Grid.Column="2"
+                    Orientation="Horizontal"
+                    Spacing="8">
+                    <Button
+                        x:Name="removeButton"
+                        Click="Remove_Click"
+                        IsEnabled="False"
+                        ToolTipService.ToolTip="Remove the selected exports from this list. Their files stay where they are.">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="14" Glyph="&#xE74D;" />
+                            <TextBlock Text="Remove" />
+                        </StackPanel>
+                        <Button.KeyboardAccelerators>
+                            <KeyboardAccelerator Key="Delete" ScopeOwner="{x:Bind jobList}" />
+                        </Button.KeyboardAccelerators>
+                    </Button>
+                    <Button Command="{x:Bind ViewModel.ClearFinishedCommand}" ToolTipService.ToolTip="Remove every finished export from this list. Their files stay where they are.">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="14" Glyph="&#xE894;" />
+                            <TextBlock Text="Clear finished" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
 
-            <ListView
+            <TextBlock
+                Grid.Row="1"
+                Margin="0,48,0,0"
+                HorizontalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="No exports match that."
+                Visibility="{x:Bind converters:Show.Unless(ViewModel.HasMatches), Mode=OneWay}" />
+
+            <!-- Cards side by side, as many as fit; their width is set in code so each row fills the page. -->
+            <GridView
                 x:Name="jobList"
                 Grid.Row="1"
                 Padding="0,0,0,24"
                 DoubleTapped="JobList_DoubleTapped"
-                ItemsSource="{x:Bind ViewModel.Jobs}"
+                ItemsSource="{x:Bind groupedJobs.View}"
                 SelectionChanged="JobList_SelectionChanged"
-                SelectionMode="Extended">
-                <ListView.ItemContainerStyle>
-                    <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
-                        <Setter Property="Margin" Value="0,0,0,4" />
-                        <Setter Property="Padding" Value="12,8" />
+                SelectionMode="Extended"
+                SizeChanged="JobList_SizeChanged">
+                <GridView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsWrapGrid ItemHeight="96" Loaded="Cards_Loaded" Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </GridView.ItemsPanel>
+                <GridView.GroupStyle>
+                    <GroupStyle HidesIfEmpty="True">
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate x:DataType="local:JobGroup">
+                                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="{x:Bind Title}" />
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </GridView.GroupStyle>
+                <GridView.ItemContainerStyle>
+                    <Style BasedOn="{StaticResource DefaultGridViewItemStyle}" TargetType="GridViewItem">
+                        <Setter Property="Margin" Value="0,0,8,8" />
+                        <Setter Property="Padding" Value="0" />
                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
-                        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
-                        <Setter Property="BorderThickness" Value="1" />
-                        <Setter Property="CornerRadius" Value="8" />
+                        <Setter Property="VerticalContentAlignment" Value="Stretch" />
                     </Style>
-                </ListView.ItemContainerStyle>
-                <ListView.ItemTemplate>
+                </GridView.ItemContainerStyle>
+                <GridView.ItemTemplate>
                     <DataTemplate x:DataType="local:ExportJob">
-                        <Grid ColumnSpacing="16">
+                        <Grid
+                            Padding="12,10"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            ColumnSpacing="12"
+                            CornerRadius="8">
                             <Grid.ContextFlyout>
                                 <MenuFlyout>
                                     <MenuFlyoutItem Command="{x:Bind OpenCommand}" Text="Open">
@@ -121,28 +174,45 @@
                             </Grid.ColumnDefinitions>
 
                             <Border
-                                Width="80"
-                                Height="45"
+                                Width="112"
+                                Height="63"
+                                VerticalAlignment="Center"
                                 Background="{ThemeResource ControlFillColorSecondaryBrush}"
                                 CornerRadius="4">
                                 <Image Stretch="UniformToFill">
                                     <Image.Source>
-                                        <BitmapImage UriSource="{x:Bind Media.ThumbnailUri}" />
+                                        <BitmapImage DecodePixelWidth="224" UriSource="{x:Bind Media.ThumbnailUri}" />
                                     </Image.Source>
                                 </Image>
                             </Border>
 
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Text="{x:Bind Media.Title}" TextTrimming="CharacterEllipsis" />
-                                <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind Summary}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                            <!-- What it was, how it was saved, and where it stands. -->
+                            <StackPanel
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Spacing="2">
+                                <TextBlock
+                                    Text="{x:Bind Media.Title}"
+                                    TextTrimming="CharacterEllipsis"
+                                    ToolTipService.ToolTip="{x:Bind Media.Title}" />
+                                <TextBlock
+                                    Style="{StaticResource SecondaryTextStyle}"
+                                    Text="{x:Bind Summary}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap" />
+                                <TextBlock
+                                    Style="{StaticResource SecondaryTextStyle}"
+                                    Text="{x:Bind Status, Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap"
+                                    ToolTipService.ToolTip="{x:Bind Status, Mode=OneWay}" />
                             </StackPanel>
 
                             <StackPanel
                                 Grid.Column="2"
                                 VerticalAlignment="Center"
                                 Orientation="Horizontal"
-                                Spacing="4">
-                                <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" MaxWidth="320" Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind Status, Mode=OneWay}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTipService.ToolTip="{x:Bind Status, Mode=OneWay}" />
+                                Spacing="2">
                                 <Button
                                     AutomationProperties.Name="Cancel"
                                     Command="{x:Bind CancelCommand}"
@@ -169,10 +239,10 @@
                                 </Button>
                             </StackPanel>
 
-                            <!-- Along the row's bottom edge, so progress doesn't make the row taller. -->
+                            <!-- Along the card's bottom edge, so progress doesn't make it taller. -->
                             <ProgressBar
                                 Grid.ColumnSpan="3"
-                                Margin="-8,0,-8,-8"
+                                Margin="-8,0,-8,-9"
                                 VerticalAlignment="Bottom"
                                 IsIndeterminate="{x:Bind IsIndeterminate, Mode=OneWay}"
                                 ShowError="{x:Bind IsFailed, Mode=OneWay}"
@@ -180,8 +250,8 @@
                                 Value="{x:Bind DisplayProgress, Mode=OneWay}" />
                         </Grid>
                     </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+                </GridView.ItemTemplate>
+            </GridView>
         </Grid>
     </Grid>
 </Page>

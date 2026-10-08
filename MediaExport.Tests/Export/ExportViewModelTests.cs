@@ -39,7 +39,7 @@ public sealed class ExportViewModelTests
             Assert.That(viewModel.State, Is.EqualTo(ExportState.Ready));
             Assert.That(viewModel.VideoQuality.Items.Select(choice => choice.Label), Is.EqualTo(new[] { "Best", "1080p", "720p" }));
             Assert.That(viewModel.VideoQuality.SelectedKey, Is.EqualTo("1080"), "the remembered height");
-            Assert.That(viewModel.ExportSummary, Is.EqualTo("MP4  ·  1080p  ·  All of it  ·  About 250 MB"));
+            Assert.That(viewModel.SizeText, Is.EqualTo("About 250 MB"));
             Assert.That(viewModel.HasSubtitles && viewModel.HasChapters && viewModel.CanRemoveSponsors, Is.True);
         });
     }

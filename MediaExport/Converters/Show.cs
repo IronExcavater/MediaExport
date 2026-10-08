@@ -21,5 +21,7 @@ public static class Show
 
     public static Visibility WhenAll(bool first, bool second) => first && second ? Visibility.Visible : Visibility.Collapsed;
 
+    public static Visibility WhenAny(bool first, bool second) => first || second ? Visibility.Visible : Visibility.Collapsed;
+
     public static Visibility WhenNone(bool first, bool second) => !first && !second ? Visibility.Visible : Visibility.Collapsed;
 }
