@@ -19,6 +19,10 @@ public static class Show
 
     public static Visibility WhenSet(TimeSpan? value) => value is null ? Visibility.Collapsed : Visibility.Visible;
 
+    public static Visibility WhenSome(object? value) => value is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public static Visibility WhenPositive(int count) => count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
     public static Visibility WhenAll(bool first, bool second) => first && second ? Visibility.Visible : Visibility.Collapsed;
 
     public static Visibility WhenAny(bool first, bool second) => first || second ? Visibility.Visible : Visibility.Collapsed;

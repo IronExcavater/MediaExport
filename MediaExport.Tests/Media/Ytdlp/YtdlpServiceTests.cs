@@ -42,6 +42,86 @@ public sealed class YtdlpServiceTests
     }
 
     [Test]
+    public void ReadOpenedLink_turns_a_youtube_playlist_into_individual_media()
+    {
+        const string json = """
+            {
+              "_type":"playlist",
+              "extractor_key":"YoutubeTab",
+              "uploader":"Channel",
+              "entries":[
+                {"id":"one","title":"First","url":"https://www.youtube.com/watch?v=one","ie_key":"Youtube","duration":61,"thumbnail":"https://example.test/one.jpg"},
+                {"id":"two","title":"Second","url":"two","ie_key":"Youtube","duration":125}
+              ]
+            }
+            """;
+
+        OpenedLink opened = YtdlpService.ReadOpenedLink(json, "https://www.youtube.com/playlist?list=PL123");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(opened.Details, Is.Null, "flat playlist entries are inspected only when selected");
+            Assert.That(opened.Media.Select(item => item.Title), Is.EqualTo(new[] { "First", "Second" }));
+            Assert.That(opened.Media.Select(item => item.SourceUrl), Is.EqualTo(new[]
+            {
+                "https://www.youtube.com/watch?v=one",
+                "https://www.youtube.com/watch?v=two"
+            }));
+            Assert.That(opened.Media.Select(item => item.ProviderId), Is.All.EqualTo("youtube"));
+            Assert.That(opened.Media[0].Duration, Is.EqualTo(TimeSpan.FromSeconds(61)));
+        });
+    }
+
+    [Test]
+    public void ReadOpenedLink_skips_incomplete_playlist_entries_without_losing_the_playlist()
+    {
+        const string json = """
+            {
+              "_type":"playlist",
+              "extractor_key":"YoutubeTab",
+              "entries":[
+                null,
+                {"id":"one","title":"First","url":"one","ie_key":"Youtube","duration":null},
+                {"id":"missing-title","url":"missing-title","ie_key":"Youtube"}
+              ]
+            }
+            """;
+
+        OpenedLink opened = YtdlpService.ReadOpenedLink(json, "https://www.youtube.com/playlist?list=PL123");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(opened.Media, Has.Count.EqualTo(1));
+            Assert.That(opened.Media[0].Title, Is.EqualTo("First"));
+            Assert.That(opened.Media[0].Duration, Is.Null);
+        });
+    }
+
+    [TestCase("https://www.youtube.com/playlist?list=PL123", true)]
+    [TestCase("https://www.youtube.com/watch?v=one&list=PL123", true)]
+    [TestCase("https://www.youtube.com/watch?v=one", false)]
+    [TestCase("https://vimeo.com/123?list=PL123", false)]
+    public void Youtube_playlist_links_are_recognised_before_metadata_is_read(string url, bool expected) =>
+        Assert.That(YtdlpService.IsYouTubePlaylist(url), Is.EqualTo(expected));
+
+    [Test]
+    public void Playlist_reads_are_complete_while_compact_searches_keep_their_limit()
+    {
+        IReadOnlyList<string> playlist = YtdlpService.GetFlatReadArguments("https://www.youtube.com/playlist?list=PL123", limit: null);
+        IReadOnlyList<string> search = YtdlpService.GetFlatReadArguments("ytsearch10:song", limit: 10);
+        IReadOnlyList<string> thirdPage = YtdlpService.GetFlatReadArguments("ytsearch36:song", offset: 24, take: 12);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(playlist, Does.Not.Contain("--playlist-end"));
+            Assert.That(search, Does.Contain("--playlist-end"));
+            Assert.That(search.SkipWhile(argument => argument != "--playlist-end").Skip(1).First(), Is.EqualTo("10"));
+            Assert.That(thirdPage.SkipWhile(argument => argument != "--playlist-start").Skip(1).First(), Is.EqualTo("25"));
+            Assert.That(thirdPage.SkipWhile(argument => argument != "--playlist-end").Skip(1).First(), Is.EqualTo("36"));
+        });
+    }
+
+    [Test]
     public void ReadDetails_offers_only_what_the_media_really_has()
     {
         const string json = """

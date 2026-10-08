@@ -33,7 +33,6 @@ public sealed class SearchQueryTests
 
     [TestCase("song creator:band", "Studio")]
     [TestCase("song creator:\"someone else\"", "Concert")]
-    [TestCase("song kind:video", "Concert,Unknown")]
     [TestCase("song longer:10m", "Concert")]
     [TestCase("song shorter:1h30m1s longer:0:03:00", "Studio,Concert")]
     [TestCase("song before:2020", "Studio")]
@@ -43,6 +42,18 @@ public sealed class SearchQueryTests
         var named = new Dictionary<MediaSearchResult, string> { [Studio] = "Studio", [Concert] = "Concert", [Unknown] = "Unknown" };
 
         Assert.That(string.Join(',', SearchQuery.Parse(text).Keep([Studio, Concert, Unknown]).Select(result => named[result])), Is.EqualTo(kept));
+    }
+
+    [Test]
+    public void Kind_is_ordinary_search_text_not_a_filter()
+    {
+        SearchQuery query = SearchQuery.Parse("song kind:video");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(query.Words, Is.EqualTo("song kind:video"));
+            Assert.That(query.Keep([Studio, Concert, Unknown]), Is.EqualTo(new[] { Studio, Concert, Unknown }));
+        });
     }
 
     [Test]
@@ -56,19 +67,123 @@ public sealed class SearchQueryTests
         });
     }
 
-    [Test]
-    public void Source_terms_are_taken_out_once_they_are_finished_and_name_a_real_source()
+    [TestCase("longer:NaN")]
+    [TestCase("shorter:1e9999")]
+    [TestCase("longer:999999999999999999999999999999999999999999m")]
+    public void Invalid_or_overlarge_durations_stay_ordinary_text_without_throwing(string text)
     {
-        static bool IsSource(string name) => name is "vimeo" or "YouTube Music";
+        SearchExtraction extraction = SearchQuery.ExtractTerms(text, includeUnfinished: true, _ => false);
 
         Assert.Multiple(() =>
         {
-            Assert.That(SearchQuery.TakeSources("source:vimeo night song", false, IsSource), Is.EqualTo(("night song", new[] { "vimeo" })));
-            Assert.That(SearchQuery.TakeSources("night song source:vim", false, IsSource).Sources, Is.Empty, "half a name, still being typed");
-            Assert.That(SearchQuery.TakeSources("night song source:vimeo", false, IsSource).Sources, Is.Empty, "may yet be more to it");
-            Assert.That(SearchQuery.TakeSources("night song source:vimeo", true, IsSource), Is.EqualTo(("night song ", new[] { "vimeo" })));
-            Assert.That(SearchQuery.TakeSources("source:\"YouTube Music\" source:vimeo song", false, IsSource).Sources, Is.EqualTo(new[] { "YouTube Music", "vimeo" }));
-            Assert.That(SearchQuery.TakeSources("source:nowhere song", true, IsSource), Is.EqualTo(("source:nowhere song", Array.Empty<string>())));
+            Assert.That(extraction.Text, Is.EqualTo(text));
+            Assert.That(extraction.Terms, Is.Empty);
+            Assert.That(SearchQuery.Parse(text).Words, Is.EqualTo(text));
+        });
+    }
+
+    [Test]
+    public void Extracting_terms_preserves_unrecognised_punctuation_between_tokens()
+    {
+        SearchExtraction extraction = SearchQuery.ExtractTerms(
+            "rock\"n\"roll source:youtube ", includeUnfinished: true, name => name == "youtube");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(extraction.Text, Is.EqualTo("rock\"n\"roll"));
+            Assert.That(extraction.Sources, Is.EqualTo(new[] { "youtube" }));
+        });
+    }
+
+    [Test]
+    public void Every_editable_term_and_known_source_is_extracted_without_losing_other_text()
+    {
+        SearchExtraction extraction = SearchQuery.ExtractTerms(
+            "night \"blue moon\" -live creator:\"The Band\" longer:10m shorter:2h before:2024 after:2020-06 source:vimeo kind:video later:",
+            includeUnfinished: true,
+            name => name == "vimeo");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(extraction.Text.Trim(), Is.EqualTo("night kind:video later:"));
+            Assert.That(extraction.Terms, Is.EqualTo(new[]
+            {
+                new ParsedSearchTerm(SearchTermType.ExactPhrase, "blue moon"),
+                new ParsedSearchTerm(SearchTermType.ExcludedWord, "live"),
+                new ParsedSearchTerm(SearchTermType.Creator, "The Band"),
+                new ParsedSearchTerm(SearchTermType.LongerThan, "10m"),
+                new ParsedSearchTerm(SearchTermType.ShorterThan, "2h"),
+                new ParsedSearchTerm(SearchTermType.Before, "2024"),
+                new ParsedSearchTerm(SearchTermType.After, "2020-06")
+            }));
+            Assert.That(extraction.Sources, Is.EqualTo(new[] { "vimeo" }));
+        });
+    }
+
+    [Test]
+    public void Editable_terms_and_sources_have_one_canonical_text_form()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(SearchQuery.Write(SearchTermType.ExactPhrase, "blue moon"), Is.EqualTo("\"blue moon\""));
+            Assert.That(SearchQuery.Write(SearchTermType.ExcludedWord, "live"), Is.EqualTo("-live"));
+            Assert.That(SearchQuery.Write(SearchTermType.Creator, "The Band"), Is.EqualTo("creator:\"The Band\""));
+            Assert.That(SearchQuery.Write(SearchTermType.LongerThan, "10m"), Is.EqualTo("longer:10m"));
+            Assert.That(SearchQuery.WriteSource("YouTube Music"), Is.EqualTo("source:\"YouTube Music\""));
+        });
+    }
+
+    [Test]
+    public void Extracted_terms_round_trip_through_the_query_parser()
+    {
+        string text = string.Join(' ', new[]
+        {
+            "song",
+            SearchQuery.Write(SearchTermType.ExactPhrase, "night song"),
+            SearchQuery.Write(SearchTermType.ExcludedWord, "live"),
+            SearchQuery.Write(SearchTermType.Creator, "The Band"),
+            SearchQuery.Write(SearchTermType.LongerThan, "3m"),
+            SearchQuery.Write(SearchTermType.Before, "2020")
+        });
+
+        Assert.That(SearchQuery.Parse(text).Keep([Studio, Concert, Unknown]), Is.EqualTo(new[] { Studio }));
+    }
+
+    [Test]
+    public void Quoted_term_values_round_trip_without_losing_quotes_or_backslashes()
+    {
+        const string creator = "Dwayne \"The Rock\" Johnson";
+        const string phrase = "C:\\Music \"Live\"";
+        string text = $"{SearchQuery.Write(SearchTermType.Creator, creator)} {SearchQuery.Write(SearchTermType.ExactPhrase, phrase)}";
+
+        SearchExtraction extraction = SearchQuery.ExtractTerms(text, includeUnfinished: true, _ => false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(SearchQuery.Write(SearchTermType.Creator, creator), Is.EqualTo("creator:\"Dwayne \\\"The Rock\\\" Johnson\""));
+            Assert.That(SearchQuery.Write(SearchTermType.ExactPhrase, phrase), Is.EqualTo("\"C:\\\\Music \\\"Live\\\"\""));
+            Assert.That(extraction.Text, Is.Empty);
+            Assert.That(extraction.Terms, Is.EqualTo(new[]
+            {
+                new ParsedSearchTerm(SearchTermType.Creator, creator),
+                new ParsedSearchTerm(SearchTermType.ExactPhrase, phrase)
+            }));
+        });
+    }
+
+    [Test]
+    public void Excluded_values_that_look_like_labelled_terms_stay_exclusions()
+    {
+        const string value = "source:youtube";
+        string written = SearchQuery.Write(SearchTermType.ExcludedWord, value);
+
+        SearchExtraction extraction = SearchQuery.ExtractTerms(written, includeUnfinished: true, _ => true);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(written, Is.EqualTo("-\"source:youtube\""));
+            Assert.That(extraction.Sources, Is.Empty);
+            Assert.That(extraction.Terms, Is.EqualTo(new[] { new ParsedSearchTerm(SearchTermType.ExcludedWord, value) }));
         });
     }
 }

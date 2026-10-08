@@ -35,7 +35,7 @@
         <Style x:Key="OptionHeaderStyle" TargetType="Grid">
             <Setter Property="MinHeight" Value="40" />
         </Style>
-        <Style x:Key="OptionComboBoxStyle" TargetType="ComboBox">
+        <Style x:Key="OptionComboBoxStyle" BasedOn="{StaticResource RoundedComboBoxStyle}" TargetType="ComboBox">
             <Setter Property="MinWidth" Value="170" />
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="VerticalAlignment" Value="Center" />
@@ -53,17 +53,27 @@
     </Page.Resources>
 
     <Grid>
-        <!-- Home: what was picked and exported lately, so it's one click to carry on. -->
+        <!-- Home: what the page is for, and what was exported lately. -->
         <ScrollViewer
+            x:Name="homeScroller"
+            HorizontalContentAlignment="Stretch"
             HorizontalScrollBarVisibility="Disabled"
+            VerticalContentAlignment="Stretch"
             VerticalScrollBarVisibility="Auto"
             Visibility="{x:Bind converters:Show.Unless(ViewModel.HasMedia), Mode=OneWay}">
-            <StackPanel
+            <Grid
+                Width="{Binding ViewportWidth, ElementName=homeScroller, Mode=OneWay}"
                 MaxWidth="{StaticResource PageMaxWidth}"
                 Padding="24"
-                Spacing="32">
+                HorizontalAlignment="Center"
+                RowSpacing="24">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-                <Border Style="{StaticResource CardStyle}" Visibility="{x:Bind converters:Show.WhenText(ClipboardLink), Mode=OneWay}">
+                <Border Grid.Row="0" Style="{StaticResource CardStyle}" Visibility="{x:Bind converters:Show.WhenText(ClipboardLink), Mode=OneWay}">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -87,21 +97,18 @@
                     </Grid>
                 </Border>
 
-                <StackPanel Spacing="12" Visibility="{x:Bind Search.HasRecents, Mode=OneWay}">
-                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Jump back in" />
-                    <ItemsRepeater Margin="-8,0" ItemsSource="{x:Bind Search.Recents}">
-                        <ItemsRepeater.Layout>
-                            <media:JustifiedLayout RowHeight="140" Spacing="4" />
-                        </ItemsRepeater.Layout>
-                        <ItemsRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="models:MediaSearchResult">
-                                <media:MediaCard Chosen="Recent_Chosen" Media="{x:Bind}" />
-                            </DataTemplate>
-                        </ItemsRepeater.ItemTemplate>
-                    </ItemsRepeater>
-                </StackPanel>
+                <controls:EmptyStateView Grid.Row="1" Glyph="&#xE896;" Title="Choose media to export">
+                    <controls:EmptyStateView.ActionContent>
+                        <Button Click="StartSearching_Click" Style="{StaticResource AccentButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontSize="14" Glyph="&#xE721;" />
+                                <TextBlock Text="Start searching" />
+                            </StackPanel>
+                        </Button>
+                    </controls:EmptyStateView.ActionContent>
+                </controls:EmptyStateView>
 
-                <StackPanel Spacing="12" Visibility="{x:Bind Activity.HasJobs, Mode=OneWay}">
+                <StackPanel Grid.Row="2" Spacing="12" Visibility="{x:Bind Activity.HasJobs, Mode=OneWay}">
                     <Grid>
                         <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Recent exports" />
                         <HyperlinkButton
@@ -119,7 +126,7 @@
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1"
                                     ColumnSpacing="16"
-                                    CornerRadius="8">
+                                    CornerRadius="12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -130,7 +137,7 @@
                                         Width="{x:Bind media:MediaViewBase.WidthFor(Media.Kind, 36)}"
                                         Height="36"
                                         Background="{ThemeResource ControlFillColorSecondaryBrush}"
-                                        CornerRadius="4">
+                                        CornerRadius="6">
                                         <Image Stretch="UniformToFill">
                                             <Image.Source>
                                                 <BitmapImage UriSource="{x:Bind Media.ThumbnailUri}" />
@@ -184,39 +191,7 @@
                     </ItemsControl>
                 </StackPanel>
 
-                <!-- First run: nothing picked or exported yet. -->
-                <StackPanel
-                    MaxWidth="420"
-                    Margin="0,64,0,0"
-                    HorizontalAlignment="Center"
-                    Spacing="12"
-                    Visibility="{x:Bind converters:Show.WhenNone(Search.HasRecents, Activity.HasJobs), Mode=OneWay}">
-                    <Image
-                        Width="72"
-                        Height="72"
-                        Source="ms-appx:///Assets/App/Square44x44Logo.targetsize-256_altform-unplated.png" />
-                    <TextBlock
-                        HorizontalAlignment="Center"
-                        Style="{StaticResource SubtitleTextBlockStyle}"
-                        Text="Save video and audio to keep" />
-                    <TextBlock
-                        HorizontalAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="Search, or paste a link from almost any video or music site."
-                        TextAlignment="Center"
-                        TextWrapping="Wrap" />
-                    <Button
-                        Margin="0,8,0,0"
-                        HorizontalAlignment="Center"
-                        Click="StartSearching_Click"
-                        Style="{StaticResource AccentButtonStyle}">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon FontSize="16" Glyph="&#xE721;" />
-                            <TextBlock Text="Start searching" />
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
-            </StackPanel>
+            </Grid>
         </ScrollViewer>
 
         <!-- Editor: the player and clips on the left, how to save it on the right. -->
@@ -288,7 +263,7 @@
                                         Width="16"
                                         Height="16"
                                         VerticalAlignment="Center"
-                                        Source="{x:Bind ViewModel.Media.ProviderId, Mode=OneWay}" />
+                                        Icon="{x:Bind ViewModel.Media.ProviderId, Mode=OneWay}" />
                                     <TextBlock
                                         VerticalAlignment="Center"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -311,7 +286,7 @@
                                     Padding="6,1,6,2"
                                     VerticalAlignment="Center"
                                     Background="{ThemeResource ControlFillColorSecondaryBrush}"
-                                    CornerRadius="4"
+                                    CornerRadius="8"
                                     Visibility="{x:Bind converters:Show.WhenSet(ViewModel.Media.Duration), Mode=OneWay}">
                                     <TextBlock FontSize="12" Text="{x:Bind converters:Format.Duration(ViewModel.Media.Duration), Mode=OneWay}" />
                                 </Border>
@@ -417,6 +392,7 @@
                                         MinWidth="130"
                                         AutomationProperties.Name="Save the clips as"
                                         SelectedIndex="{x:Bind local:ExportPage.JoinIndex(ViewModel.JoinClips), Mode=TwoWay, BindBack=SetJoinIndex}"
+                                        Style="{StaticResource RoundedComboBoxStyle}"
                                         ToolTipService.ToolTip="Save the clips joined into one file, or as a file each"
                                         Visibility="{x:Bind ViewModel.HasSeveralClips, Mode=OneWay}">
                                         <x:String>As one file</x:String>
@@ -475,7 +451,7 @@
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1"
-                    CornerRadius="8">
+                    CornerRadius="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
@@ -603,7 +579,7 @@
                         Background="{ThemeResource LayerFillColorAltBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="0,1,0,0"
-                        CornerRadius="0,0,7,7"
+                        CornerRadius="0,0,11,11"
                         Spacing="12">
                         <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
@@ -695,7 +671,7 @@
                                 Background="{ThemeResource ControlFillColorDefaultBrush}"
                                 BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
                                 BorderThickness="1"
-                                CornerRadius="4"
+                                CornerRadius="8"
                                 Visibility="{x:Bind ViewModel.IsRunning, Mode=OneWay}">
                                 <Border
                                     Background="{ThemeResource AccentFillColorDefaultBrush}"
@@ -808,6 +784,19 @@
                 </Grid>
             </Grid>
         </ScrollViewer>
+
+        <Rectangle
+            Height="14"
+            VerticalAlignment="Top"
+            Canvas.ZIndex="3"
+            Fill="{StaticResource TopPageFadeBrush}"
+            IsHitTestVisible="False" />
+        <Rectangle
+            Height="14"
+            VerticalAlignment="Bottom"
+            Canvas.ZIndex="3"
+            Fill="{StaticResource BottomPageFadeBrush}"
+            IsHitTestVisible="False" />
 
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup>

@@ -39,7 +39,7 @@
                 </Border>
             </Grid>
 
-            <!-- What it is; where it's from and who made it; how played and how old it is. -->
+            <!-- What it is; where it's from and who made it; its views and age. -->
             <StackPanel Grid.Row="1" Spacing="3">
                 <TextBlock
                     FontWeight="SemiBold"
@@ -57,7 +57,7 @@
                         Width="14"
                         Height="14"
                         VerticalAlignment="Center"
-                        Source="{x:Bind ProviderId}" />
+                        Icon="{x:Bind ProviderId}" />
                     <TextBlock
                         Grid.Column="1"
                         VerticalAlignment="Center"

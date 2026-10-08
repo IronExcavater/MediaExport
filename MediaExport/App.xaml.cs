@@ -16,9 +16,11 @@ namespace MediaExport;
 
 public partial class App : Application
 {
+    private readonly IServiceProvider _services;
+
     public static new App Current => (App)Application.Current;
 
-    public IServiceProvider Services { get; }
+    public AppViewModels ViewModels { get; private set; } = null!;
     public Window MainWindow { get; private set; } = null!;
 
     public App()
@@ -28,8 +30,8 @@ public partial class App : Application
         Environment.SetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--autoplay-policy=no-user-gesture-required");
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddMediaExport(GetDataFolder());
-        Services = serviceCollection.BuildServiceProvider();
-        IconView.SourceIcons = Services.GetServices<IMediaSearchProvider>().ToDictionary(source => source.Id, source => source.Icon);
+        _services = serviceCollection.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
+        IconView.SourceIcons = _services.GetServices<IMediaSearchProvider>().ToDictionary(source => source.Id, source => source.Icon);
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
@@ -38,7 +40,8 @@ public partial class App : Application
         UnhandledException += (_, error) =>
             File.AppendAllText(Path.Combine(GetDataFolder(), "crash.log"), $"{DateTime.Now:u} {error.Exception}{Environment.NewLine}{Environment.NewLine}");
 
-        MainWindow = new MainWindow();
+        ViewModels = _services.GetRequiredService<AppViewModels>();
+        MainWindow = _services.GetRequiredService<MainWindow>();
         MainWindow.Activate();
     }
 

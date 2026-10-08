@@ -71,11 +71,11 @@ public sealed partial class ExportViewModel : ObservableObject
         _isRestoring = true; // Otherwise each choice restored here would save the rest before they're restored.
 
         VideoFormat = new ChoiceGroup(
-            [new Choice("mp4", "MP4", "Plays everywhere"), new Choice("mkv", "MKV", "Keeps every track"), new Choice("webm", "WebM", "Open, often smaller")],
+            [new Choice("mp4", ".mp4", "Plays everywhere"), new Choice("mkv", ".mkv", "Keeps every track"), new Choice("webm", ".webm", "Open, often smaller")],
             saved.VideoFormat);
         AudioFormat = new ChoiceGroup(
-            [new Choice("mp3", "MP3", "Plays everywhere"), new Choice("m4a", "M4A", "Apple devices"), new Choice("opus", "Opus", "Smallest"),
-             new Choice("flac", "FLAC", "Lossless"), new Choice("wav", "WAV", "Uncompressed")],
+            [new Choice("mp3", ".mp3", "Plays everywhere"), new Choice("m4a", ".m4a", "Apple devices"), new Choice("opus", ".opus", "Smallest"),
+             new Choice("flac", ".flac", "Lossless"), new Choice("wav", ".wav", "Uncompressed")],
             saved.AudioFormat);
         VideoQuality = new ChoiceGroup(VideoQualities(null), Key(saved.VideoQuality));
         AudioQuality = new ChoiceGroup(

@@ -48,19 +48,19 @@ public static class Format
         return whole == 0 ? "today" : whole == 1 ? $"1 {unit} ago" : $"{whole} {unit}s ago";
     }
 
-    /// <summary>What's known of how much something's been played and when it went up: <c>1.9M plays · 2 years ago</c>.</summary>
+    /// <summary>What's known of how often something was viewed and when it went up: <c>1.9M views · 2 years ago</c>.</summary>
     public static string Meta(long? views, DateTimeOffset? published) => string.Join("  ·  ", new[]
     {
-        views is { } count ? $"{Count(count)} plays" : null,
+        views is { } count ? $"{Count(count)} {(count == 1 ? "view" : "views")}" : null,
         published is { } then ? Age(then, DateTimeOffset.Now) : null
     }.Where(part => part is not null));
 
     /// <summary>
-    /// The same in full, for a tooltip: <c>21,315,080 plays · 17 April 2013</c>. A date known only roughly is given as its year.
+    /// The same in full, for a tooltip: <c>21,315,080 views · 17 April 2013</c>. A date known only roughly is given as its year.
     /// </summary>
     public static string MetaDetail(long? views, DateTimeOffset? published, bool isDateApproximate) => string.Join("  ·  ", new[]
     {
-        views is { } count ? $"{count.ToString("N0", CultureInfo.CurrentCulture)} plays" : null,
+        views is { } count ? $"{count.ToString("N0", CultureInfo.CurrentCulture)} {(count == 1 ? "view" : "views")}" : null,
         published is not { } then ? null
             : isDateApproximate ? $"around {then.LocalDateTime.Year}"
             : then.LocalDateTime.ToString("d MMMM yyyy", CultureInfo.CurrentCulture)

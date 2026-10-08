@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
 using MediaExport.Activity;
+using MediaExport.Controls;
 using MediaExport.Core.Exporting;
 using MediaExport.Core.Media.Models;
 using MediaExport.Core.Media.Providers;
 using MediaExport.Search;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -38,9 +38,9 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public ExportViewModel ViewModel { get; } = App.Current.Services.GetRequiredService<ExportViewModel>();
-    public SearchViewModel Search { get; } = App.Current.Services.GetRequiredService<SearchViewModel>();
-    public ActivityViewModel Activity { get; } = App.Current.Services.GetRequiredService<ActivityViewModel>();
+    public ExportViewModel ViewModel { get; } = App.Current.ViewModels.Export;
+    public SearchViewModel Search { get; } = App.Current.ViewModels.Search;
+    public ActivityViewModel Activity { get; } = App.Current.ViewModels.Activity;
 
     private static MainWindow Shell => (MainWindow)App.Current.MainWindow;
 
@@ -87,8 +87,6 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
         await Shell.OpenLinkAsync(link);
     }
 
-    private void Recent_Chosen(object? sender, MediaSearchResult media) => Shell.Open(media);
-
     private void SeeAllExports_Click(object sender, RoutedEventArgs args) => Shell.GoToActivity();
 
     private void StartSearching_Click(object sender, RoutedEventArgs args) => Shell.FocusSearch();
@@ -131,7 +129,7 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
         menu.Items.Clear();
         foreach (SubtitleChoice choice in ViewModel.Subtitles)
         {
-            var item = new ToggleMenuFlyoutItem { Text = choice.Track.Name, IsChecked = choice.IsSelected };
+            ToggleMenuFlyoutItem item = ChoiceMenu.Toggle(choice.Track.Name, choice, "\uE8BA", choice.IsSelected);
             item.Click += (_, _) => choice.IsSelected = item.IsChecked;
             menu.Items.Add(item);
         }

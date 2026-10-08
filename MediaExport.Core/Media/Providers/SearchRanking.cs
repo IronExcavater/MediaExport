@@ -24,7 +24,7 @@ public static class SearchRanking
     /// <summary>
     /// How well a result answers a search, from 0 to 1: whether its title and maker say the words searched
     /// for, how high its own source placed it (sources know things the words don't), and how much it's been
-    /// played, which tells one source's best match from another's.
+    /// viewed, which helps compare one source's best match with another's.
     /// </summary>
     /// <param name="place">Where its source put it, from 0.</param>
     /// <param name="of">How many results that source gave.</param>
@@ -38,15 +38,15 @@ public static class SearchRanking
         double inEither = words.Count(word => Says(result.Title, word) || Says(result.Creator, word)) / (double)words.Length;
         double asPhrase = Says(result.Title, query.Trim()) ? 1 : 0;
         double placed = 1 - place / (double)Math.Max(1, of);
-        // Each tenfold more plays counts the same again, up to a billion; unknown counts sit in the middle.
-        double played = result.Views is { } views ? Math.Min(1, Math.Log10(views + 1) / 9) : 0.5;
-        return 0.25 * inEither + 0.1 * inTitle + 0.1 * asPhrase + 0.3 * placed + 0.25 * played;
+        // Each tenfold increase in views counts the same again, up to a billion; unknown counts sit in the middle.
+        double viewed = result.Views is { } views ? Math.Min(1, Math.Log10(views + 1) / 9) : 0.5;
+        return 0.25 * inEither + 0.1 * inTitle + 0.1 * asPhrase + 0.3 * placed + 0.25 * viewed;
     }
 
     /// <summary>
     /// One list from each source's results, ranked by <paramref name="sort"/> and then laid out by
     /// <paramref name="arrangement"/>. By relevance a single source keeps its own order. Results without a
-    /// play count go last by popularity, and those without a date go last when arranged by date, either way round.
+    /// view count go last by popularity, and those without a date go last when arranged by date, either way round.
     /// </summary>
     public static IReadOnlyList<MediaSearchResult> Order(
         IReadOnlyList<IReadOnlyList<MediaSearchResult>> sources,

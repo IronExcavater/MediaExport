@@ -1,7 +1,6 @@
 // Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -18,7 +17,7 @@ public sealed partial class ActivityPage : Page
         InitializeComponent();
     }
 
-    public ActivityViewModel ViewModel { get; } = App.Current.Services.GetRequiredService<ActivityViewModel>();
+    public ActivityViewModel ViewModel { get; } = App.Current.ViewModels.Activity;
 
     private static MainWindow Shell => (MainWindow)App.Current.MainWindow;
 

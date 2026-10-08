@@ -9,6 +9,7 @@
     xmlns:media="using:MediaExport.Media.Controls"
     xmlns:models="using:MediaExport.Core.Media.Models"
     Background="Transparent"
+    Loaded="Page_Loaded"
     NavigationCacheMode="Required">
 
     <Page.Resources>
@@ -21,9 +22,9 @@
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
             <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="12,0,8,0" />
-            <Setter Property="Height" Value="34" />
-            <Setter Property="CornerRadius" Value="17" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="CornerRadius" Value="15" />
             <Setter Property="FocusVisualMargin" Value="-3" />
             <Setter Property="UseSystemFocusVisuals" Value="True" />
             <Setter Property="Template">
@@ -43,6 +44,7 @@
                                 Opacity="0" />
                             <ContentPresenter
                                 Padding="{TemplateBinding Padding}"
+                                HorizontalContentAlignment="Center"
                                 VerticalContentAlignment="Center"
                                 Content="{TemplateBinding Content}"
                                 Foreground="{TemplateBinding Foreground}" />
@@ -96,130 +98,205 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- What was searched and how much came back; on the right, back to every source in one go. -->
-        <Grid MinHeight="40" ColumnSpacing="12">
+        <!-- How much came back, level with the way back to every source on the right. -->
+        <Grid MinHeight="32" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock
-                VerticalAlignment="Bottom"
+                VerticalAlignment="Center"
                 Style="{StaticResource SubtitleTextBlockStyle}"
-                Text="{x:Bind ViewModel.Heading, Mode=OneWay}"
+                Text="{x:Bind ViewModel.Summary, Mode=OneWay}"
                 TextTrimming="CharacterEllipsis" />
-            <TextBlock
-                Grid.Column="1"
-                Margin="0,0,0,3"
-                VerticalAlignment="Bottom"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Text="{x:Bind ViewModel.Summary, Mode=OneWay}" />
-            <!--
-                While every source is searched this just says so; once some are left out it becomes the way back.
-                A button that's always there would have nothing to do most of the time.
-            -->
             <StackPanel
-                Grid.Column="2"
+                Grid.Column="1"
                 VerticalAlignment="Center"
                 Orientation="Horizontal"
-                Spacing="8"
-                Visibility="{x:Bind ViewModel.AreAllPicked, Mode=OneWay}">
-                <FontIcon
-                    FontSize="14"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Glyph="&#xE774;" />
-                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Searching everywhere" />
-            </StackPanel>
-            <Button
-                Grid.Column="2"
-                VerticalAlignment="Center"
-                Command="{x:Bind ViewModel.PickAllCommand}"
-                Style="{StaticResource AccentButtonStyle}"
-                ToolTipService.ToolTip="Search every source again"
-                Visibility="{x:Bind converters:Show.Unless(ViewModel.AreAllPicked), Mode=OneWay}">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <FontIcon FontSize="14" Glyph="&#xE774;" />
-                    <TextBlock Text="Search everywhere" />
+                Spacing="8">
+                <StackPanel
+                    Orientation="Horizontal"
+                    Spacing="2"
+                    Visibility="{x:Bind ViewModel.HasPages, Mode=OneWay}">
+                    <Button
+                        Width="30"
+                        Height="30"
+                        Padding="0"
+                        AutomationProperties.Name="Previous page"
+                        Command="{x:Bind ViewModel.PreviousPageCommand}">
+                        <FontIcon FontSize="12" Glyph="&#xE76B;" />
+                    </Button>
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.PageChoices, Mode=OneWay}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="2" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:SearchPageChoice">
+                                <Grid MinWidth="30" Height="30">
+                                    <TextBlock
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Text="{x:Bind Label}"
+                                        Visibility="{x:Bind converters:Show.When(IsEllipsis)}" />
+                                    <ToggleButton
+                                        MinWidth="30"
+                                        Height="30"
+                                        Padding="7,0"
+                                        AutomationProperties.Name="{x:Bind Label}"
+                                        Click="Page_Click"
+                                        Content="{x:Bind Label}"
+                                        IsChecked="{x:Bind IsCurrent}"
+                                        IsEnabled="{x:Bind converters:Show.Not(IsCurrent)}"
+                                        Tag="{x:Bind Number}"
+                                        Visibility="{x:Bind converters:Show.Unless(IsEllipsis)}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button
+                        Width="30"
+                        Height="30"
+                        Padding="0"
+                        AutomationProperties.Name="Next page"
+                        Command="{x:Bind ViewModel.NextPageCommand}">
+                        <FontIcon FontSize="12" Glyph="&#xE76C;" />
+                    </Button>
                 </StackPanel>
-            </Button>
+                <ToggleButton
+                    Height="30"
+                    VerticalAlignment="Center"
+                    Command="{x:Bind ViewModel.PickAllCommand}"
+                    IsChecked="{x:Bind ViewModel.AreAllPicked, Mode=OneWay}"
+                    Style="{StaticResource SourcePillStyle}"
+                    ToolTipService.ToolTip="Select every source">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon FontSize="13" Glyph="&#xE774;" />
+                        <TextBlock Text="Everywhere" />
+                    </StackPanel>
+                </ToggleButton>
+            </StackPanel>
         </Grid>
 
         <!--
             Where to look, in place of the title bar's one source: the sources picked, which to begin with is all of them.
-            They wrap onto another line when the window's too narrow for one. Each keeps room for its count,
-            so the row doesn't reflow as results arrive.
+            They wrap onto another line when the window's too narrow for one.
         -->
         <ItemsControl
             Grid.Row="1"
-            Margin="0,0,0,-8"
+            Margin="0,0,0,-4"
             ItemsPanel="{StaticResource WrapPanelTemplate}"
             ItemsSource="{x:Bind ViewModel.Sources}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="local:SourceFilter">
                     <ToggleButton
-                        Margin="0,0,8,8"
+                        Margin="0,0,3,3"
                         AutomationProperties.Name="{x:Bind Provider.DisplayName}"
                         IsChecked="{x:Bind IsPicked, Mode=TwoWay}"
                         Style="{StaticResource SourcePillStyle}"
                         ToolTipService.ToolTip="Search just this source, or add it to the ones picked">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
                             <controls:IconView
-                                Width="18"
-                                Height="18"
+                                Width="15"
+                                Height="15"
                                 VerticalAlignment="Center"
                                 Icon="{x:Bind Provider.Icon}" />
                             <TextBlock VerticalAlignment="Center" Text="{x:Bind Provider.DisplayName}" />
-                            <!-- How many of the results on the page are this source's. -->
-                            <TextBlock
-                                MinWidth="14"
-                                VerticalAlignment="Center"
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                Text="{x:Bind Count, Mode=OneWay}" />
                         </StackPanel>
                     </ToggleButton>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <ProgressBar
+        <ScrollViewer
             Grid.Row="2"
-            VerticalAlignment="Top"
-            IsIndeterminate="True"
-            Visibility="{x:Bind ViewModel.IsSearching, Mode=OneWay}" />
-
-        <StackPanel
-            Grid.Row="2"
-            MaxWidth="420"
-            Margin="0,72,0,0"
-            HorizontalAlignment="Center"
-            Spacing="12"
-            Visibility="{x:Bind ViewModel.HasMessage, Mode=OneWay}">
-            <FontIcon
-                FontSize="40"
-                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                Glyph="&#xE721;" />
-            <TextBlock
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Text="{x:Bind ViewModel.Message, Mode=OneWay}"
-                TextAlignment="Center"
-                TextWrapping="Wrap" />
-        </StackPanel>
-
-        <!--
-            A feed of cards in rows of one height, each card as wide as its picture's shape: 16:9 for video, square for a cover.
-        -->
-        <ScrollViewer Grid.Row="2" Margin="-8,0,-8,0">
-            <ItemsRepeater Margin="0,0,0,24" ItemsSource="{x:Bind ViewModel.Results}">
+            Margin="-4,0"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Disabled"
+            Visibility="{x:Bind ViewModel.IsShowingSkeletons, Mode=OneWay}">
+            <ItemsRepeater ItemsSource="{x:Bind ViewModel.LoadingSlots}">
                 <ItemsRepeater.Layout>
-                    <media:JustifiedLayout RowHeight="180" Spacing="4" />
+                    <UniformGridLayout
+                        ItemsStretch="Fill"
+                        MaximumRowsOrColumns="4"
+                        MinColumnSpacing="8"
+                        MinItemHeight="204"
+                        MinItemWidth="220"
+                        MinRowSpacing="14" />
                 </ItemsRepeater.Layout>
                 <ItemsRepeater.ItemTemplate>
-                    <DataTemplate x:DataType="models:MediaSearchResult">
-                        <media:MediaCard Chosen="Result_Chosen" Media="{x:Bind}" />
+                    <DataTemplate x:DataType="x:Int32">
+                        <media:MediaSkeletonView />
                     </DataTemplate>
                 </ItemsRepeater.ItemTemplate>
             </ItemsRepeater>
         </ScrollViewer>
+
+        <controls:EmptyStateView
+            Grid.Row="2"
+            Glyph="&#xE721;"
+            Title="{x:Bind ViewModel.EmptyTitle, Mode=OneWay}"
+            Visibility="{x:Bind ViewModel.HasEmptyState, Mode=OneWay}">
+            <controls:EmptyStateView.ActionContent>
+                <StackPanel Spacing="8" Visibility="{x:Bind converters:Show.WhenAll(ViewModel.IsBlank, Search.HasRecentSearches), Mode=OneWay}">
+                    <TextBlock HorizontalAlignment="Center" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Recent searches" />
+                    <ItemsControl ItemsPanel="{StaticResource WrapPanelTemplate}" ItemsSource="{x:Bind Search.RecentSearches}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <Button
+                                    Margin="0,0,6,6"
+                                    Click="RecentSearch_Click"
+                                    Tag="{x:Bind}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon
+                                            FontSize="14"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Glyph="&#xE81C;" />
+                                        <TextBlock Text="{x:Bind}" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </controls:EmptyStateView.ActionContent>
+        </controls:EmptyStateView>
+
+        <!--
+            A feed of cards in rows of one height, each card as wide as its picture's shape: 16:9 for video, square for a cover.
+        -->
+        <ScrollViewer
+            x:Name="resultsScroll"
+            Grid.Row="2"
+            Margin="-8,0,-8,0"
+            Visibility="{x:Bind converters:Show.Unless(ViewModel.IsShowingSkeletons), Mode=OneWay}">
+            <ItemsRepeater ItemsSource="{x:Bind ViewModel.Results}">
+                    <ItemsRepeater.Layout>
+                        <media:JustifiedLayout RowHeight="180" Spacing="4" />
+                    </ItemsRepeater.Layout>
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate x:DataType="models:MediaSearchResult">
+                            <media:MediaCard Chosen="Result_Chosen" Media="{x:Bind}" />
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
+        </ScrollViewer>
+        <Rectangle
+            Grid.Row="2"
+            Height="14"
+            VerticalAlignment="Top"
+            Canvas.ZIndex="2"
+            Fill="{StaticResource TopPageFadeBrush}"
+            IsHitTestVisible="False"
+            Visibility="{x:Bind converters:Show.Unless(ViewModel.HasEmptyState), Mode=OneWay}" />
+        <Rectangle
+            Grid.Row="2"
+            Height="14"
+            VerticalAlignment="Bottom"
+            Canvas.ZIndex="2"
+            Fill="{StaticResource BottomPageFadeBrush}"
+            IsHitTestVisible="False"
+            Visibility="{x:Bind converters:Show.Unless(ViewModel.HasEmptyState), Mode=OneWay}" />
     </Grid>
 </Page>

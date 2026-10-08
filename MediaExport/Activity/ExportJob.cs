@@ -59,7 +59,7 @@ public sealed partial class ExportJob : ObservableObject
     public ExportOptions Options { get; }
     public DateTimeOffset? FinishedAt { get; private set; }
 
-    /// <summary>What was exported, e.g. "MP4 1080p, no sound" or "MP3 320 kbps, 2 clips".</summary>
+    /// <summary>What was exported, e.g. ".mp4 1080p, no sound" or ".mp3 320 kbps, 2 clips".</summary>
     public string Summary
     {
         get
@@ -70,7 +70,7 @@ public sealed partial class ExportJob : ObservableObject
                 { IncludeVideo: false, AudioBitrate: int kbps } => $"{kbps} kbps",
                 _ => "best quality"
             };
-            var parts = new List<string> { $"{Options.Format.ToUpperInvariant()} {quality}" };
+            var parts = new List<string> { $".{Options.Format.ToLowerInvariant()} {quality}" };
             if (Options is { IncludeVideo: true, IncludeAudio: false })
                 parts.Add("no sound");
             if (Options.Clips.Count > 0)

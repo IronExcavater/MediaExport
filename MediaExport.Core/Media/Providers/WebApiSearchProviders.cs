@@ -15,33 +15,68 @@ namespace MediaExport.Core.Media.Providers;
 /// <summary>Sources yt-dlp can download from but not search (or not search well), searched through their web APIs instead.</summary>
 public abstract class WebApiSearchProvider(HttpClient http) : IMediaSearchProvider
 {
-    protected const int ResultCount = 10;
-
     public abstract string Id { get; }
     public abstract string DisplayName { get; }
     public abstract string Icon { get; }
+    public virtual bool SupportsPaging => true;
+    public virtual bool SupportsPopular => true;
 
     protected HttpClient Http { get; } = http;
 
-    protected abstract string GetSearchUrl(string query, SearchSort sort);
+    protected abstract string GetSearchUrl(string query, SearchSort sort, int offset, int take);
+
+    protected virtual string? GetPopularUrl(int offset, int take) => null;
 
     /// <summary>The search request; sources that want more than a link (a token, say) add it here.</summary>
-    protected virtual Task<HttpRequestMessage> CreateRequestAsync(string query, SearchSort sort, CancellationToken cancellationToken) =>
-        Task.FromResult(new HttpRequestMessage(HttpMethod.Get, GetSearchUrl(query, sort)));
+    protected virtual Task<HttpRequestMessage> CreateRequestAsync(string query, SearchSort sort, int offset, int take, CancellationToken cancellationToken) =>
+        Task.FromResult(new HttpRequestMessage(HttpMethod.Get, GetSearchUrl(query, sort, offset, take)));
+
+    protected virtual Task<HttpRequestMessage?> CreatePopularRequestAsync(int offset, int take, CancellationToken cancellationToken) =>
+        Task.FromResult(GetPopularUrl(offset, take) is { } url ? new HttpRequestMessage(HttpMethod.Get, url) : null);
 
     protected abstract IEnumerable<MediaSearchResult> ReadResults(JsonElement root);
 
     public async Task<IReadOnlyList<MediaSearchResult>> SearchAsync(
         string query,
         SearchSort sort = SearchSort.Relevance,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int limit = 10)
     {
         if (string.IsNullOrWhiteSpace(query))
             return [];
 
-        using HttpRequestMessage request = await CreateRequestAsync(query.Trim(), sort, cancellationToken);
+        return (await SearchAsync(query, sort, offset: 0, take: limit, cancellationToken)).Results;
+    }
+
+    public async Task<SearchResultPage> SearchAsync(
+        string query,
+        SearchSort sort,
+        int offset,
+        int take,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return new SearchResultPage([], false);
+
+        offset = Math.Max(0, offset);
+        take = Math.Clamp(take, 1, 50);
+        using HttpRequestMessage request = await CreateRequestAsync(query.Trim(), sort, offset, take, cancellationToken);
         using JsonDocument document = await GetJsonAsync(request, cancellationToken);
-        return await CompleteAsync(ReadResults(document.RootElement).Take(ResultCount).ToArray(), cancellationToken);
+        IReadOnlyList<MediaSearchResult> results = await CompleteAsync(ReadResults(document.RootElement).Take(take).ToArray(), cancellationToken);
+        return new SearchResultPage(results, SupportsPaging && results.Count == take);
+    }
+
+    public virtual async Task<SearchResultPage> PopularAsync(int offset, int take, CancellationToken cancellationToken = default)
+    {
+        offset = Math.Max(0, offset);
+        take = Math.Clamp(take, 1, 50);
+        using HttpRequestMessage? request = await CreatePopularRequestAsync(offset, take, cancellationToken);
+        if (request is null)
+            return new SearchResultPage([], false);
+
+        using JsonDocument document = await GetJsonAsync(request, cancellationToken);
+        IReadOnlyList<MediaSearchResult> results = await CompleteAsync(ReadResults(document.RootElement).Take(take).ToArray(), cancellationToken);
+        return new SearchResultPage(results, SupportsPaging && results.Count == take);
     }
 
     /// <summary>Fills in what the search itself left out, for sources that need a second look to say it.</summary>
@@ -117,20 +152,27 @@ public abstract class WebApiSearchProvider(HttpClient http) : IMediaSearchProvid
 }
 
 /// <summary>Songs, searched the way YouTube Music's own page does; they play and export as YouTube videos.</summary>
-public sealed class YouTubeMusicSearchProvider(HttpClient http) : WebApiSearchProvider(http)
+public sealed class YouTubeMusicSearchProvider : WebApiSearchProvider
 {
     // Asks for songs only, leaving out albums, artists, playlists and videos.
     private const string SongsOnly = "EgWKAQIIAWoKEAkQBRAKEAMQBA%3D%3D";
+    private readonly YouTubeCharts _charts;
+
+    public YouTubeMusicSearchProvider(HttpClient http) : this(http, new YouTubeCharts(http)) { }
+
+    public YouTubeMusicSearchProvider(HttpClient http, YouTubeCharts charts) : base(http) => _charts = charts;
 
     public override string Id => "youtubemusic";
     public override string DisplayName => "YouTube Music";
     public override string Icon => "youtube-music";
+    public override bool SupportsPaging => false;
+    public override bool SupportsPopular => true;
 
-    protected override string GetSearchUrl(string query, SearchSort sort) => "https://music.youtube.com/youtubei/v1/search?prettyPrint=false";
+    protected override string GetSearchUrl(string query, SearchSort sort, int offset, int take) => "https://music.youtube.com/youtubei/v1/search?prettyPrint=false";
 
-    protected override async Task<HttpRequestMessage> CreateRequestAsync(string query, SearchSort sort, CancellationToken cancellationToken)
+    protected override async Task<HttpRequestMessage> CreateRequestAsync(string query, SearchSort sort, int offset, int take, CancellationToken cancellationToken)
     {
-        HttpRequestMessage request = await base.CreateRequestAsync(query, sort, cancellationToken);
+        HttpRequestMessage request = await base.CreateRequestAsync(query, sort, offset, take, cancellationToken);
         request.Method = HttpMethod.Post;
         request.Content = new StringContent(
             $$$"""{"context":{"client":{"clientName":"WEB_REMIX","clientVersion":"1.20240101.01.00"}},"params":"{{{SongsOnly}}}","query":"{{{JavaScriptEncoder.Default.Encode(query)}}}"}""",
@@ -167,6 +209,27 @@ public sealed class YouTubeMusicSearchProvider(HttpClient http) : WebApiSearchPr
         }
     }
 
+    public override async Task<SearchResultPage> PopularAsync(int offset, int take, CancellationToken cancellationToken = default)
+    {
+        (IReadOnlyList<YouTubeChartEntry> entries, bool hasMore) = await _charts.GetAsync(offset, take, cancellationToken);
+        return new SearchResultPage(entries.Select(entry =>
+        {
+            string url = $"https://music.youtube.com/watch?v={Uri.EscapeDataString(entry.Id)}";
+            return new MediaSearchResult(
+                entry.Id,
+                url,
+                entry.Thumbnail,
+                entry.Title,
+                entry.Creator,
+                entry.Duration,
+                MediaKind.Audio,
+                entry.ChannelId is { } channel ? $"https://music.youtube.com/channel/{Uri.EscapeDataString(channel)}" : null,
+                EmbedLinks.For(Id, entry.Id, url),
+                Id,
+                entry.Views);
+        }).ToArray(), hasMore);
+    }
+
     private static IEnumerable<JsonElement> Runs(JsonElement song, int column) =>
         Items(At(song, "flexColumns", column, "musicResponsiveListItemFlexColumnRenderer", "text", "runs"));
 
@@ -192,8 +255,11 @@ public sealed class MixcloudSearchProvider(HttpClient http) : WebApiSearchProvid
     public override string Icon => "mixcloud";
 
     // Its search has one order, and doesn't say how often a show's been played.
-    protected override string GetSearchUrl(string query, SearchSort sort) =>
-        $"https://api.mixcloud.com/search/?q={Uri.EscapeDataString(query)}&type=cloudcast&limit={ResultCount}";
+    protected override string GetSearchUrl(string query, SearchSort sort, int offset, int take) =>
+        $"https://api.mixcloud.com/search/?q={Uri.EscapeDataString(query)}&type=cloudcast&limit={take}&offset={offset}";
+
+    protected override string GetPopularUrl(int offset, int take) =>
+        $"https://api.mixcloud.com/popular/hot/?limit={take}&offset={offset}";
 
     protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
     {
@@ -232,12 +298,32 @@ public sealed class VimeoSearchProvider(HttpClient http) : WebApiSearchProvider(
     public override string DisplayName => "Vimeo";
     public override string Icon => "vimeo";
 
-    protected override string GetSearchUrl(string query, SearchSort sort) =>
-        $"https://api.vimeo.com/videos?query={Uri.EscapeDataString(query)}&per_page={ResultCount}"
+    protected override string GetSearchUrl(string query, SearchSort sort, int offset, int take) =>
+        $"https://api.vimeo.com/videos?query={Uri.EscapeDataString(query)}&per_page={take}&page={offset / take + 1}"
         + $"&sort={(sort == SearchSort.Popularity ? "plays" : "relevant")}&direction=desc"
         + "&fields=uri,name,link,duration,created_time,stats.plays,pictures.sizes.link,pictures.sizes.width,user.name,user.link";
 
-    protected override async Task<HttpRequestMessage> CreateRequestAsync(string query, SearchSort sort, CancellationToken cancellationToken)
+    protected override string GetPopularUrl(int offset, int take) =>
+        $"https://api.vimeo.com/videos?per_page={take}&page={offset / take + 1}&sort=plays&direction=desc"
+        + "&fields=uri,name,link,duration,created_time,stats.plays,pictures.sizes.link,pictures.sizes.width,user.name,user.link";
+
+    protected override async Task<HttpRequestMessage> CreateRequestAsync(string query, SearchSort sort, int offset, int take, CancellationToken cancellationToken)
+    {
+        await EnsureTokenAsync(cancellationToken);
+        HttpRequestMessage request = await base.CreateRequestAsync(query, sort, offset, take, cancellationToken);
+        request.Headers.Authorization = new AuthenticationHeaderValue("jwt", _token);
+        return request;
+    }
+
+    protected override async Task<HttpRequestMessage?> CreatePopularRequestAsync(int offset, int take, CancellationToken cancellationToken)
+    {
+        await EnsureTokenAsync(cancellationToken);
+        HttpRequestMessage request = (await base.CreatePopularRequestAsync(offset, take, cancellationToken))!;
+        request.Headers.Authorization = new AuthenticationHeaderValue("jwt", _token);
+        return request;
+    }
+
+    private async Task EnsureTokenAsync(CancellationToken cancellationToken)
     {
         if (_token is null || DateTime.UtcNow - _tokenTime > TokenLife)
         {
@@ -248,10 +334,6 @@ public sealed class VimeoSearchProvider(HttpClient http) : WebApiSearchProvider(
             _token = Text(document.RootElement, "token") ?? throw new InvalidOperationException("Vimeo didn't allow a search.");
             _tokenTime = DateTime.UtcNow;
         }
-
-        HttpRequestMessage request = await base.CreateRequestAsync(query, sort, cancellationToken);
-        request.Headers.Authorization = new AuthenticationHeaderValue("jwt", _token);
-        return request;
     }
 
     protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
@@ -289,9 +371,13 @@ public sealed class DailymotionSearchProvider(HttpClient http) : WebApiSearchPro
     public override string DisplayName => "Dailymotion";
     public override string Icon => "dailymotion";
 
-    protected override string GetSearchUrl(string query, SearchSort sort) =>
-        $"https://api.dailymotion.com/videos?search={Uri.EscapeDataString(query)}&limit={ResultCount}"
+    protected override string GetSearchUrl(string query, SearchSort sort, int offset, int take) =>
+        $"https://api.dailymotion.com/videos?search={Uri.EscapeDataString(query)}&limit={take}&page={offset / take + 1}"
         + $"&sort={(sort == SearchSort.Popularity ? "visited" : "relevance")}"
+        + "&fields=id,title,duration,thumbnail_480_url,owner.screenname,owner.url,url,views_total,created_time";
+
+    protected override string GetPopularUrl(int offset, int take) =>
+        $"https://api.dailymotion.com/videos?limit={take}&page={offset / take + 1}&sort=visited"
         + "&fields=id,title,duration,thumbnail_480_url,owner.screenname,owner.url,url,views_total,created_time";
 
     protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
@@ -327,11 +413,30 @@ public sealed class BilibiliSearchProvider(HttpClient http) : WebApiSearchProvid
     public override string DisplayName => "Bilibili";
     public override string Icon => "bilibili";
 
-    protected override string GetSearchUrl(string query, SearchSort sort) =>
-        $"https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword={Uri.EscapeDataString(query)}&page_size={ResultCount}"
+    protected override string GetSearchUrl(string query, SearchSort sort, int offset, int take) =>
+        $"https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword={Uri.EscapeDataString(query)}&page_size={take}&page={offset / take + 1}"
         + $"&order={(sort == SearchSort.Popularity ? "click" : "totalrank")}";
 
-    protected override async Task<HttpRequestMessage> CreateRequestAsync(string query, SearchSort sort, CancellationToken cancellationToken)
+    protected override string GetPopularUrl(int offset, int take) =>
+        $"https://api.bilibili.com/x/web-interface/popular?ps={take}&pn={offset / take + 1}";
+
+    protected override async Task<HttpRequestMessage> CreateRequestAsync(string query, SearchSort sort, int offset, int take, CancellationToken cancellationToken)
+    {
+        await EnsureVisitorAsync(cancellationToken);
+        HttpRequestMessage request = await base.CreateRequestAsync(query, sort, offset, take, cancellationToken);
+        AddVisitor(request);
+        return request;
+    }
+
+    protected override async Task<HttpRequestMessage?> CreatePopularRequestAsync(int offset, int take, CancellationToken cancellationToken)
+    {
+        await EnsureVisitorAsync(cancellationToken);
+        HttpRequestMessage request = (await base.CreatePopularRequestAsync(offset, take, cancellationToken))!;
+        AddVisitor(request);
+        return request;
+    }
+
+    private async Task EnsureVisitorAsync(CancellationToken cancellationToken)
     {
         if (_visitor is null)
         {
@@ -339,37 +444,51 @@ public sealed class BilibiliSearchProvider(HttpClient http) : WebApiSearchProvid
             using JsonDocument document = await GetJsonAsync(visit, cancellationToken);
             _visitor = Text(At(document.RootElement, "data"), "b_3") ?? throw new InvalidOperationException("Bilibili didn't allow a search.");
         }
+    }
 
-        HttpRequestMessage request = await base.CreateRequestAsync(query, sort, cancellationToken);
+    private void AddVisitor(HttpRequestMessage request)
+    {
         request.Headers.Add("Cookie", $"buvid3={_visitor}");
         request.Headers.Referrer = new Uri("https://www.bilibili.com/");
-        return request;
     }
 
     protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
     {
-        foreach (JsonElement video in Items(At(root, "data", "result")))
+        JsonElement result = At(root, "data", "result");
+        foreach (JsonElement video in Items(result.ValueKind == JsonValueKind.Array ? result : At(root, "data", "list")))
         {
             if (Text(video, "bvid") is not { Length: > 0 } id)
                 continue;
 
             string url = $"https://www.bilibili.com/video/{Uri.EscapeDataString(id)}";
+            JsonElement owner = At(video, "owner");
+            JsonElement stats = At(video, "stat");
+            string? creator = Text(video, "author") ?? Text(owner, "name");
+            long? uploader = Count(video, "mid") ?? Count(owner, "mid");
             yield return new MediaSearchResult(
                 id,
                 url,
-                // Pictures come without a scheme: //i1.hdslb.com/…
-                Link("https:" + Text(video, "pic")),
+                BilibiliPicture(Text(video, "pic")),
                 // The words searched for are marked up in the title: <em class="keyword">…</em>
                 WebUtility.HtmlDecode(Regex.Replace(Text(video, "title") ?? url, "<[^>]+>", "")),
-                Text(video, "author"),
-                Clock(Text(video, "duration")),
+                creator,
+                Seconds(video, "duration") ?? Clock(Text(video, "duration")),
                 MediaKind.Video,
-                Count(video, "mid") is { } uploader ? $"https://space.bilibili.com/{uploader}" : null,
+                uploader is { } uploaderId ? $"https://space.bilibili.com/{uploaderId}" : null,
                 EmbedLinks.For(Id, id, url),
                 Id,
-                Count(video, "play"),
+                Count(video, "play") ?? Count(stats, "view") ?? Count(stats, "vv"),
                 Date(Number(video, "pubdate")));
         }
+    }
+
+    private static Uri? BilibiliPicture(string? picture)
+    {
+        if (picture?.StartsWith("//", StringComparison.Ordinal) == true)
+            picture = "https:" + picture;
+        else if (picture?.StartsWith("http://", StringComparison.OrdinalIgnoreCase) == true)
+            picture = "https://" + picture[7..];
+        return Link(picture);
     }
 }
 
@@ -388,10 +507,15 @@ public sealed class NiconicoSearchProvider(HttpClient http) : WebApiSearchProvid
     public override string Icon => "niconico";
 
     // It can't order by relevance, so that gives the most watched matches too.
-    protected override string GetSearchUrl(string query, SearchSort sort) =>
+    protected override string GetSearchUrl(string query, SearchSort sort, int offset, int take) =>
         $"https://snapshot.search.nicovideo.jp/api/v2/snapshot/video/contents/search?q={Uri.EscapeDataString(query)}"
         + "&targets=title,description,tags&fields=contentId,title,lengthSeconds,thumbnailUrl,viewCounter,startTime,userId"
-        + $"&_sort=-viewCounter&_limit={ResultCount}&_context=MediaExport";
+        + $"&_sort=-viewCounter&_offset={offset}&_limit={take}&_context=MediaExport";
+
+    protected override string GetPopularUrl(int offset, int take) =>
+        "https://snapshot.search.nicovideo.jp/api/v2/snapshot/video/contents/search?q=*"
+        + "&targets=title,description,tags&fields=contentId,title,lengthSeconds,thumbnailUrl,viewCounter,startTime,userId"
+        + $"&_sort=-viewCounter&_offset={offset}&_limit={take}&_context=MediaExport";
 
     protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
     {
@@ -445,14 +569,21 @@ public sealed class NiconicoSearchProvider(HttpClient http) : WebApiSearchProvid
 
 public sealed class InternetArchiveSearchProvider(HttpClient http) : WebApiSearchProvider(http)
 {
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _creators = new();
+
     public override string Id => "internetarchive";
     public override string DisplayName => "Internet Archive";
     public override string Icon => "internet-archive";
 
-    protected override string GetSearchUrl(string query, SearchSort sort) =>
+    protected override string GetSearchUrl(string query, SearchSort sort, int offset, int take) =>
         $"https://archive.org/advancedsearch.php?q={Uri.EscapeDataString($"({query}) AND mediatype:(movies OR audio)")}"
-        + $"&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=mediatype&fl[]=downloads&fl[]=date&fl[]=publicdate&rows={ResultCount}&output=json"
+        + $"&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=mediatype&fl[]=downloads&fl[]=date&fl[]=publicdate&rows={take}&page={offset / take + 1}&output=json"
         + (sort == SearchSort.Popularity ? "&sort[]=downloads+desc" : "");
+
+    protected override string GetPopularUrl(int offset, int take) =>
+        $"https://archive.org/advancedsearch.php?q={Uri.EscapeDataString("mediatype:(movies OR audio)")}"
+        + $"&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=mediatype&fl[]=downloads&fl[]=date&fl[]=publicdate&rows={take}&page={offset / take + 1}&output=json"
+        + "&sort[]=downloads+desc";
 
     protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
     {
@@ -477,6 +608,48 @@ public sealed class InternetArchiveSearchProvider(HttpClient http) : WebApiSearc
                 Count(item, "downloads"),
                 // When the thing itself is from, if the item says; otherwise when it was put up.
                 Date(Text(item, "date")) ?? Date(Text(item, "publicdate")));
+        }
+    }
+
+    protected override async Task<IReadOnlyList<MediaSearchResult>> CompleteAsync(
+        IReadOnlyList<MediaSearchResult> results,
+        CancellationToken cancellationToken) =>
+        await Task.WhenAll(results.Select(async result =>
+        {
+            if (result.Creator is not null)
+                return result;
+
+            string? creator = await CreatorAsync(result.Identity, cancellationToken);
+            return creator is null
+                ? result
+                : result with
+                {
+                    Creator = creator,
+                    CreatorUrl = $"https://archive.org/search?query=creator%3A%22{Uri.EscapeDataString(creator)}%22"
+                };
+        }));
+
+    private async Task<string?> CreatorAsync(string id, CancellationToken cancellationToken)
+    {
+        if (_creators.TryGetValue(id, out string? known))
+            return known;
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://archive.org/metadata/{Uri.EscapeDataString(id)}");
+            using JsonDocument document = await GetJsonAsync(request, cancellationToken);
+            JsonElement metadata = At(document.RootElement, "metadata");
+            string? creator = FirstText(metadata, "creator")
+                ?? FirstText(metadata, "contributor")
+                ?? FirstText(metadata, "publisher")
+                ?? FirstText(metadata, "uploader");
+            if (creator is not null)
+                _creators[id] = creator;
+            return creator;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException)
+        {
+            return null;
         }
     }
 }

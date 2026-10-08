@@ -2,49 +2,13 @@
 <Application
     x:Class="MediaExport.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:MediaExport.Controls">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <ResourceDictionary Source="ms-appx:///Styles/AppStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <!--
-                The logo's cyan, whatever accent Windows uses: a grey or pale accent makes selected and accent
-                controls hard to read. Controls pick Light2 on dark and Dark1 on light, so both stay readable.
-            -->
-            <Color x:Key="SystemAccentColor">#14A596</Color>
-            <Color x:Key="SystemAccentColorLight1">#37C2B3</Color>
-            <Color x:Key="SystemAccentColorLight2">#5FD6C8</Color>
-            <Color x:Key="SystemAccentColorLight3">#9BE9DF</Color>
-            <Color x:Key="SystemAccentColorDark1">#0E8579</Color>
-            <Color x:Key="SystemAccentColorDark2">#09675E</Color>
-            <Color x:Key="SystemAccentColorDark3">#054A44</Color>
-
-            <!-- The widest pages get before they stop growing and centre instead. -->
-            <x:Double x:Key="PageMaxWidth">1400</x:Double>
-
-            <!-- A group of related settings on one surface. -->
-            <Style x:Key="CardStyle" TargetType="Border">
-                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="8" />
-                <Setter Property="Padding" Value="16" />
-            </Style>
-
-            <Style x:Key="SectionTitleStyle" BasedOn="{StaticResource BodyStrongTextBlockStyle}" TargetType="TextBlock" />
-
-            <Style x:Key="SecondaryTextStyle" BasedOn="{StaticResource CaptionTextBlockStyle}" TargetType="TextBlock">
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-                <Setter Property="TextWrapping" Value="Wrap" />
-            </Style>
-
-            <!-- A divider between sections of a card. -->
-            <Style x:Key="DividerStyle" TargetType="Rectangle">
-                <Setter Property="Height" Value="1" />
-                <Setter Property="Fill" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
-            </Style>
 
             <!-- Pills: one of a few short options, e.g. a quality or a format. -->
             <Style x:Key="ChipRadioButtonStyle" TargetType="RadioButton">
@@ -129,7 +93,7 @@
                 <Setter Property="Padding" Value="12,10" />
                 <Setter Property="HorizontalAlignment" Value="Stretch" />
                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="CornerRadius" Value="10" />
                 <Setter Property="FocusVisualMargin" Value="-3" />
                 <Setter Property="UseSystemFocusVisuals" Value="True" />
                 <Setter Property="Template">
@@ -202,10 +166,6 @@
                 </Setter>
             </Style>
 
-            <!-- Pills wrap onto more lines when there are many. -->
-            <ItemsPanelTemplate x:Key="WrapPanelTemplate">
-                <controls:WrapPanel />
-            </ItemsPanelTemplate>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

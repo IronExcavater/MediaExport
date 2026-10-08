@@ -56,6 +56,7 @@ public sealed class AppSettings
     public string? CookiesFromBrowser { get; set; } = "auto";
 
     public List<MediaSearchResult> RecentResults { get; set; } = [];
+    public List<string> RecentSearches { get; set; } = [];
     public List<ExportRecord> History { get; set; } = [];
 }
 

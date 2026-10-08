@@ -23,6 +23,18 @@ public sealed class ExportViewModelTests
         true);
 
     [Test]
+    public void File_format_choices_are_written_as_extensions()
+    {
+        ExportViewModel viewModel = Create(new FakeDownloader());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.VideoFormat.Items.Select(choice => choice.Label), Is.EqualTo(new[] { ".mp4", ".mkv", ".webm" }));
+            Assert.That(viewModel.AudioFormat.Items.Select(choice => choice.Label), Is.EqualTo(new[] { ".mp3", ".m4a", ".opus", ".flac", ".wav" }));
+        });
+    }
+
+    [Test]
     public async Task Choosing_media_checks_what_it_has_then_offers_just_that()
     {
         var downloader = new FakeDownloader();

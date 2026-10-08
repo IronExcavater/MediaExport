@@ -46,6 +46,17 @@ public sealed class AllSearchProviderTests
     }
 
     [Test]
+    public async Task A_page_search_asks_each_source_for_its_configured_share()
+    {
+        var source = new Source("source", Result("source", "Song"));
+        source.Answer();
+
+        await new AllSearchProvider([source], perSource: 48).SearchAsync("song");
+
+        Assert.That(source.LastLimit, Is.EqualTo(48));
+    }
+
+    [Test]
     public void Relevance_weighs_the_words_the_sources_own_order_and_plays()
     {
         MediaSearchResult exact = Result("a", "Blue Song", views: 1_000_000);
@@ -90,6 +101,7 @@ public sealed class AllSearchProviderTests
         public string DisplayName => id;
         public string Icon => id;
         public Exception? Failure { get; init; }
+        public int LastLimit { get; private set; }
 
         public void Answer()
         {
@@ -99,7 +111,10 @@ public sealed class AllSearchProviderTests
                 _answer.SetException(Failure);
         }
 
-        public Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, SearchSort sort = SearchSort.Relevance, CancellationToken cancellationToken = default) =>
-            _answer.Task;
+        public Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, SearchSort sort = SearchSort.Relevance, CancellationToken cancellationToken = default, int limit = 10)
+        {
+            LastLimit = limit;
+            return _answer.Task;
+        }
     }
 }

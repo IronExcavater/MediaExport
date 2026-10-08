@@ -5,8 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MediaExport.Core.Tooling;
 using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -21,18 +20,19 @@ public sealed partial class ToolViewModel(Tool tool, ToolchainService toolchain,
     public Uri SourceCode => new(Tool.SourceUrl);
     public bool HasWebsite => Website is not null;
 
-    /// <summary>Releases with a Windows build, newest first.</summary>
-    public ObservableCollection<ToolRelease> Releases { get; } = [];
-
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsInstalled), nameof(IsHealthy), nameof(IsMissing), nameof(IsManaged), nameof(VersionText), nameof(SourceText))]
+    [NotifyPropertyChangedFor(nameof(IsInstalled), nameof(IsHealthy), nameof(IsMissing), nameof(IsManaged), nameof(CanRemove), nameof(VersionText), nameof(SourceText))]
     [NotifyPropertyChangedFor(nameof(Latest), nameof(HasUpdate), nameof(PrimaryAction), nameof(HasPrimaryAction))]
     public partial ToolStatus? Status { get; private set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
-    [NotifyCanExecuteChangedFor(nameof(InstallCommand), nameof(InstallVersionCommand), nameof(RemoveCommand))]
+    [NotifyCanExecuteChangedFor(nameof(InstallCommand), nameof(RemoveCommand))]
     public partial bool IsWorking { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsHealthy), nameof(IsMissing), nameof(CanRemove), nameof(HasPrimaryAction))]
+    public partial bool IsChecking { get; private set; } = true;
 
     [ObservableProperty]
     public partial double Progress { get; private set; }
@@ -45,20 +45,23 @@ public sealed partial class ToolViewModel(Tool tool, ToolchainService toolchain,
     public partial string? Error { get; private set; }
 
     public bool IsInstalled => Status?.IsInstalled == true;
-    public bool IsHealthy => IsInstalled && !HasError;
-    public bool IsMissing => Status is { IsInstalled: false } && !HasError;
+    public bool IsHealthy => !IsChecking && IsInstalled && !HasError;
+    public bool IsMissing => !IsChecking && Status is { IsInstalled: false } && !HasError;
     public bool IsManaged => Status?.IsManaged == true;
+    public bool CanRemove => !IsChecking && IsManaged;
     public bool IsIdle => !IsWorking;
     public bool HasError => Error is not null;
-    public ToolRelease? Latest => Releases.FirstOrDefault();
+    /// <summary>The newest release there is to install, once it's been looked up.</summary>
+    public ToolRelease? Latest { get; private set; }
+
     public bool HasUpdate => IsInstalled && Latest is { } latest && Status?.Version is { } version && IsNewer(latest.Version, version);
 
-    /// <summary>The first line under the name: the version, or that it's missing.</summary>
+    /// <summary>Beside the name: the version, whether that's the newest, or that it's missing.</summary>
     public string VersionText => Status switch
     {
-        null => "Checking…",
+        null => string.Empty,
         { IsInstalled: false } => Tool.IsRequired ? "Not installed" : "Not installed (optional)",
-        { Version: { } version } => version,
+        { Version: { } version } => HasUpdate || Latest is null ? version : $"{version}, up to date",
         _ => "Installed"
     };
 
@@ -66,7 +69,7 @@ public sealed partial class ToolViewModel(Tool tool, ToolchainService toolchain,
     public string? SourceText => Error ?? Status switch
     {
         { IsManaged: true } => "Installed by MediaExport",
-        { Path: { } path } => $"Found at {path}",
+        { Path: { } path } => $"Found at {DisplayPath(path)}",
         _ => null
     };
 
@@ -78,34 +81,36 @@ public sealed partial class ToolViewModel(Tool tool, ToolchainService toolchain,
         _ => null
     };
 
-    public bool HasPrimaryAction => PrimaryAction is not null;
+    public bool HasPrimaryAction => !IsChecking && Status is not null && PrimaryAction is not null;
 
     public async Task RefreshAsync()
     {
+        IsChecking = true;
         Error = null;
+        ToolStatus? status = null;
         try
         {
-            Status = await toolchain.CheckAsync(Tool);
-            IReadOnlyList<ToolRelease> releases = await toolchain.GetReleasesAsync(Tool);
-            Releases.Clear();
-            foreach (ToolRelease release in releases)
-                Releases.Add(release);
+            status = await toolchain.CheckAsync(Tool);
+            ToolRelease? latest = await toolchain.GetLatestAsync(Tool);
+            Status = status;
+            Latest = latest;
         }
         catch (Exception exception)
         {
-            Error = $"Couldn't look for versions: {exception.Message}";
+            Status = status;
+            Error = $"Couldn't look for updates: {exception.Message}";
         }
-
-        RaiseReleaseState();
+        finally
+        {
+            IsChecking = false;
+            RaiseReleaseState();
+        }
     }
 
     private bool CanAct() => !IsWorking;
 
     [RelayCommand(CanExecute = nameof(CanAct))]
-    private Task InstallAsync() => RunAsync(() => toolchain.InstallAsync(Tool, null, new Progress<double>(ReportProgress)));
-
-    [RelayCommand(CanExecute = nameof(CanAct))]
-    private Task InstallVersionAsync(ToolRelease release) => RunAsync(() => toolchain.InstallAsync(Tool, release, new Progress<double>(ReportProgress)));
+    private Task InstallAsync() => RunAsync(() => toolchain.InstallAsync(Tool, new Progress<double>(ReportProgress)));
 
     [RelayCommand(CanExecute = nameof(CanAct))]
     private Task RemoveAsync() => RunAsync(() =>
@@ -136,10 +141,22 @@ public sealed partial class ToolViewModel(Tool tool, ToolchainService toolchain,
         }
         finally
         {
-            Status = await toolchain.CheckAsync(Tool);
-            IsWorking = false;
-            RaiseReleaseState();
-            changed();
+            try
+            {
+                Status = await toolchain.CheckAsync(Tool);
+            }
+            catch (Exception exception)
+            {
+                // Keep the action's error when there is one; it is the useful reason to retry. A failed
+                // follow-up probe must never leave the command permanently busy.
+                Error ??= $"Couldn't refresh status: {exception.Message}";
+            }
+            finally
+            {
+                IsWorking = false;
+                RaiseReleaseState();
+                changed();
+            }
         }
     }
 
@@ -149,6 +166,13 @@ public sealed partial class ToolViewModel(Tool tool, ToolchainService toolchain,
         OnPropertyChanged(nameof(HasUpdate));
         OnPropertyChanged(nameof(PrimaryAction));
         OnPropertyChanged(nameof(HasPrimaryAction));
+        OnPropertyChanged(nameof(VersionText));
+    }
+
+    internal static string DisplayPath(string path)
+    {
+        string extension = Path.GetExtension(path);
+        return extension.Length == 0 ? path : path[..^extension.Length] + extension.ToLowerInvariant();
     }
 
     // Tags are dates (yt-dlp) or semantic versions (FFmpeg, Deno); both compare part by part as numbers.

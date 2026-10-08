@@ -48,6 +48,27 @@ public sealed class WebApiSearchProviderTests
     }
 
     [Test]
+    public async Task Internet_Archive_uses_item_metadata_when_the_search_index_omits_the_creator()
+    {
+        var handler = new RouteResponse(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/advancedsearch.php" => """{"response":{"docs":[{"identifier":"reel","title":"Reel","mediatype":"movies"}]}}""",
+            "/metadata/reel" => """{"metadata":{"uploader":"Archive Curator"}}""",
+            _ => "{}"
+        });
+        var provider = new InternetArchiveSearchProvider(new HttpClient(handler));
+
+        MediaSearchResult result = (await provider.SearchAsync("reel")).Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Creator, Is.EqualTo("Archive Curator"));
+            Assert.That(result.CreatorUrl, Does.Contain("Archive%20Curator"));
+            Assert.That(handler.Paths, Does.Contain("/metadata/reel"));
+        });
+    }
+
+    [Test]
     public async Task Vimeo_searches_with_the_visitor_token()
     {
         var handler = new FixedResponse("""
@@ -95,6 +116,18 @@ public sealed class WebApiSearchProviderTests
     }
 
     [Test]
+    public void YouTube_Music_uses_chart_results_for_its_popular_feed()
+    {
+        var provider = new YouTubeMusicSearchProvider(Serve("{}"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(provider.SupportsPaging, Is.False);
+            Assert.That(provider.SupportsPopular, Is.True);
+        });
+    }
+
+    [Test]
     public async Task Mixcloud_shows_embed_by_their_path()
     {
         var provider = new MixcloudSearchProvider(Serve("""
@@ -134,6 +167,35 @@ public sealed class WebApiSearchProviderTests
     }
 
     [Test]
+    public async Task Bilibili_popular_items_read_their_nested_owner_stats_and_absolute_picture()
+    {
+        var provider = new BilibiliSearchProvider(Serve("""
+            {"data":{"b_3":"visitor","list":[{"bvid":"BV2","title":"Popular clip","pic":"http://i0.hdslb.com/cover.jpg","duration":91,"owner":{"name":"Maker","mid":8},"stat":{"view":970941}}]}}
+            """));
+
+        MediaSearchResult result = (await provider.PopularAsync(0, 12)).Results.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.ThumbnailUri, Is.EqualTo(new Uri("https://i0.hdslb.com/cover.jpg")));
+            Assert.That(result.Creator, Is.EqualTo("Maker"));
+            Assert.That(result.CreatorUrl, Is.EqualTo("https://space.bilibili.com/8"));
+            Assert.That(result.Views, Is.EqualTo(970941));
+            Assert.That(result.Duration, Is.EqualTo(TimeSpan.FromSeconds(91)));
+        });
+    }
+
+    [Test]
+    public async Task Mixcloud_popular_feed_uses_the_documented_hot_list()
+    {
+        var handler = new FixedResponse("{}");
+
+        await new MixcloudSearchProvider(new HttpClient(handler)).PopularAsync(0, 12);
+
+        Assert.That(handler.Paths.Single(), Is.EqualTo("/popular/hot/"));
+    }
+
+    [Test]
     public async Task Niconico_titles_are_decoded_twice()
     {
         var provider = new NiconicoSearchProvider(Serve("""
@@ -165,6 +227,49 @@ public sealed class WebApiSearchProviderTests
             .And.Exactly(1).Contains("_sort=-viewCounter"));
     }
 
+    [Test]
+    public async Task A_page_search_can_request_more_than_the_suggestion_limit()
+    {
+        var handler = new FixedResponse("{}");
+
+        await new DailymotionSearchProvider(new HttpClient(handler)).SearchAsync("clip", limit: 48);
+
+        Assert.That(handler.Queries.Single(), Does.Contain("limit=48"));
+    }
+
+    [Test]
+    public async Task Native_pages_use_the_requested_offset_and_take()
+    {
+        var handler = new FixedResponse("{}");
+        var provider = new DailymotionSearchProvider(new HttpClient(handler));
+        System.Reflection.MethodInfo? pagedSearch = provider.GetType().GetMethods()
+            .SingleOrDefault(method => method.Name == nameof(provider.SearchAsync)
+                && method.GetParameters().Any(parameter => parameter.Name == "offset")
+                && method.GetParameters().Any(parameter => parameter.Name == "take"));
+        Assert.That(pagedSearch, Is.Not.Null, "search providers expose real offset/take paging");
+
+        await (Task)pagedSearch!.Invoke(provider, ["clip", SearchSort.Relevance, 24, 12, CancellationToken.None])!;
+
+        Assert.That(handler.Queries.Single(), Does.Contain("page=3").And.Contain("limit=12"));
+    }
+
+    [Test]
+    public async Task Popular_pages_use_remote_paging_without_an_invented_search_term()
+    {
+        var handler = new FixedResponse("{}");
+        var http = new HttpClient(handler);
+
+        await new DailymotionSearchProvider(http).PopularAsync(offset: 24, take: 12);
+        await new InternetArchiveSearchProvider(http).PopularAsync(offset: 24, take: 12);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(handler.Queries, Has.All.Not.Contains("search="));
+            Assert.That(handler.Queries, Has.All.Not.Contains("technology"));
+            Assert.That(handler.Queries, Has.All.Contains("page=3"));
+        });
+    }
+
     [TestCase("1.9B plays", 1_900_000_000)]
     [TestCase("727K plays", 727_000)]
     [TestCase("812 plays", 812)]
@@ -181,11 +286,28 @@ public sealed class WebApiSearchProviderTests
 
         public List<string> Queries { get; } = [];
 
+        public List<string> Paths { get; } = [];
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Add($"{request.RequestUri!.Host} {request.Headers.Authorization}");
             Queries.Add(Uri.UnescapeDataString(request.RequestUri.Query));
+            Paths.Add(request.RequestUri.AbsolutePath);
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") });
+        }
+    }
+
+    private sealed class RouteResponse(Func<HttpRequestMessage, string> response) : HttpMessageHandler
+    {
+        public List<string> Paths { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Paths.Add(request.RequestUri!.AbsolutePath);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(response(request), Encoding.UTF8, "application/json")
+            });
         }
     }
 }

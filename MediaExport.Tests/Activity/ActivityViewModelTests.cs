@@ -32,7 +32,7 @@ public sealed class ActivityViewModelTests
             Assert.That(restored.Jobs, Has.Count.EqualTo(1));
             Assert.That(restored.Jobs[0].IsCompleted, Is.True);
             Assert.That(restored.Jobs[0].Status, Is.EqualTo("Saved to out"));
-            Assert.That(restored.Jobs[0].Summary, Is.EqualTo("MP4 720p"));
+            Assert.That(restored.Jobs[0].Summary, Is.EqualTo(".mp4 720p"));
         });
     }
 
@@ -70,7 +70,7 @@ public sealed class ActivityViewModelTests
             Assert.That(
                 ActivityViewModel.Group(jobs, "", now).Select(group => $"{group.Title}: {string.Join(", ", group.Select(job => job.Media.Title))}"),
                 Is.EqualTo(new[] { "Today: Morning song", "Yesterday: Evening song", "Earlier this week: Midweek clip", "Older: Old film" }));
-            Assert.That(ActivityViewModel.Group(jobs, "song MP4", now).Sum(group => group.Count), Is.EqualTo(2), "every word, in the title or the format");
+            Assert.That(ActivityViewModel.Group(jobs, "song .mp4", now).Sum(group => group.Count), Is.EqualTo(2), "every word, in the title or the format");
         });
     }
 

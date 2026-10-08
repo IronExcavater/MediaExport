@@ -16,6 +16,9 @@ using YtdlpClient = ManuHub.Ytdlp.NET.Ytdlp;
 
 namespace MediaExport.Core.Media.Ytdlp;
 
+/// <summary>A pasted link resolved to one item, or to the entries in a playlist.</summary>
+public sealed record OpenedLink(IReadOnlyList<MediaSearchResult> Media, MediaDetails? Details);
+
 public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloader
 {
     private const string OutputMarker = "__MEDIA_EXPORT_FILE__:";
@@ -25,16 +28,21 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
 
     /// <param name="limit">How many results to read; a search page would otherwise be read to its end.</param>
     public async Task<IReadOnlyList<YtdlpSearchResult>> SearchAsync(string searchTarget, int limit, CancellationToken cancellationToken = default)
+        => await SearchAsync(searchTarget, offset: 0, take: limit, cancellationToken);
+
+    public async Task<IReadOnlyList<YtdlpSearchResult>> SearchAsync(string searchTarget, int offset, int take, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(searchTarget))
             return [];
 
+        offset = Math.Max(0, offset);
+        take = Math.Max(1, take);
         cancellationToken.ThrowIfCancellationRequested();
-        return ReadSearchResults(await ReadSearchAsync(searchTarget, limit, cancellationToken));
+        return ReadSearchResults(await ReadSearchAsync(searchTarget, offset, take, cancellationToken));
     }
 
     // yt-dlp is run directly here: the library's metadata call can't be told when to stop, and reads a search page to its end.
-    private async Task<string> ReadSearchAsync(string target, int limit, CancellationToken cancellationToken)
+    private async Task<string> ReadSearchAsync(string target, int offset, int? take, CancellationToken cancellationToken)
     {
         var start = new ProcessStartInfo(tools.Locate("yt-dlp") ?? "yt-dlp.exe")
         {
@@ -45,13 +53,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8
         };
-        foreach (string argument in (string[])
-        [
-            "--dump-single-json", "--flat-playlist", "--playlist-end", $"{limit}", "--quiet", "--no-warnings", "--encoding", "utf-8",
-            // YouTube's results only say roughly how old a video is ("3 years ago"); this turns that into a date.
-            "--extractor-args", "youtubetab:approximate_date",
-            target
-        ])
+        foreach (string argument in GetFlatReadArguments(target, offset, take))
             start.ArgumentList.Add(argument);
 
         Process? started;
@@ -84,19 +86,65 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         }
     }
 
+    internal static IReadOnlyList<string> GetFlatReadArguments(string target, int? limit) => GetFlatReadArguments(target, 0, limit);
+
+    internal static IReadOnlyList<string> GetFlatReadArguments(string target, int offset, int? take)
+    {
+        var arguments = new List<string> { "--dump-single-json", "--flat-playlist" };
+        if (offset > 0)
+        {
+            arguments.Add("--playlist-start");
+            arguments.Add((offset + 1).ToString(CultureInfo.InvariantCulture));
+        }
+        if (take is { } count)
+        {
+            arguments.Add("--playlist-end");
+            arguments.Add((offset + count).ToString(CultureInfo.InvariantCulture));
+        }
+        arguments.AddRange([
+            "--quiet", "--no-warnings", "--encoding", "utf-8",
+            // YouTube's results only say roughly how old a video is ("3 years ago"); this turns that into a date.
+            "--extractor-args", "youtubetab:approximate_date", target
+        ]);
+        return arguments;
+    }
+
     /// <summary>Reads a link someone pasted: what it is, and what can be exported from it.</summary>
     public async Task<(MediaSearchResult Media, MediaDetails Details)> OpenLinkAsync(string url, CancellationToken cancellationToken = default)
     {
-        using JsonDocument document = JsonDocument.Parse(await ReadMetadataAsync(url, "That link couldn't be opened.", cancellationToken));
-        JsonElement root = document.RootElement;
-        if (GetString(root, "_type") == "playlist")
+        OpenedLink opened = await OpenLinkResultsAsync(url, cancellationToken);
+        if (opened.Media.Count != 1 || opened.Details is null)
             throw new InvalidOperationException("That's a playlist. Open one of its videos or tracks instead.");
+        return (opened.Media[0], opened.Details);
+    }
+
+    /// <summary>Reads a pasted link, expanding playlists into media that can each be opened and exported.</summary>
+    public async Task<OpenedLink> OpenLinkResultsAsync(string url, CancellationToken cancellationToken = default)
+    {
+        string json = IsYouTubePlaylist(url)
+            ? await ReadSearchAsync(url, offset: 0, take: null, cancellationToken)
+            : await ReadMetadataAsync(url, "That link couldn't be opened.", cancellationToken);
+        return ReadOpenedLink(json, url);
+    }
+
+    internal static OpenedLink ReadOpenedLink(string json, string url)
+    {
+        using JsonDocument document = JsonDocument.Parse(json);
+        JsonElement root = document.RootElement;
+        if (GetString(root, "_type") == "playlist" && root.TryGetProperty("entries", out JsonElement entries) && entries.ValueKind == JsonValueKind.Array)
+        {
+            MediaSearchResult[] playlistMedia = entries.EnumerateArray()
+                .Select(entry => ReadPlaylistEntry(entry, root))
+                .OfType<MediaSearchResult>()
+                .ToArray();
+            return new OpenedLink(playlistMedia, null);
+        }
 
         MediaDetails details = ReadDetails(root);
         string identity = GetString(root, "id") ?? url;
         // A link read by another address is still kept as it was given.
         string sourceUrl = Reachable(url) != url ? url : GetSourceUrl(root) ?? url;
-        string providerId = (GetString(root, "extractor_key") ?? "web").ToLowerInvariant() switch { "archiveorg" => "internetarchive", var key => key };
+        string providerId = ProviderId(root);
         var media = new MediaSearchResult(
             identity,
             sourceUrl,
@@ -109,8 +157,13 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
             EmbedLinks.For(providerId, identity, sourceUrl),
             providerId);
 
-        return (media, details);
+        return new OpenedLink([media], details);
     }
+
+    public static bool IsYouTubePlaylist(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out Uri? uri)
+        && (uri.Host.Equals("youtu.be", StringComparison.OrdinalIgnoreCase) || uri.Host.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase))
+        && Regex.IsMatch(uri.Query, @"(?:^|[?&])list=[^&]+", RegexOptions.IgnoreCase);
 
     public async Task<MediaDetails> InspectAsync(string sourceUrl, CancellationToken cancellationToken = default)
     {
@@ -518,6 +571,55 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         return results;
     }
 
+    private static MediaSearchResult? ReadPlaylistEntry(JsonElement entry, JsonElement playlist)
+    {
+        // Flat playlists may contain null/deleted/private placeholders. One unavailable entry must not
+        // prevent the usable entries around it from being shown.
+        if (entry.ValueKind != JsonValueKind.Object)
+            return null;
+
+        string? identity = GetString(entry, "id");
+        string? title = GetString(entry, "title");
+        if (string.IsNullOrWhiteSpace(identity) || string.IsNullOrWhiteSpace(title))
+            return null;
+
+        string providerId = ProviderId(entry, playlist);
+        string? candidate = GetSourceUrl(entry);
+        string? sourceUrl = Uri.TryCreate(candidate, UriKind.Absolute, out Uri? absolute) ? absolute.AbsoluteUri
+            : providerId == "youtube" ? $"https://www.youtube.com/watch?v={Uri.EscapeDataString(identity)}"
+            : null;
+        if (sourceUrl is null)
+            return null;
+
+        return new MediaSearchResult(
+            identity,
+            sourceUrl,
+            GetThumbnailUri(entry),
+            title,
+            GetString(entry, "uploader") ?? GetString(entry, "channel") ?? GetString(playlist, "uploader") ?? GetString(playlist, "channel"),
+            GetDuration(entry),
+            providerId == "soundcloud" ? MediaKind.Audio : MediaKind.Video,
+            GetString(entry, "channel_url") ?? GetString(entry, "uploader_url"),
+            EmbedLinks.For(providerId, identity, sourceUrl),
+            providerId,
+            GetNumber(entry, "view_count") is { } views ? (long)views : null,
+            GetNumber(entry, "timestamp") is { } time ? DateTimeOffset.FromUnixTimeSeconds((long)time) : null);
+    }
+
+    private static string ProviderId(JsonElement entry, JsonElement? fallback = null)
+    {
+        string key = GetString(entry, "extractor_key") ?? GetString(entry, "ie_key")
+            ?? (fallback is { } root ? GetString(root, "extractor_key") ?? GetString(root, "ie_key") : null)
+            ?? "web";
+        return key.ToLowerInvariant() switch
+        {
+            "archiveorg" => "internetarchive",
+            "youtubetab" or "youtubeplaylist" => "youtube",
+            "soundcloudset" or "soundcloudplaylist" => "soundcloud",
+            var provider => provider
+        };
+    }
+
     private static bool IsCodec(JsonElement format, string property) =>
         GetString(format, property) is { } codec && codec != "none";
 
@@ -566,7 +668,10 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
     }
 
     private static TimeSpan? GetDuration(JsonElement entry) =>
-        entry.TryGetProperty("duration", out JsonElement value) && value.TryGetDouble(out double seconds)
+        entry.ValueKind == JsonValueKind.Object
+        && entry.TryGetProperty("duration", out JsonElement value)
+        && value.ValueKind == JsonValueKind.Number
+        && value.TryGetDouble(out double seconds)
             ? TimeSpan.FromSeconds(seconds)
             : null;
 }

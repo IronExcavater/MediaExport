@@ -29,7 +29,7 @@ public sealed record Tool(
 
 public sealed record ToolRelease(string Version, string Tag, DateTimeOffset Published, string AssetUrl, long AssetSize);
 
-/// <param name="IsManaged">Installed by MediaExport, so it can be updated, switched or removed here.</param>
+/// <param name="IsManaged">Installed by MediaExport, so it can be updated or removed here.</param>
 public sealed record ToolStatus(Tool Tool, string? Path, string? Version, bool IsManaged)
 {
     public bool IsInstalled => Path is not null;
@@ -38,8 +38,8 @@ public sealed record ToolStatus(Tool Tool, string? Path, string? Version, bool I
 public sealed record ProcessResult(int ExitCode, string Output, string Error);
 
 /// <summary>
-/// Finds yt-dlp, FFmpeg and Deno, and installs, switches or removes copies MediaExport manages itself,
-/// straight from each project's GitHub releases. A managed copy wins over one on PATH.
+/// Finds yt-dlp, FFmpeg and Deno, and installs, updates or removes copies MediaExport manages itself,
+/// straight from each project's newest GitHub release. A managed copy wins over one on PATH.
 /// </summary>
 public sealed partial class ToolchainService
 {
@@ -49,7 +49,7 @@ public sealed partial class ToolchainService
     private readonly HttpClient _http;
     private readonly Func<string, IReadOnlyList<string>, CancellationToken, Task<ProcessResult>> _run;
     private readonly Func<string, string?> _resolveOnPath;
-    private readonly Dictionary<string, IReadOnlyList<ToolRelease>> _releases = [];
+    private readonly Dictionary<string, ToolRelease> _latest = [];
 
     public ToolchainService(string folder)
         : this(folder, CreateHttpClient(), RunProcessAsync, ResolveOnPath)
@@ -119,34 +119,35 @@ public sealed partial class ToolchainService
         return new ToolStatus(tool, path, version, isManaged);
     }
 
-    /// <summary>Recent releases with a Windows build, newest first. Cached for the session.</summary>
-    public async Task<IReadOnlyList<ToolRelease>> GetReleasesAsync(Tool tool, CancellationToken cancellationToken = default)
+    /// <summary>The newest release with a Windows build, or <c>null</c> if there's none. Remembered for the session.</summary>
+    public async Task<ToolRelease?> GetLatestAsync(Tool tool, CancellationToken cancellationToken = default)
     {
-        if (_releases.TryGetValue(tool.Id, out IReadOnlyList<ToolRelease>? known))
+        if (_latest.TryGetValue(tool.Id, out ToolRelease? known))
             return known;
 
+        // A page of recent ones: the very newest may be a draft, a pre-release, or not have a Windows build yet.
         GitHubRelease[] releases = await _http.GetFromJsonAsync(
-            $"https://api.github.com/repos/{tool.Repository}/releases?per_page=100",
+            $"https://api.github.com/repos/{tool.Repository}/releases?per_page=30",
             ToolchainJson.Default.GitHubReleaseArray,
             cancellationToken) ?? [];
 
         var pattern = new Regex(tool.AssetPattern, RegexOptions.IgnoreCase);
-        ToolRelease[] usable = releases
+        ToolRelease? latest = releases
             .Where(release => !release.Draft && !release.Prerelease)
             .Select(release => (release, asset: release.Assets.FirstOrDefault(asset => pattern.IsMatch(asset.Name))))
             .Where(pair => pair.asset is not null)
-            .Select(pair => new ToolRelease(
-                pair.release.Tag.TrimStart('v'), pair.release.Tag, pair.release.Published, pair.asset!.Url, pair.asset.Size))
-            .ToArray();
+            .Select(pair => new ToolRelease(pair.release.Tag.TrimStart('v'), pair.release.Tag, pair.release.Published, pair.asset!.Url, pair.asset.Size))
+            .FirstOrDefault();
 
-        _releases[tool.Id] = usable;
-        return usable;
+        if (latest is not null)
+            _latest[tool.Id] = latest;
+        return latest;
     }
 
-    /// <summary>Installs <paramref name="release"/> (the newest when <c>null</c>) as the managed copy, replacing any other version.</summary>
-    public async Task InstallAsync(Tool tool, ToolRelease? release, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+    /// <summary>Installs the newest release as the managed copy, replacing whichever version was there.</summary>
+    public async Task InstallAsync(Tool tool, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
-        release ??= (await GetReleasesAsync(tool, cancellationToken)).FirstOrDefault()
+        ToolRelease release = await GetLatestAsync(tool, cancellationToken)
             ?? throw new InvalidOperationException($"{tool.Name} has no Windows release to install.");
 
         string download = Path.Combine(Path.GetTempPath(), $"MediaExport-{tool.Id}-{Guid.NewGuid():N}{Path.GetExtension(release.AssetUrl)}");

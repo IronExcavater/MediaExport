@@ -15,69 +15,96 @@ using System.Threading.Tasks;
 
 namespace MediaExport.Search;
 
-/// <summary>A result or recent result, or (with no media) a line saying why there aren't any.</summary>
-/// <param name="Query">What was searched; the box keeps showing it while suggestions are highlighted.</param>
-public sealed record SearchSuggestion(MediaSearchResult? Media, bool IsRecent = false, string? Message = null, string Query = "")
+/// <summary>A line in the search box's list: a result, a search made before, or a message where results would be.</summary>
+/// <param name="Query">What the box shows while the line is highlighted: the search it belongs to, or for an earlier search, that search.</param>
+public sealed record SearchSuggestion(MediaSearchResult? Media, string? Message = null, string Query = "", bool IsRecentSearch = false)
 {
-    public bool IsMessage => Media is null;
+    public bool IsMessage => Media is null && !IsRecentSearch;
 
     // Suggestions are announced by screen readers using ToString.
-    public override string ToString() => Message ?? (IsRecent ? $"Recent: {Media}" : $"{Media}");
+    public override string ToString() => IsRecentSearch ? $"Searched before: {Query}" : Message ?? $"{Media}";
 }
 
 /// <summary>
-/// The title bar search: one source's results as you type, recent picks from it, and pasted links.
-/// Every source together is the Search page's (<see cref="ResultsViewModel"/>).
+/// The title bar search. A search is the words in the box, the labelled terms beside it as pills, and
+/// the source it's aimed at; here it's asked of one source as you type. Every source together is the
+/// Search page's (<see cref="ResultsViewModel"/>), which takes its words, terms and order from here.
 /// </summary>
 public sealed partial class SearchViewModel : ObservableObject
 {
     public const int RecentLimit = 24;
-    private const int RecentMatchLimit = 3;
+    private const int RecentSearchLimit = 12;
     private static readonly TimeSpan DebounceDelay = TimeSpan.FromMilliseconds(400);
 
     private readonly SettingsStore _settings;
-    private readonly YtdlpService _ytdlp;
+    private readonly Func<string, CancellationToken, Task<OpenedLink>> _openLink;
     private readonly Dictionary<string, MediaDetails> _linkDetails = [];
 
     // Each source's last results, so switching sources back and forth doesn't search again.
     private readonly Dictionary<string, (string Query, SearchSort Sort, SearchArrangement Arrangement, IReadOnlyList<MediaSearchResult> Results)> _results = [];
     private CancellationTokenSource? _search;
     private string? _shownQuery;
+    private bool _changingDraft;
 
     public SearchViewModel(IEnumerable<IMediaSearchProvider> providers, YtdlpService ytdlp, SettingsStore settings)
+        : this(providers, settings, ytdlp.OpenLinkResultsAsync)
+    {
+    }
+
+    internal SearchViewModel(
+        IEnumerable<IMediaSearchProvider> providers,
+        SettingsStore settings,
+        Func<string, CancellationToken, Task<OpenedLink>> openLink)
     {
         _settings = settings;
-        _ytdlp = ytdlp;
+        _openLink = openLink;
         Providers = providers.ToArray();
         SelectedProvider = Providers.FirstOrDefault(provider => provider.Id == settings.Current.ProviderId) ?? Providers[0];
         // A saved order this version no longer has falls back to the usual one.
         Sort = Enum.IsDefined(settings.Current.Sort) ? settings.Current.Sort : SearchSort.Relevance;
         Arrangement = Enum.IsDefined(settings.Current.Arrangement) ? settings.Current.Arrangement : SearchArrangement.AsRanked;
-        // Recent picks saved before sources were recorded get theirs from the link.
-        List<MediaSearchResult> recents = settings.Current.RecentResults;
-        for (int i = 0; i < recents.Count; i++)
-            recents[i] = recents[i] with { ProviderId = recents[i].ProviderId ?? GuessProvider(recents[i].SourceUrl) };
-        Recents = new ObservableCollection<MediaSearchResult>(recents);
+
+        Recents = new ObservableCollection<MediaSearchResult>(settings.Current.RecentResults);
         Recents.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasRecents));
+        RecentSearches = new ObservableCollection<string>(settings.Current.RecentSearches);
+        RecentSearches.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasRecentSearches));
+        Draft.Changed += (_, _) => OnDraftChanged();
     }
 
     public IReadOnlyList<IMediaSearchProvider> Providers { get; }
     public ObservableCollection<SearchSuggestion> Suggestions { get; } = [];
 
-    /// <summary>Everything picked recently, from every source, newest first. Kept in step with the saved list.</summary>
+    /// <summary>The editable words and structured terms rendered by the unified search input.</summary>
+    public SearchDraft Draft { get; } = new();
+
+    /// <summary>Media opened recently, from every source, newest first. Kept in step with the saved list.</summary>
     public ObservableCollection<MediaSearchResult> Recents { get; }
 
+    /// <summary>Searches made recently, newest first, as they'd be typed.</summary>
+    public ObservableCollection<string> RecentSearches { get; }
+
     public bool HasRecents => Recents.Count > 0;
+    public bool HasRecentSearches => RecentSearches.Count > 0;
+
+    /// <summary>The ordinary words in the editable search.</summary>
+    public string SearchText
+    {
+        get => Draft.Text;
+        set
+        {
+            if (Draft.Text == value)
+                return;
+            Draft.Text = value;
+            OnPropertyChanged();
+            QueryTextChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     [ObservableProperty]
-    public partial string SearchText { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Placeholder))]
     public partial IMediaSearchProvider SelectedProvider { get; set; }
 
     /// <summary>
-    /// What decides which results come back, here and on the Search page: the best matches or the most played.
+    /// What decides which results come back, here and on the Search page: the best matches or the most viewed.
     /// Asked of the sources that can order their own, and applied to what comes back.
     /// </summary>
     [ObservableProperty]
@@ -89,7 +116,31 @@ public sealed partial class SearchViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(SortLabel))]
     public partial SearchArrangement Arrangement { get; set; }
 
-    /// <summary>Both in a few words, e.g. "Relevancy" or "Popularity, newest first".</summary>
+    [ObservableProperty]
+    public partial bool IsSearching { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPlayerObscured))]
+    public partial bool IsSuggestionListOpen { get; set; }
+
+    /// <summary>A menu or a term's editor is open from the search bar.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPlayerObscured))]
+    public partial bool IsMenuOpen { get; set; }
+
+    /// <summary>
+    /// True on the Search page, which takes the box over: what's typed is asked of every source and shown
+    /// on the page, so there's no source to choose here and no list of suggestions.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsPageSearch { get; set; }
+
+    /// <summary>Web players swallow input meant for popups drawn over them, so they step aside while one's open.</summary>
+    public bool IsPlayerObscured => IsSuggestionListOpen || IsMenuOpen;
+
+    public string Placeholder => "Search or paste a link";
+
+    /// <summary>Both parts of the order in a few words, e.g. "Relevancy" or "Popularity, newest first".</summary>
     public string SortLabel => (Sort == SearchSort.Popularity ? "Popularity" : "Relevancy") + Arrangement switch
     {
         SearchArrangement.NewestFirst => ", newest first",
@@ -99,28 +150,14 @@ public sealed partial class SearchViewModel : ObservableObject
         _ => string.Empty
     };
 
-    [ObservableProperty]
-    public partial bool IsSearching { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsPlayerObscured))]
-    public partial bool IsSuggestionListOpen { get; set; }
-
-    /// <summary>The list of sources.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsPlayerObscured))]
-    public partial bool IsMenuOpen { get; set; }
-
-    /// <summary>Web players swallow input meant for popups drawn over them, so they step aside while one's open.</summary>
-    public bool IsPlayerObscured => IsSuggestionListOpen || IsMenuOpen;
+    /// <summary>The search as it's run: the box's words and the pills' terms, as one line of text.</summary>
+    public string QueryText => Draft.QueryText;
 
     /// <summary>
-    /// True on the Search page, which takes the box over: what's typed is asked of every source and shown
-    /// on the page, so there's no source to choose here and no list of suggestions.
+    /// The whole search as text, for copying: <see cref="QueryText"/> plus the source it's aimed at.
+    /// Pasted back in, it's the same search again.
     /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Placeholder))]
-    public partial bool IsPageSearch { get; set; }
+    public string FullText => Draft.Serialize((IsPageSearch ? PageSources() : [SelectedProvider]).Select(source => source.Id));
 
     /// <summary>The sources the Search page has narrowed its search to (none when it's searching them all); that page keeps this up to date.</summary>
     public Func<IEnumerable<IMediaSearchProvider>> PageSources { get; set; } = () => [];
@@ -128,106 +165,162 @@ public sealed partial class SearchViewModel : ObservableObject
     /// <summary>On the Search page, <c>source:</c> terms were typed; that page picks the sources they name.</summary>
     public event EventHandler<IReadOnlyList<IMediaSearchProvider>>? SourcesNamed;
 
-    /// <summary>
-    /// The whole search as text, for copying: what's in the box plus the source it's aimed at, which the box
-    /// itself doesn't show. Pasted back in, it's the same search again.
-    /// </summary>
-    public string FullText => string.Join(' ', (IsPageSearch ? PageSources() : [SelectedProvider])
-        .Select(source => $"source:{source.Id}")
-        .Prepend(SearchText.Trim())
-        .Where(term => term.Length > 0));
+    /// <summary>A pill was added, removed or given another value, so the search is no longer what was last run.</summary>
+    public event EventHandler? TermsChanged;
 
-    public string Placeholder => IsPageSearch ? "Search every source, or paste a link" : $"Search {SelectedProvider.DisplayName} or paste a link";
+    /// <summary>The ordinary text changed, so the Search page can debounce words or clear itself for a link.</summary>
+    public event EventHandler? QueryTextChanged;
 
     /// <summary>Details already read while opening a pasted link, so they aren't read twice.</summary>
     public MediaDetails? TakeLinkDetails(MediaSearchResult media) =>
         _linkDetails.Remove(media.SourceUrl, out MediaDetails? details) ? details : null;
 
-    /// <summary>On focus: recent picks for an empty box, otherwise the results for what's typed.</summary>
+    /// <summary>On focus: earlier searches for an empty box, otherwise the results for what's typed.</summary>
     public void ShowSuggestions()
     {
-        if (SearchText.Trim().Length == 0)
-        {
-            ShowRecents();
-            return;
-        }
-
-        if (_shownQuery != SearchText.Trim())
+        if (QueryText.Length == 0)
+            ShowRecentSearches();
+        else if (_shownQuery != QueryText)
             _ = SearchAsync(debounce: false);
         else if (Suggestions.Count > 0)
             IsSuggestionListOpen = true;
     }
 
+    /// <summary>Stops title-bar suggestions while the Search page owns an ordinary word search.</summary>
+    public void ResetSuggestions()
+    {
+        Cancel();
+        IsSearching = false;
+        IsSuggestionListOpen = false;
+        _shownQuery = null;
+        Suggestions.Clear();
+    }
+
     /// <summary>
-    /// Acts on any <c>source:</c> terms in the box and takes them out of it: a source is chosen with the
-    /// source picker (or the Search page's own), so the term has done its job once that's set.
+    /// Lifts any labelled terms out of the box's text and acts on them: <c>source:</c> chooses the source
+    /// (here, or on the Search page), and the rest become pills. A term has done its job as text once
+    /// it's somewhere it can be seen and changed properly.
     /// </summary>
     /// <param name="includeUnfinished">Whether a term at the very end counts; it doesn't while it may still be being typed.</param>
     /// <returns>Whether the box's text changed.</returns>
-    public bool ResolveSources(bool includeUnfinished)
+    public bool ResolveTerms(bool includeUnfinished)
     {
-        (string rest, IReadOnlyList<string> named) = SearchQuery.TakeSources(SearchText, includeUnfinished, name => FindSource(name) is not null);
-        if (named.Count == 0)
-            return false;
+        string before = Draft.QueryText;
+        _changingDraft = true;
+        IReadOnlyList<string> named;
+        try
+        {
+            named = Draft.Resolve(includeUnfinished, name => FindSource(name) is not null);
+        }
+        finally
+        {
+            _changingDraft = false;
+        }
 
+        IMediaSearchProvider[] sources = RouteSources(named);
+
+        bool changed = before != Draft.QueryText || sources.Length > 0;
+        if (changed)
+            OnStructuredDraftChanged();
+        return changed;
+    }
+
+    /// <summary>Puts a search made before back in the input without running it; its caller submits it once.</summary>
+    public void Restore(string search) => ReplaceDraft(search, notify: false);
+
+    /// <summary>Replaces every editable part of the field, routing copied source terms and searching once.</summary>
+    public void Replace(string search) => ReplaceDraft(search, notify: true);
+
+    private void ReplaceDraft(string search, bool notify)
+    {
+        _changingDraft = true;
+        IReadOnlyList<string> named;
+        try
+        {
+            Draft.Cut();
+            Draft.Text = search;
+            named = Draft.Resolve(includeUnfinished: true, name => FindSource(name) is not null);
+        }
+        finally
+        {
+            _changingDraft = false;
+        }
+        RouteSources(named);
+        OnPropertyChanged(nameof(SearchText));
+        OnPropertyChanged(nameof(QueryText));
+        OnPropertyChanged(nameof(FullText));
+        if (notify)
+            OnStructuredDraftChanged();
+    }
+
+    private IMediaSearchProvider[] RouteSources(IEnumerable<string> named)
+    {
         IMediaSearchProvider[] sources = named.Select(name => FindSource(name)!).Distinct().ToArray();
-        SearchText = rest;
-        if (IsPageSearch)
+        if (sources.Length > 0 && IsPageSearch)
             SourcesNamed?.Invoke(this, sources);
-        else
+        else if (sources.Length > 0)
             SelectedProvider = sources[^1];
-        return true;
+        return sources;
     }
 
     /// <summary>Searches once typing pauses; each keystroke restarts the wait.</summary>
     public Task SearchAsync(bool debounce = true)
     {
-        if (SearchText.Trim().Length == 0)
+        if (QueryText.Length == 0)
         {
             Cancel();
             IsSearching = false;
-            ShowRecents();
+            ShowRecentSearches();
             return Task.CompletedTask;
         }
 
-        return RunSearchAsync(SearchText.Trim(), debounce);
+        return RunSearchAsync(QueryText, debounce);
     }
 
+    /// <summary>Notes that media was opened: the list closes, and it goes to the top of the recently opened.</summary>
     public void Remember(MediaSearchResult media)
     {
         Cancel();
         IsSearching = false;
         IsSuggestionListOpen = false;
-
-        // Moved to the top in place, so lists showing the recents change once rather than being rebuilt.
-        int existing = Recents.ToList().FindIndex(recent => recent.SourceUrl == media.SourceUrl);
-        if (existing >= 0)
-            Recents.RemoveAt(existing);
-        Recents.Insert(0, media);
-        while (Recents.Count > RecentLimit)
-            Recents.RemoveAt(Recents.Count - 1);
-
+        MoveToTop(Recents, media, recent => recent.SourceUrl == media.SourceUrl, RecentLimit);
         _settings.Current.RecentResults = [.. Recents];
+        _settings.Save();
+    }
+
+    /// <summary>Notes the search as it stands as one worth offering again.</summary>
+    public void RememberSearch()
+    {
+        string search = QueryText;
+        if (search.Length == 0 || IsLink(search))
+            return;
+
+        MoveToTop(RecentSearches, search, recent => string.Equals(recent, search, StringComparison.CurrentCultureIgnoreCase), RecentSearchLimit);
+        _settings.Current.RecentSearches = [.. RecentSearches];
         _settings.Save();
     }
 
     public void ClearRecents()
     {
+        Recents.Clear();
         _settings.Current.RecentResults.Clear();
         _settings.Save();
-        Recents.Clear();
-        foreach (SearchSuggestion recent in Suggestions.Where(suggestion => suggestion.IsRecent).ToArray())
+    }
+
+    public void ClearRecentSearches()
+    {
+        RecentSearches.Clear();
+        _settings.Current.RecentSearches.Clear();
+        _settings.Save();
+        foreach (SearchSuggestion recent in Suggestions.Where(suggestion => suggestion.IsRecentSearch).ToArray())
             Suggestions.Remove(recent);
     }
 
     partial void OnIsPageSearchChanged(bool value)
     {
         // Whatever the box was suggesting belongs to the page it was on.
-        Cancel();
-        IsSearching = false;
-        IsSuggestionListOpen = false;
-        _shownQuery = null;
-        Suggestions.Clear();
+        ResetSuggestions();
+        OnPropertyChanged(nameof(FullText));
     }
 
     partial void OnSelectedProviderChanged(IMediaSearchProvider value)
@@ -238,11 +331,12 @@ public sealed partial class SearchViewModel : ObservableObject
         IsSearching = false;
         _shownQuery = null;
         Suggestions.Clear();
+        OnPropertyChanged(nameof(FullText));
 
-        string query = SearchText.Trim();
+        string query = QueryText;
         if (query.Length > 0 && !IsLink(query) && _results.TryGetValue(value.Id, out var cached) && cached.Query == query && cached.Sort == Sort && cached.Arrangement == Arrangement)
         {
-            Show(MatchingRecents(query, RecentMatchLimit), cached.Results, query);
+            Show(cached.Results, query);
             _shownQuery = query;
         }
     }
@@ -259,7 +353,25 @@ public sealed partial class SearchViewModel : ObservableObject
         _settings.Current.Sort = Sort;
         _settings.Current.Arrangement = Arrangement;
         _settings.Save();
-        if (!IsPageSearch && SearchText.Trim().Length > 0)
+        if (!IsPageSearch && QueryText.Length > 0)
+            _ = SearchAsync(debounce: false);
+    }
+
+    private void OnDraftChanged()
+    {
+        OnPropertyChanged(nameof(SearchText));
+        OnPropertyChanged(nameof(QueryText));
+        OnPropertyChanged(nameof(FullText));
+        if (_changingDraft || Draft.LastChangeWasText)
+            return;
+
+        OnStructuredDraftChanged();
+    }
+
+    private void OnStructuredDraftChanged()
+    {
+        TermsChanged?.Invoke(this, EventArgs.Empty);
+        if (!IsPageSearch || IsLink(QueryText.Trim()))
             _ = SearchAsync(debounce: false);
     }
 
@@ -270,9 +382,7 @@ public sealed partial class SearchViewModel : ObservableObject
         CancellationTokenSource search = Restart();
         CancellationToken token = search.Token;
         IsSearching = true;
-
-        // Recent picks that match show straight away; results fill in below them.
-        Show(MatchingRecents(query, RecentMatchLimit), [], query);
+        Suggestions.Clear();
 
         try
         {
@@ -280,15 +390,15 @@ public sealed partial class SearchViewModel : ObservableObject
                 await Task.Delay(DebounceDelay, token);
 
             IReadOnlyList<MediaSearchResult> results = IsLink(query)
-                ? [await OpenLinkAsync(query, token)]
+                ? await OpenLinkResultsAsync(query, token)
                 : await SearchSourceAsync(provider, SearchQuery.Parse(query), sort, arrangement, token);
             token.ThrowIfCancellationRequested();
 
             if (!IsLink(query))
                 _results[provider.Id] = (query, sort, arrangement, results);
-            Show(MatchingRecents(query, RecentMatchLimit), results, query);
+            Show(results, query);
             if (Suggestions.Count == 0)
-                Suggestions.Add(new SearchSuggestion(null, Message: $"No results for \"{query}\"", Query: query));
+                Suggestions.Add(new SearchSuggestion(null, $"No results for \"{query}\"", query));
             _shownQuery = query;
             IsSuggestionListOpen = true;
         }
@@ -298,7 +408,7 @@ public sealed partial class SearchViewModel : ObservableObject
             // Said in the list, where the results would have been; choosing it searches again.
             string what = IsLink(query) ? "open that link" : $"search {provider.DisplayName}";
             Suggestions.Clear();
-            Suggestions.Add(new SearchSuggestion(null, Message: $"Couldn't {what}. {exception.Message}", Query: query));
+            Suggestions.Add(new SearchSuggestion(null, $"Couldn't {what}. {exception.Message}", query));
             _shownQuery = null;
             IsSuggestionListOpen = true;
         }
@@ -317,38 +427,43 @@ public sealed partial class SearchViewModel : ObservableObject
     /// <summary>Reads a pasted link into media, keeping its details for when it's opened.</summary>
     public async Task<MediaSearchResult> OpenLinkAsync(string url, CancellationToken token = default)
     {
-        (MediaSearchResult media, MediaDetails details) = await _ytdlp.OpenLinkAsync(url, token);
-        _linkDetails[media.SourceUrl] = details;
-        return media;
+        IReadOnlyList<MediaSearchResult> media = await OpenLinkResultsAsync(url, token);
+        return media.Count == 1 ? media[0] : throw new InvalidOperationException("That link contains a playlist. Choose one of its items.");
     }
 
-    private void ShowRecents()
+    /// <summary>Reads a pasted link, returning every entry when it is a playlist.</summary>
+    public async Task<IReadOnlyList<MediaSearchResult>> OpenLinkResultsAsync(string url, CancellationToken token = default)
     {
-        Show(MatchingRecents(string.Empty, RecentLimit), [], string.Empty);
+        OpenedLink opened = await _openLink(url, token);
+        if (opened.Media.Count == 1 && opened.Details is { } details)
+            _linkDetails[opened.Media[0].SourceUrl] = details;
+        return opened.Media;
+    }
+
+    private void ShowRecentSearches()
+    {
+        Suggestions.Clear();
+        foreach (string search in RecentSearches)
+            Suggestions.Add(new SearchSuggestion(null, Query: search, IsRecentSearch: true));
         _shownQuery = string.Empty;
         IsSuggestionListOpen = Suggestions.Count > 0;
     }
 
-    private IEnumerable<MediaSearchResult> MatchingRecents(string query, int limit)
+    private void Show(IReadOnlyList<MediaSearchResult> results, string query)
     {
-        if (IsLink(query))
-            return [];
-
-        string[] words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        return _settings.Current.RecentResults
-            .Where(recent => recent.ProviderId == SelectedProvider.Id)
-            .Where(recent => words.All(word => $"{recent.Title} {recent.Creator}".Contains(word, StringComparison.CurrentCultureIgnoreCase)))
-            .Take(limit);
+        Suggestions.Clear();
+        foreach (MediaSearchResult result in results)
+            Suggestions.Add(new SearchSuggestion(result, Query: SearchText));
     }
 
-    private void Show(IEnumerable<MediaSearchResult> recents, IReadOnlyList<MediaSearchResult> results, string query)
+    // Moved in place, so lists showing these change once rather than being rebuilt.
+    private static void MoveToTop<T>(ObservableCollection<T> items, T item, Func<T, bool> isSame, int limit)
     {
-        MediaSearchResult[] shownRecents = recents.ToArray();
-        Suggestions.Clear();
-        foreach (MediaSearchResult recent in shownRecents)
-            Suggestions.Add(new SearchSuggestion(recent, IsRecent: true, Query: query));
-        foreach (MediaSearchResult result in results.Where(result => shownRecents.All(recent => recent.SourceUrl != result.SourceUrl)))
-            Suggestions.Add(new SearchSuggestion(result, Query: query));
+        if (items.ToList().FindIndex(existing => isSame(existing)) is >= 0 and var existing)
+            items.RemoveAt(existing);
+        items.Insert(0, item);
+        while (items.Count > limit)
+            items.RemoveAt(items.Count - 1);
     }
 
     // By its id or its name, however it's spaced or cased: youtubemusic, "YouTube Music".
@@ -360,12 +475,6 @@ public sealed partial class SearchViewModel : ObservableObject
 
     internal static bool IsLink(string text) =>
         Uri.TryCreate(text, UriKind.Absolute, out Uri? uri) && uri.Scheme is "http" or "https";
-
-    // Recent picks saved before sources were recorded; the site says which source they came from.
-    private static string? GuessProvider(string url) =>
-        url.Contains("soundcloud.com", StringComparison.OrdinalIgnoreCase) ? "soundcloud"
-        : url.Contains("youtube.com", StringComparison.OrdinalIgnoreCase) || url.Contains("youtu.be", StringComparison.OrdinalIgnoreCase) ? "youtube"
-        : null;
 
     private CancellationTokenSource Restart()
     {

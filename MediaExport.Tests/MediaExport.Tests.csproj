@@ -21,12 +21,15 @@
     <ProjectReference Include="..\MediaExport.Core\MediaExport.Core.csproj" />
     <!-- View models are plain C#, so they're tested without the WinUI app. -->
     <Compile Include="..\MediaExport\Search\SearchViewModel.cs" Link="Linked\SearchViewModel.cs" />
+    <Compile Include="..\MediaExport\Search\SearchDraft.cs" Link="Linked\SearchDraft.cs" />
+    <Compile Include="..\MediaExport\Search\ResultsViewModel.cs" Link="Linked\ResultsViewModel.cs" />
     <Compile Include="..\MediaExport\Export\ExportViewModel.cs" Link="Linked\ExportViewModel.cs" />
     <Compile Include="..\MediaExport\Export\Choice.cs" Link="Linked\Choice.cs" />
     <Compile Include="..\MediaExport\Converters\Format.cs" Link="Linked\Format.cs" />
     <Compile Include="..\MediaExport\Activity\ExportJob.cs" Link="Linked\ExportJob.cs" />
     <Compile Include="..\MediaExport\Activity\ActivityViewModel.cs" Link="Linked\ActivityViewModel.cs" />
     <Compile Include="..\MediaExport\Settings\ToolViewModel.cs" Link="Linked\ToolViewModel.cs" />
+    <Compile Include="..\MediaExport\Settings\BrowserCatalog.cs" Link="Linked\BrowserCatalog.cs" />
   </ItemGroup>
 
   <ItemGroup>

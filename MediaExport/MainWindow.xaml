@@ -61,6 +61,7 @@
             <TitleBar.LeftHeader>
                 <!-- As wide as the open pane beside the toggle, so the search starts level with the pages below. -->
                 <StackPanel
+                    x:Name="appHeader"
                     Width="182"
                     Margin="4,0,0,0"
                     VerticalAlignment="Center"
@@ -72,6 +73,7 @@
                         VerticalAlignment="Center"
                         Source="ms-appx:///Assets/App/Square44x44Logo.targetsize-24_altform-unplated.png" />
                     <TextBlock
+                        x:Name="appName"
                         VerticalAlignment="Center"
                         FontSize="16"
                         FontWeight="SemiBold"
@@ -79,234 +81,26 @@
                 </StackPanel>
             </TitleBar.LeftHeader>
 
-            <Grid
+            <!-- One fixed-height field owns provider, structured terms, words, add and sort actions. -->
+            <search:SearchInput
+                x:Name="searchInput"
                 Margin="24,0,16,0"
+                HorizontalAlignment="Stretch"
                 VerticalAlignment="Center"
-                ColumnSpacing="8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <ComboBox
-                    MinWidth="196"
-                    VerticalAlignment="Center"
-                    AutomationProperties.Name="Search source"
-                    Visibility="{x:Bind converters:Show.Unless(Search.IsPageSearch), Mode=OneWay}"
-                    DropDownClosed="ProviderBox_DropDownClosed"
-                    DropDownOpened="ProviderBox_DropDownOpened"
-                    ItemsSource="{x:Bind Search.Providers}"
-                    SelectedItem="{x:Bind Search.SelectedProvider, Mode=OneWay}"
-                    SelectionChanged="ProviderBox_SelectionChanged">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate x:DataType="providers:IMediaSearchProvider">
-                            <Grid ColumnSpacing="10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="24" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <controls:IconView
-                                    Width="24"
-                                    Height="24"
-                                    Icon="{x:Bind Icon}" />
-                                <TextBlock
-                                    Grid.Column="1"
-                                    VerticalAlignment="Center"
-                                    Text="{x:Bind DisplayName}" />
-                            </Grid>
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
-
-                <Grid Grid.Column="1">
-                    <AutoSuggestBox
-                        x:Name="searchBox"
-                        AutomationProperties.Name="Search"
-                        GotFocus="SearchBox_GotFocus"
-                        IsSuggestionListOpen="{x:Bind Search.IsSuggestionListOpen, Mode=TwoWay}"
-                        ItemsSource="{x:Bind Search.Suggestions}"
-                        Loaded="SearchBox_Loaded"
-                        PlaceholderText="{x:Bind Search.Placeholder, Mode=OneWay}"
-                        QueryIcon="Find"
-                        QuerySubmitted="SearchBox_QuerySubmitted"
-                        Text="{x:Bind Search.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                        TextChanged="SearchBox_TextChanged"
-                        TextMemberPath="Query">
-                        <AutoSuggestBox.KeyboardAccelerators>
-                            <KeyboardAccelerator
-                                Key="K"
-                                Invoked="FocusSearch_Invoked"
-                                Modifiers="Control" />
-                        </AutoSuggestBox.KeyboardAccelerators>
-                        <AutoSuggestBox.TextBoxStyle>
-                            <Style BasedOn="{StaticResource AutoSuggestBoxTextBoxStyle}" TargetType="TextBox">
-                                <Setter Property="IsSpellCheckEnabled" Value="False" />
-                            </Style>
-                        </AutoSuggestBox.TextBoxStyle>
-                        <AutoSuggestBox.ItemTemplate>
-                            <DataTemplate x:DataType="search:SearchSuggestion">
-                                <Grid ColumnSpacing="12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <media:CompactMediaView Media="{x:Bind Media}" Visibility="{x:Bind converters:Show.Unless(IsMessage)}" />
-                                    <TextBlock
-                                        Padding="0,8"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Text="{x:Bind Message}"
-                                        TextWrapping="Wrap"
-                                        Visibility="{x:Bind IsMessage}" />
-                                    <FontIcon
-                                        Grid.Column="1"
-                                        FontSize="14"
-                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                        Glyph="&#xE81C;"
-                                        ToolTipService.ToolTip="Picked recently"
-                                        Visibility="{x:Bind IsRecent}" />
-                                </Grid>
-                            </DataTemplate>
-                        </AutoSuggestBox.ItemTemplate>
-                    </AutoSuggestBox>
-
-                    <!-- Over the box's bottom stroke while searching, so nothing moves. -->
-                    <ProgressBar
-                        Margin="1,0"
-                        VerticalAlignment="Bottom"
-                        CornerRadius="0,0,4,4"
-                        IsHitTestVisible="False"
-                        IsIndeterminate="True"
-                        Visibility="{x:Bind converters:Show.WhenAny(Search.IsSearching, Results.IsSearching), Mode=OneWay}" />
-                </Grid>
-
-                <StackPanel
-                    Grid.Column="2"
-                    VerticalAlignment="Center"
-                    Orientation="Horizontal"
-                    Spacing="4">
-                    <!--
-                        Terms that narrow a search, added to the box as the text they are (creator:name, longer:10m),
-                        so they can be typed, edited, copied and pasted like the rest of it.
-                    -->
-                    <DropDownButton
-                        Height="32"
-                        AutomationProperties.Name="Narrow the search"
-                        ToolTipService.ToolTip="Narrow the search">
-                        <FontIcon FontSize="14" Glyph="&#xE71C;" />
-                        <DropDownButton.Flyout>
-                            <MenuFlyout
-                                Closed="Menu_Closed"
-                                Opening="TermsMenu_Opening"
-                                Placement="BottomEdgeAlignedRight">
-                                <MenuFlyoutItem
-                                    Click="AddTerm_Click"
-                                    Tag="&quot;|exact words"
-                                    Text="Exact phrase" />
-                                <MenuFlyoutItem
-                                    Click="AddTerm_Click"
-                                    Tag="-|word"
-                                    Text="Without a word" />
-                                <MenuFlyoutItem
-                                    Click="AddTerm_Click"
-                                    Tag="creator:|name"
-                                    Text="Creator" />
-                                <MenuFlyoutSubItem x:Name="sourceTerms" Text="Source" />
-                                <MenuFlyoutSubItem Text="Kind">
-                                    <MenuFlyoutItem
-                                        Click="AddTerm_Click"
-                                        Tag="kind:video"
-                                        Text="Video" />
-                                    <MenuFlyoutItem
-                                        Click="AddTerm_Click"
-                                        Tag="kind:audio"
-                                        Text="Audio" />
-                                </MenuFlyoutSubItem>
-                                <MenuFlyoutSeparator />
-                                <MenuFlyoutItem
-                                    Click="AddTerm_Click"
-                                    Tag="longer:|10m"
-                                    Text="Longer than" />
-                                <MenuFlyoutItem
-                                    Click="AddTerm_Click"
-                                    Tag="shorter:|10m"
-                                    Text="Shorter than" />
-                                <MenuFlyoutSeparator />
-                                <MenuFlyoutItem
-                                    Click="AddTerm_Click"
-                                    Tag="after:|2020"
-                                    Text="After a date" />
-                                <MenuFlyoutItem
-                                    Click="AddTerm_Click"
-                                    Tag="before:|2020"
-                                    Text="Before a date" />
-                            </MenuFlyout>
-                        </DropDownButton.Flyout>
-                    </DropDownButton>
-
-                    <!--
-                        What comes first, for the suggestions here and the Search page alike. Two choices in one menu,
-                        as File Explorer's sort has: what the results are ranked by, then what order they're shown in.
-                    -->
-                    <DropDownButton
-                        Height="32"
-                        AutomationProperties.Name="Sort results"
-                        ToolTipService.ToolTip="Sort results">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon FontSize="14" Glyph="&#xE8CB;" />
-                            <TextBlock Text="{x:Bind Search.SortLabel, Mode=OneWay}" />
-                        </StackPanel>
-                        <DropDownButton.Flyout>
-                            <MenuFlyout
-                                Closed="Menu_Closed"
-                                Opening="SortMenu_Opening"
-                                Placement="BottomEdgeAlignedRight">
-                                <MenuFlyoutItem IsEnabled="False" Text="Rank by" />
-                                <RadioMenuFlyoutItem
-                                    Click="Sort_Click"
-                                    GroupName="Rank"
-                                    Tag="Relevance"
-                                    Text="Relevancy" />
-                                <RadioMenuFlyoutItem
-                                    Click="Sort_Click"
-                                    GroupName="Rank"
-                                    Tag="Popularity"
-                                    Text="Popularity" />
-                                <MenuFlyoutSeparator />
-                                <MenuFlyoutItem IsEnabled="False" Text="Then show" />
-                                <RadioMenuFlyoutItem
-                                    Click="Sort_Click"
-                                    GroupName="Show"
-                                    Tag="AsRanked"
-                                    Text="In that order" />
-                                <RadioMenuFlyoutItem
-                                    Click="Sort_Click"
-                                    GroupName="Show"
-                                    Tag="NewestFirst"
-                                    Text="Newest first" />
-                                <RadioMenuFlyoutItem
-                                    Click="Sort_Click"
-                                    GroupName="Show"
-                                    Tag="OldestFirst"
-                                    Text="Oldest first" />
-                                <RadioMenuFlyoutItem
-                                    Click="Sort_Click"
-                                    GroupName="Show"
-                                    Tag="TitleAToZ"
-                                    Text="Title, A to Z" />
-                                <RadioMenuFlyoutItem
-                                    Click="Sort_Click"
-                                    GroupName="Show"
-                                    Tag="TitleZToA"
-                                    Text="Title, Z to A" />
-                            </MenuFlyout>
-                        </DropDownButton.Flyout>
-                    </DropDownButton>
-                </StackPanel>
-            </Grid>
+                MediaChosen="SearchInput_MediaChosen"
+                Results="{x:Bind Results}"
+                Submitted="SearchInput_Submitted"
+                ViewModel="{x:Bind Search}">
+                <search:SearchInput.KeyboardAccelerators>
+                    <KeyboardAccelerator
+                        Key="K"
+                        Invoked="FocusSearch_Invoked"
+                        Modifiers="Control" />
+                </search:SearchInput.KeyboardAccelerators>
+            </search:SearchInput>
         </TitleBar>
 
-        <!-- The pane stays open in code and its width is animated, so pages resize smoothly with it. -->
+        <!-- The pane stays open while only its width changes, keeping the page bounds continuous during animation. -->
         <NavigationView
             x:Name="navView"
             Grid.Row="1"
@@ -393,5 +187,33 @@
                 <Frame x:Name="navFrame" Grid.Row="1" />
             </Grid>
         </NavigationView>
+
+        <!--
+            As the window narrows, the title bar keeps the complete compact search control and lets go of the app name.
+        -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup>
+                <VisualState x:Name="WideBar">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="1240" />
+                    </VisualState.StateTriggers>
+                </VisualState>
+                <VisualState x:Name="MediumBar">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="1000" />
+                    </VisualState.StateTriggers>
+                </VisualState>
+                <VisualState x:Name="NarrowBar">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="0" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="appName.Visibility" Value="Collapsed" />
+                        <Setter Target="appHeader.Width" Value="Auto" />
+                        <Setter Target="searchInput.Margin" Value="12,0,12,0" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
     </Grid>
 </Window>

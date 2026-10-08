@@ -36,13 +36,13 @@ public abstract partial class MediaViewBase : UserControl
     public string CreatorText => Media?.Creator ?? string.Empty;
     public string? ProviderId => Media?.ProviderId;
 
-    /// <summary>How played and how old, in short ("1.9M plays · 2 years ago").</summary>
+    /// <summary>Views and age, in short ("1.9M views · 2 years ago").</summary>
     public string MetaText => Format.Meta(Media?.Views, Media?.Published);
 
     /// <summary>The same exactly, for a tooltip; nothing if neither is known.</summary>
     public string? MetaDetail => Format.MetaDetail(Media?.Views, Media?.Published, Media?.IsDateApproximate == true) is { Length: > 0 } detail ? detail : null;
 
-    /// <summary>Who made it and how played and old it is, on one line for where there's only room for one.</summary>
+    /// <summary>Who made it, its views and age, on one line for where there is only room for one.</summary>
     public string BylineText => string.Join("  ·  ", new[] { CreatorText, MetaText }.Where(part => part.Length > 0));
 
     public string AccessibleName => Media?.ToString() ?? string.Empty;
