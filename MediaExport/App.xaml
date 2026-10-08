@@ -5,23 +5,13 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <ResourceDictionary>
+            <!-- The app's own dictionaries come after the controls', so what they redefine (the accent colours) wins. -->
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <ResourceDictionary Source="Resources/Theme.xaml" />
+                <ResourceDictionary Source="Resources/Styles.xaml" />
+                <ResourceDictionary Source="Resources/Icons.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <!--
-                The logo's cyan, whatever accent Windows uses: a grey or pale accent makes selected and accent
-                controls hard to read. Controls pick Light2 on dark and Dark1 on light, so both stay readable.
-            -->
-            <Color x:Key="SystemAccentColor">#14A596</Color>
-            <Color x:Key="SystemAccentColorLight1">#37C2B3</Color>
-            <Color x:Key="SystemAccentColorLight2">#5FD6C8</Color>
-            <Color x:Key="SystemAccentColorLight3">#9BE9DF</Color>
-            <Color x:Key="SystemAccentColorDark1">#0E8579</Color>
-            <Color x:Key="SystemAccentColorDark2">#09675E</Color>
-            <Color x:Key="SystemAccentColorDark3">#054A44</Color>
-
-            <!-- The widest pages get before they stop growing and centre instead. -->
-            <x:Double x:Key="PageMaxWidth">1400</x:Double>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

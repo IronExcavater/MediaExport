@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Every picture the app ships, by name, so nothing else needs to know where the files are:
+        <Image Source="{ThemeResource DailymotionIcon}" />
+    Use ThemeResource rather than StaticResource for the icons, so those with a light and a dark drawing
+    follow the theme (the others are the same either way, and work with both).
+    A new icon is a file in Assets/Icons and a line here.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.ThemeDictionaries>
+        <!-- One-colour marks, drawn light for dark backgrounds and dark for light ones. -->
+        <ResourceDictionary x:Key="Default">
+            <SvgImageSource x:Key="DailymotionIcon" UriSource="ms-appx:///Assets/Icons/dailymotion.dark.svg" />
+            <SvgImageSource x:Key="InternetArchiveIcon" UriSource="ms-appx:///Assets/Icons/internet-archive.dark.svg" />
+            <SvgImageSource x:Key="NiconicoIcon" UriSource="ms-appx:///Assets/Icons/niconico.dark.svg" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <SvgImageSource x:Key="DailymotionIcon" UriSource="ms-appx:///Assets/Icons/dailymotion.light.svg" />
+            <SvgImageSource x:Key="InternetArchiveIcon" UriSource="ms-appx:///Assets/Icons/internet-archive.light.svg" />
+            <SvgImageSource x:Key="NiconicoIcon" UriSource="ms-appx:///Assets/Icons/niconico.light.svg" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+    <!-- Marks in their own colours, which read on either theme. -->
+    <SvgImageSource x:Key="BilibiliIcon" UriSource="ms-appx:///Assets/Icons/bilibili.svg" />
+    <SvgImageSource x:Key="MixcloudIcon" UriSource="ms-appx:///Assets/Icons/mixcloud.svg" />
+    <SvgImageSource x:Key="SoundCloudIcon" UriSource="ms-appx:///Assets/Icons/soundcloud.svg" />
+    <SvgImageSource x:Key="VimeoIcon" UriSource="ms-appx:///Assets/Icons/vimeo.svg" />
+    <SvgImageSource x:Key="YouTubeIcon" UriSource="ms-appx:///Assets/Icons/youtube.svg" />
+    <SvgImageSource x:Key="YouTubeMusicIcon" UriSource="ms-appx:///Assets/Icons/youtube-music.svg" />
+
+    <!-- Browsers, for choosing whose sign-in to use. -->
+    <SvgImageSource x:Key="ChromeIcon" UriSource="ms-appx:///Assets/Icons/google-chrome.svg" />
+    <SvgImageSource x:Key="EdgeIcon" UriSource="ms-appx:///Assets/Icons/microsoft-edge.svg" />
+    <SvgImageSource x:Key="FirefoxIcon" UriSource="ms-appx:///Assets/Icons/mozilla-firefox.svg" />
+    <SvgImageSource x:Key="OperaIcon" UriSource="ms-appx:///Assets/Icons/opera.svg" />
+
+    <BitmapImage x:Key="AppLogo" UriSource="ms-appx:///Assets/App/Square44x44Logo.targetsize-256_altform-unplated.png" />
+</ResourceDictionary>
