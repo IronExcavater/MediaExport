@@ -55,6 +55,17 @@ public static class Format
         published is { } then ? Age(then, DateTimeOffset.Now) : null
     }.Where(part => part is not null));
 
+    /// <summary>
+    /// The same in full, for a tooltip: <c>21,315,080 plays · 17 April 2013</c>. A date known only roughly is given as its year.
+    /// </summary>
+    public static string MetaDetail(long? views, DateTimeOffset? published, bool isDateApproximate) => string.Join("  ·  ", new[]
+    {
+        views is { } count ? $"{count.ToString("N0", CultureInfo.CurrentCulture)} plays" : null,
+        published is not { } then ? null
+            : isDateApproximate ? $"around {then.LocalDateTime.Year}"
+            : then.LocalDateTime.ToString("d MMMM yyyy", CultureInfo.CurrentCulture)
+    }.Where(part => part is not null));
+
     /// <summary>Time left, rounded to what's worth saying: <c>about 20 seconds left</c>, <c>about 3 minutes left</c>.</summary>
     public static string Remaining(TimeSpan left) => left.TotalSeconds switch
     {

@@ -122,8 +122,9 @@ public sealed partial class ResultsViewModel : ObservableObject
             }
 
             var everything = new AllSearchProvider(asked, PerSource, _search.Arrangement);
-            await foreach (IReadOnlyList<MediaSearchResult> soFar in everything.SearchEachAsync(query, _search.Sort, running.Token))
-                Show(soFar);
+            var terms = new SearchTerms(query);
+            await foreach (IReadOnlyList<MediaSearchResult> soFar in everything.SearchEachAsync(terms.Query, _search.Sort, running.Token))
+                Show(terms.Keep(soFar));
 
             if (Results.Count == 0)
                 Message = $"Nothing found for “{query}”.";

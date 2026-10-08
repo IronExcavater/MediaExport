@@ -41,8 +41,12 @@ public abstract class WebApiSearchProvider(HttpClient http) : IMediaSearchProvid
 
         using HttpRequestMessage request = await CreateRequestAsync(query.Trim(), sort, cancellationToken);
         using JsonDocument document = await GetJsonAsync(request, cancellationToken);
-        return ReadResults(document.RootElement).Take(ResultCount).ToArray();
+        return await CompleteAsync(ReadResults(document.RootElement).Take(ResultCount).ToArray(), cancellationToken);
     }
+
+    /// <summary>Fills in what the search itself left out, for sources that need a second look to say it.</summary>
+    protected virtual Task<IReadOnlyList<MediaSearchResult>> CompleteAsync(IReadOnlyList<MediaSearchResult> results, CancellationToken cancellationToken) =>
+        Task.FromResult(results);
 
     protected async Task<JsonDocument> GetJsonAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
@@ -369,9 +373,16 @@ public sealed class BilibiliSearchProvider(HttpClient http) : WebApiSearchProvid
     }
 }
 
-/// <summary>Searched through Niconico's snapshot of its videos, which doesn't say who made each one.</summary>
+/// <summary>
+/// Searched through Niconico's snapshot of its videos. That says who made each one only by number, so the
+/// makers' names are looked up afterwards, and remembered.
+/// </summary>
 public sealed class NiconicoSearchProvider(HttpClient http) : WebApiSearchProvider(http)
 {
+    private const string UserPage = "https://www.nicovideo.jp/user/";
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string?> _names = new();
+
     public override string Id => "niconico";
     public override string DisplayName => "Niconico";
     public override string Icon => "niconico";
@@ -379,7 +390,7 @@ public sealed class NiconicoSearchProvider(HttpClient http) : WebApiSearchProvid
     // It can't order by relevance, so that gives the most watched matches too.
     protected override string GetSearchUrl(string query, SearchSort sort) =>
         $"https://snapshot.search.nicovideo.jp/api/v2/snapshot/video/contents/search?q={Uri.EscapeDataString(query)}"
-        + "&targets=title,description,tags&fields=contentId,title,lengthSeconds,thumbnailUrl,viewCounter,startTime"
+        + "&targets=title,description,tags&fields=contentId,title,lengthSeconds,thumbnailUrl,viewCounter,startTime,userId"
         + $"&_sort=-viewCounter&_limit={ResultCount}&_context=MediaExport";
 
     protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
@@ -399,11 +410,35 @@ public sealed class NiconicoSearchProvider(HttpClient http) : WebApiSearchProvid
                 null,
                 Seconds(video, "lengthSeconds"),
                 MediaKind.Video,
-                null,
+                Count(video, "userId") is { } user ? $"{UserPage}{user}" : null,
                 EmbedLinks.For(Id, id, url),
                 Id,
                 Count(video, "viewCounter"),
                 Date(Text(video, "startTime")));
+        }
+    }
+
+    protected override async Task<IReadOnlyList<MediaSearchResult>> CompleteAsync(IReadOnlyList<MediaSearchResult> results, CancellationToken cancellationToken) =>
+        await Task.WhenAll(results.Select(async result =>
+            result.CreatorUrl?[UserPage.Length..] is { } user ? result with { Creator = await NameAsync(user, cancellationToken) } : result));
+
+    // A name that can't be found just leaves the result without one.
+    private async Task<string?> NameAsync(string user, CancellationToken cancellationToken)
+    {
+        if (_names.TryGetValue(user, out string? known))
+            return known;
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://nvapi.nicovideo.jp/v1/users/{user}");
+            request.Headers.Add("X-Frontend-Id", "6");
+            request.Headers.Add("X-Frontend-Version", "0");
+            using JsonDocument document = await GetJsonAsync(request, cancellationToken);
+            return _names[user] = Text(At(document.RootElement, "data", "user"), "nickname");
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException)
+        {
+            return null;
         }
     }
 }
@@ -416,7 +451,7 @@ public sealed class InternetArchiveSearchProvider(HttpClient http) : WebApiSearc
 
     protected override string GetSearchUrl(string query, SearchSort sort) =>
         $"https://archive.org/advancedsearch.php?q={Uri.EscapeDataString($"({query}) AND mediatype:(movies OR audio)")}"
-        + $"&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=mediatype&fl[]=downloads&fl[]=publicdate&rows={ResultCount}&output=json"
+        + $"&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=mediatype&fl[]=downloads&fl[]=date&fl[]=publicdate&rows={ResultCount}&output=json"
         + (sort == SearchSort.Popularity ? "&sort[]=downloads+desc" : "");
 
     protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
@@ -440,7 +475,8 @@ public sealed class InternetArchiveSearchProvider(HttpClient http) : WebApiSearc
                 EmbedLinks.For(Id, id, url),
                 Id,
                 Count(item, "downloads"),
-                Date(Text(item, "publicdate")));
+                // When the thing itself is from, if the item says; otherwise when it was put up.
+                Date(Text(item, "date")) ?? Date(Text(item, "publicdate")));
         }
     }
 }

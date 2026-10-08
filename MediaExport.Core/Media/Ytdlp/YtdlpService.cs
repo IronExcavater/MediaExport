@@ -45,7 +45,13 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8
         };
-        foreach (string argument in (string[])["--dump-single-json", "--flat-playlist", "--playlist-end", $"{limit}", "--quiet", "--no-warnings", "--encoding", "utf-8", target])
+        foreach (string argument in (string[])
+        [
+            "--dump-single-json", "--flat-playlist", "--playlist-end", $"{limit}", "--quiet", "--no-warnings", "--encoding", "utf-8",
+            // YouTube's results only say roughly how old a video is ("3 years ago"); this turns that into a date.
+            "--extractor-args", "youtubetab:approximate_date",
+            target
+        ])
             start.ArgumentList.Add(argument);
 
         Process? started;

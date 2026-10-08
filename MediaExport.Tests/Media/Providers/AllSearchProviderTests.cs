@@ -79,6 +79,20 @@ public sealed class AllSearchProviderTests
         });
     }
 
+    [Test]
+    public void Quoted_phrases_must_be_said_and_minus_words_must_not()
+    {
+        var terms = new SearchTerms("blue \"night song\" -live hi-fi");
+        MediaSearchResult studio = Result("a", "Blue Night Song (hi-fi)"), live = Result("a", "Night Song live"), other = Result("a", "Blue song at night");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(terms.Query, Is.EqualTo("blue night song hi-fi"), "sources get the plain words");
+            Assert.That(terms.Keep([studio, live, other]), Is.EqualTo(new[] { studio }));
+            Assert.That(new SearchTerms("plain words").Keep([live]), Is.EqualTo(new[] { live }));
+        });
+    }
+
     private static MediaSearchResult Result(string source, string title, long? views = null, DateTimeOffset? published = null) =>
         new(title, $"https://{source}.test/{Uri.EscapeDataString(title)}", null, title, null, null, ProviderId: source, Views: views, Published: published);
 

@@ -64,13 +64,15 @@
                         Style="{StaticResource SecondaryTextStyle}"
                         Text="{x:Bind CreatorText}"
                         TextTrimming="CharacterEllipsis"
-                        TextWrapping="NoWrap" />
+                        TextWrapping="NoWrap"
+                        ToolTipService.ToolTip="{x:Bind CreatorText}" />
                 </Grid>
                 <TextBlock
                     Style="{StaticResource SecondaryTextStyle}"
                     Text="{x:Bind MetaText}"
                     TextTrimming="CharacterEllipsis"
-                    TextWrapping="NoWrap" />
+                    TextWrapping="NoWrap"
+                    ToolTipService.ToolTip="{x:Bind MetaDetail}" />
             </StackPanel>
         </Grid>
     </Button>

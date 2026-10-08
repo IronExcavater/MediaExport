@@ -97,7 +97,7 @@
         </Grid.RowDefinitions>
 
         <!-- What was searched and how much came back; on the right, back to every source in one go. -->
-        <Grid ColumnSpacing="12">
+        <Grid MinHeight="40" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -114,19 +114,34 @@
                 VerticalAlignment="Bottom"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 Text="{x:Bind ViewModel.Summary, Mode=OneWay}" />
-            <!-- Lit while every source is picked; clicking it picks them all, and never unpicks any. -->
-            <ToggleButton
+            <!--
+                While every source is searched this just says so; once some are left out it becomes the way back.
+                A button that's always there would have nothing to do most of the time.
+            -->
+            <StackPanel
                 Grid.Column="2"
                 VerticalAlignment="Center"
-                AutomationProperties.Name="Search everywhere"
-                Click="Everywhere_Click"
-                IsChecked="{x:Bind ViewModel.AreAllPicked, Mode=OneWay}"
-                ToolTipService.ToolTip="Search every source">
+                Orientation="Horizontal"
+                Spacing="8"
+                Visibility="{x:Bind ViewModel.AreAllPicked, Mode=OneWay}">
+                <FontIcon
+                    FontSize="14"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Glyph="&#xE774;" />
+                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Searching everywhere" />
+            </StackPanel>
+            <Button
+                Grid.Column="2"
+                VerticalAlignment="Center"
+                Command="{x:Bind ViewModel.PickAllCommand}"
+                Style="{StaticResource AccentButtonStyle}"
+                ToolTipService.ToolTip="Search every source again"
+                Visibility="{x:Bind converters:Show.Unless(ViewModel.AreAllPicked), Mode=OneWay}">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <FontIcon FontSize="14" Glyph="&#xE774;" />
-                    <TextBlock Text="Everywhere" />
+                    <TextBlock Text="Search everywhere" />
                 </StackPanel>
-            </ToggleButton>
+            </Button>
         </Grid>
 
         <!--

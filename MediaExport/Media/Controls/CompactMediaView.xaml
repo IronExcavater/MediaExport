@@ -43,8 +43,9 @@
             <TextBlock
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 Style="{StaticResource CaptionTextBlockStyle}"
-                Text="{x:Bind CreatorText, Mode=OneTime}"
-                TextTrimming="CharacterEllipsis" />
+                Text="{x:Bind BylineText, Mode=OneTime}"
+                TextTrimming="CharacterEllipsis"
+                ToolTipService.ToolTip="{x:Bind MetaDetail, Mode=OneTime}" />
         </StackPanel>
     </Grid>
 </local:MediaViewBase>

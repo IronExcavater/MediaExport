@@ -258,7 +258,7 @@ public sealed partial class SearchViewModel : ObservableObject
 
             IReadOnlyList<MediaSearchResult> results = IsLink(query)
                 ? [await OpenLinkAsync(query, token)]
-                : SearchRanking.Order([await provider.SearchAsync(query, sort, token)], query, sort, arrangement);
+                : await SearchSourceAsync(provider, new SearchTerms(query), sort, arrangement, token);
             token.ThrowIfCancellationRequested();
 
             if (!IsLink(query))
@@ -285,6 +285,10 @@ public sealed partial class SearchViewModel : ObservableObject
                 IsSearching = false;
         }
     }
+
+    private static async Task<IReadOnlyList<MediaSearchResult>> SearchSourceAsync(
+        IMediaSearchProvider provider, SearchTerms terms, SearchSort sort, SearchArrangement arrangement, CancellationToken token) =>
+        terms.Keep(SearchRanking.Order([await provider.SearchAsync(terms.Query, sort, token)], terms.Query, sort, arrangement));
 
     /// <summary>Reads a pasted link into media, keeping its details for when it's opened.</summary>
     public async Task<MediaSearchResult> OpenLinkAsync(string url, CancellationToken token = default)

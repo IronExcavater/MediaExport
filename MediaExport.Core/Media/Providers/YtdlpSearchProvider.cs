@@ -13,6 +13,9 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
 
     protected virtual MediaKind Kind => MediaKind.Video;
 
+    /// <summary>Whether the source's results give dates only to about a year.</summary>
+    protected virtual bool HasApproximateDates => false;
+
     public abstract string Id { get; }
     public abstract string DisplayName { get; }
     public abstract string Icon { get; }
@@ -50,7 +53,8 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
             EmbedLinks.For(Id, result.Identity, sourceUrl),
             Id,
             result.Views,
-            result.Published);
+            result.Published,
+            HasApproximateDates);
     }
 
     protected virtual string? GetSourceUrl(YtdlpSearchResult result) => result.SourceUrl;
