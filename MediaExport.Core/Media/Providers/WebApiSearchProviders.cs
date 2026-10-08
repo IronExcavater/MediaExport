@@ -4,7 +4,10 @@
 using MediaExport.Core.Media.Models;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace MediaExport.Core.Media.Providers;
 
@@ -54,6 +57,220 @@ public abstract class WebApiSearchProvider(HttpClient http) : IMediaSearchProvid
         element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Array && value.GetArrayLength() > 0
             ? WebUtility.HtmlDecode(value[0].GetString())
             : Text(element, name);
+
+    /// <summary>Follows names and positions into nested JSON; nothing (<c>Undefined</c>) if a step is missing.</summary>
+    protected static JsonElement At(JsonElement element, params object[] path)
+    {
+        foreach (object step in path)
+        {
+            if (step is string name && element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out JsonElement child))
+                element = child;
+            else if (step is int index && element.ValueKind == JsonValueKind.Array && index < element.GetArrayLength())
+                element = element[index];
+            else
+                return default;
+        }
+
+        return element;
+    }
+
+    protected static IEnumerable<JsonElement> Items(JsonElement element) =>
+        element.ValueKind == JsonValueKind.Array ? element.EnumerateArray() : [];
+
+    /// <summary>A length written as a clock reads: <c>4:09</c>, <c>1:02:03</c>, or all in minutes (<c>125:30</c>).</summary>
+    protected static TimeSpan? Clock(string? text)
+    {
+        double seconds = 0;
+        foreach (string part in (text ?? "").Split(':'))
+        {
+            if (!int.TryParse(part, out int number))
+                return null;
+            seconds = seconds * 60 + number;
+        }
+
+        return TimeSpan.FromSeconds(seconds);
+    }
+}
+
+/// <summary>Songs, searched the way YouTube Music's own page does; they play and export as YouTube videos.</summary>
+public sealed class YouTubeMusicSearchProvider(HttpClient http) : WebApiSearchProvider(http)
+{
+    // Asks for songs only, leaving out albums, artists, playlists and videos.
+    private const string SongsOnly = "EgWKAQIIAWoKEAkQBRAKEAMQBA%3D%3D";
+
+    public override string Id => "youtubemusic";
+    public override string DisplayName => "YouTube Music";
+    public override string Icon => "youtube-music";
+
+    protected override string GetSearchUrl(string query) => "https://music.youtube.com/youtubei/v1/search?prettyPrint=false";
+
+    protected override async Task<HttpRequestMessage> CreateRequestAsync(string query, CancellationToken cancellationToken)
+    {
+        HttpRequestMessage request = await base.CreateRequestAsync(query, cancellationToken);
+        request.Method = HttpMethod.Post;
+        request.Content = new StringContent(
+            $$$"""{"context":{"client":{"clientName":"WEB_REMIX","clientVersion":"1.20240101.01.00"}},"params":"{{{SongsOnly}}}","query":"{{{JavaScriptEncoder.Default.Encode(query)}}}"}""",
+            Encoding.UTF8,
+            "application/json");
+        return request;
+    }
+
+    protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
+    {
+        JsonElement sections = At(root, "contents", "tabbedSearchResultsRenderer", "tabs", 0, "tabRenderer", "content", "sectionListRenderer", "contents");
+        foreach (JsonElement item in Items(sections).SelectMany(section => Items(At(section, "musicShelfRenderer", "contents"))))
+        {
+            JsonElement song = At(item, "musicResponsiveListItemRenderer");
+            if (Text(At(song, "playlistItemData"), "videoId") is not { } id || Text(Runs(song, 0).FirstOrDefault(), "text") is not { } title)
+                continue;
+
+            // Under the title: the artists, then the album, then the length, with a dot between each.
+            JsonElement[] byline = Runs(song, 1).ToArray();
+            JsonElement[] artists = byline.TakeWhile(run => Text(run, "text") != " • ").ToArray();
+            string url = $"https://music.youtube.com/watch?v={Uri.EscapeDataString(id)}";
+            yield return new MediaSearchResult(
+                id,
+                url,
+                ReadCover(song),
+                title,
+                artists.Length > 0 ? string.Concat(artists.Select(run => Text(run, "text"))) : null,
+                byline.Length > 0 ? Clock(Text(byline[^1], "text")) : null,
+                MediaKind.Audio,
+                Text(At(artists.FirstOrDefault(), "navigationEndpoint", "browseEndpoint"), "browseId") is { } channel ? $"https://music.youtube.com/channel/{channel}" : null,
+                EmbedLinks.For(Id, id, url),
+                Id);
+        }
+    }
+
+    private static IEnumerable<JsonElement> Runs(JsonElement song, int column) =>
+        Items(At(song, "flexColumns", column, "musicResponsiveListItemFlexColumnRenderer", "text", "runs"));
+
+    // Covers are offered small (…=w120-h120-…); the size is part of the address, so a bigger one is asked for.
+    private static Uri? ReadCover(JsonElement song)
+    {
+        string? smallest = Text(Items(At(song, "thumbnail", "musicThumbnailRenderer", "thumbnail", "thumbnails")).LastOrDefault(), "url");
+        return Uri.TryCreate(Regex.Replace(smallest ?? "", @"=w\d+-h\d+", "=w480-h480"), UriKind.Absolute, out Uri? cover) ? cover : null;
+    }
+}
+
+public sealed class MixcloudSearchProvider(HttpClient http) : WebApiSearchProvider(http)
+{
+    public override string Id => "mixcloud";
+    public override string DisplayName => "Mixcloud";
+    public override string Icon => "mixcloud";
+
+    protected override string GetSearchUrl(string query) =>
+        $"https://api.mixcloud.com/search/?q={Uri.EscapeDataString(query)}&type=cloudcast&limit={ResultCount}";
+
+    protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
+    {
+        foreach (JsonElement show in Items(At(root, "data")))
+        {
+            if (Text(show, "key") is not { } id || Text(show, "url") is not { } url)
+                continue;
+
+            JsonElement user = At(show, "user");
+            yield return new MediaSearchResult(
+                id,
+                url,
+                Uri.TryCreate(Text(At(show, "pictures"), "640wx640h"), UriKind.Absolute, out Uri? thumbnail) ? thumbnail : null,
+                Text(show, "name") ?? url,
+                Text(user, "name"),
+                show.TryGetProperty("audio_length", out JsonElement seconds) && seconds.TryGetDouble(out double length) ? TimeSpan.FromSeconds(length) : null,
+                MediaKind.Audio,
+                Text(user, "url"),
+                EmbedLinks.For(Id, id, url),
+                Id);
+        }
+    }
+}
+
+/// <summary>Bilibili's search turns away visitors it hasn't seen; it's first asked for the id it gives new ones.</summary>
+public sealed class BilibiliSearchProvider(HttpClient http) : WebApiSearchProvider(http)
+{
+    private string? _visitor;
+
+    public override string Id => "bilibili";
+    public override string DisplayName => "Bilibili";
+    public override string Icon => "bilibili";
+
+    protected override string GetSearchUrl(string query) =>
+        $"https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword={Uri.EscapeDataString(query)}&page_size={ResultCount}";
+
+    protected override async Task<HttpRequestMessage> CreateRequestAsync(string query, CancellationToken cancellationToken)
+    {
+        if (_visitor is null)
+        {
+            using var visit = new HttpRequestMessage(HttpMethod.Get, "https://api.bilibili.com/x/frontend/finger/spi");
+            using JsonDocument document = await GetJsonAsync(visit, cancellationToken);
+            _visitor = Text(At(document.RootElement, "data"), "b_3") ?? throw new InvalidOperationException("Bilibili didn't allow a search.");
+        }
+
+        HttpRequestMessage request = await base.CreateRequestAsync(query, cancellationToken);
+        request.Headers.Add("Cookie", $"buvid3={_visitor}");
+        request.Headers.Referrer = new Uri("https://www.bilibili.com/");
+        return request;
+    }
+
+    protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
+    {
+        foreach (JsonElement video in Items(At(root, "data", "result")))
+        {
+            if (Text(video, "bvid") is not { Length: > 0 } id)
+                continue;
+
+            string url = $"https://www.bilibili.com/video/{Uri.EscapeDataString(id)}";
+            yield return new MediaSearchResult(
+                id,
+                url,
+                // Pictures come without a scheme: //i1.hdslb.com/…
+                Uri.TryCreate("https:" + Text(video, "pic"), UriKind.Absolute, out Uri? thumbnail) ? thumbnail : null,
+                // The words searched for are marked up in the title: <em class="keyword">…</em>
+                WebUtility.HtmlDecode(Regex.Replace(Text(video, "title") ?? url, "<[^>]+>", "")),
+                Text(video, "author"),
+                Clock(Text(video, "duration")),
+                MediaKind.Video,
+                video.TryGetProperty("mid", out JsonElement uploader) && uploader.TryGetInt64(out long number) ? $"https://space.bilibili.com/{number}" : null,
+                EmbedLinks.For(Id, id, url),
+                Id);
+        }
+    }
+}
+
+/// <summary>Searched through Niconico's snapshot of its videos, which doesn't say who made each one.</summary>
+public sealed class NiconicoSearchProvider(HttpClient http) : WebApiSearchProvider(http)
+{
+    public override string Id => "niconico";
+    public override string DisplayName => "Niconico";
+    public override string Icon => "niconico";
+
+    // There's no ordering by relevance, so the most watched matches come first.
+    protected override string GetSearchUrl(string query) =>
+        $"https://snapshot.search.nicovideo.jp/api/v2/snapshot/video/contents/search?q={Uri.EscapeDataString(query)}"
+        + $"&targets=title,description,tags&fields=contentId,title,lengthSeconds,thumbnailUrl&_sort=-viewCounter&_limit={ResultCount}&_context=MediaExport";
+
+    protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
+    {
+        foreach (JsonElement video in Items(At(root, "data")))
+        {
+            if (Text(video, "contentId") is not { } id)
+                continue;
+
+            string url = $"https://www.nicovideo.jp/watch/{Uri.EscapeDataString(id)}";
+            yield return new MediaSearchResult(
+                id,
+                url,
+                Uri.TryCreate(Text(video, "thumbnailUrl"), UriKind.Absolute, out Uri? thumbnail) ? thumbnail : null,
+                // Titles arrive encoded twice over (&amp;#039; for an apostrophe).
+                WebUtility.HtmlDecode(Text(video, "title")) ?? url,
+                null,
+                video.TryGetProperty("lengthSeconds", out JsonElement seconds) && seconds.TryGetDouble(out double length) ? TimeSpan.FromSeconds(length) : null,
+                MediaKind.Video,
+                null,
+                EmbedLinks.For(Id, id, url),
+                Id);
+        }
+    }
 }
 
 public sealed class DailymotionSearchProvider(HttpClient http) : WebApiSearchProvider(http)

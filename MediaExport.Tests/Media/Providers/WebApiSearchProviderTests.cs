@@ -68,6 +68,88 @@ public sealed class WebApiSearchProviderTests
         });
     }
 
+    [Test]
+    public async Task YouTube_Music_songs_name_their_artists_and_play_as_YouTube_videos()
+    {
+        var provider = new YouTubeMusicSearchProvider(Serve("""
+            {"contents":{"tabbedSearchResultsRenderer":{"tabs":[{"tabRenderer":{"content":{"sectionListRenderer":{"contents":[{"itemSectionRenderer":{}},{"musicShelfRenderer":{"contents":[{"musicResponsiveListItemRenderer":{
+              "playlistItemData":{"videoId":"abc"},
+              "thumbnail":{"musicThumbnailRenderer":{"thumbnail":{"thumbnails":[{"url":"https://example.test/cover=w60-h60-l90-rj"},{"url":"https://example.test/cover=w120-h120-l90-rj"}]}}},
+              "flexColumns":[
+                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"Song"}]}}},
+                {"musicResponsiveListItemFlexColumnRenderer":{"text":{"runs":[{"text":"One","navigationEndpoint":{"browseEndpoint":{"browseId":"UC1"}}},{"text":" & "},{"text":"Two"},{"text":" • "},{"text":"Album"},{"text":" • "},{"text":"4:09"}]}}}]}}]}}]}}}}]}}}
+            """));
+
+        MediaSearchResult result = (await provider.SearchAsync("song")).Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Title, Is.EqualTo("Song"));
+            Assert.That(result.Creator, Is.EqualTo("One & Two"));
+            Assert.That(result.CreatorUrl, Is.EqualTo("https://music.youtube.com/channel/UC1"));
+            Assert.That(result.Duration, Is.EqualTo(new TimeSpan(0, 4, 9)));
+            Assert.That(result.ThumbnailUri, Is.EqualTo(new Uri("https://example.test/cover=w480-h480-l90-rj")));
+            Assert.That(result.EmbedUri?.AbsoluteUri, Does.StartWith("https://www.youtube.com/embed/abc?"));
+            Assert.That(result.Kind, Is.EqualTo(MediaKind.Audio));
+        });
+    }
+
+    [Test]
+    public async Task Mixcloud_shows_embed_by_their_path()
+    {
+        var provider = new MixcloudSearchProvider(Serve("""
+            {"data":[{"key":"/dj/set/","url":"https://www.mixcloud.com/dj/set/","name":"Set","audio_length":3600,"pictures":{"640wx640h":"https://example.test/set.jpg"},"user":{"name":"DJ","url":"https://www.mixcloud.com/dj/"}}]}
+            """));
+
+        MediaSearchResult result = (await provider.SearchAsync("set")).Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Creator, Is.EqualTo("DJ"));
+            Assert.That(result.Duration, Is.EqualTo(TimeSpan.FromHours(1)));
+            Assert.That(result.EmbedUri, Is.EqualTo(new Uri("https://player-widget.mixcloud.com/widget/iframe/?hide_cover=1&feed=%2Fdj%2Fset%2F")));
+        });
+    }
+
+    [Test]
+    public async Task Bilibili_searches_as_a_visitor_and_tidies_what_comes_back()
+    {
+        var handler = new FixedResponse("""
+            {"data":{"b_3":"visitor","result":[{"bvid":"BV1","title":"A <em class=\"keyword\">Clip</em> &amp; more","author":"Maker","mid":7,"pic":"//example.test/p.jpg","duration":"125:30"}]}}
+            """);
+        var provider = new BilibiliSearchProvider(new HttpClient(handler));
+
+        MediaSearchResult result = (await provider.SearchAsync("clip")).Single();
+        await provider.SearchAsync("again");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(handler.Requests, Has.Count.EqualTo(3), "the visitor id is asked for once");
+            Assert.That(result.Title, Is.EqualTo("A Clip & more"));
+            Assert.That(result.Duration, Is.EqualTo(new TimeSpan(2, 5, 30)));
+            Assert.That(result.ThumbnailUri, Is.EqualTo(new Uri("https://example.test/p.jpg")));
+            Assert.That(result.CreatorUrl, Is.EqualTo("https://space.bilibili.com/7"));
+            Assert.That(result.EmbedUri, Is.EqualTo(new Uri("https://player.bilibili.com/player.html?bvid=BV1&autoplay=0")));
+        });
+    }
+
+    [Test]
+    public async Task Niconico_titles_are_decoded_twice()
+    {
+        var provider = new NiconicoSearchProvider(Serve("""
+            {"data":[{"contentId":"sm9","title":"It&amp;#039;s","lengthSeconds":124,"thumbnailUrl":"https://example.test/9"}]}
+            """));
+
+        MediaSearchResult result = (await provider.SearchAsync("it")).Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Title, Is.EqualTo("It's"));
+            Assert.That(result.SourceUrl, Is.EqualTo("https://www.nicovideo.jp/watch/sm9"));
+            Assert.That(result.EmbedUri, Is.EqualTo(new Uri("https://embed.nicovideo.jp/watch/sm9")));
+        });
+    }
+
     private static HttpClient Serve(string json) => new(new FixedResponse(json));
 
     private sealed class FixedResponse(string json) : HttpMessageHandler
