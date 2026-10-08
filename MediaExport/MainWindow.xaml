@@ -59,8 +59,10 @@
             </TitleBar.Resources>
             <!-- The app's own icon and name, larger than the title bar's caption-sized title and centred together. -->
             <TitleBar.LeftHeader>
+                <!-- As wide as the open pane beside the toggle, so the search starts level with the pages below. -->
                 <StackPanel
-                    Margin="4,0,8,0"
+                    Width="182"
+                    Margin="4,0,0,0"
                     VerticalAlignment="Center"
                     Orientation="Horizontal"
                     Spacing="10">
@@ -78,8 +80,7 @@
             </TitleBar.LeftHeader>
 
             <Grid
-                MaxWidth="980"
-                Margin="16,0"
+                Margin="24,0,16,0"
                 VerticalAlignment="Center"
                 ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
@@ -180,8 +181,8 @@
                 </Grid>
 
                 <!--
-                    What comes first, for the suggestions here and the Search page alike: what the results are ranked by,
-                    and then how they're laid out. Only laying out by date or title has a direction, so it's chosen there.
+                    What comes first, for the suggestions here and the Search page alike, as the two questions it is:
+                    which results to find, and what order to show them in.
                 -->
                 <DropDownButton
                     Grid.Column="2"
@@ -194,47 +195,25 @@
                         <TextBlock Text="{x:Bind Search.SortLabel, Mode=OneWay}" />
                     </StackPanel>
                     <DropDownButton.Flyout>
-                        <MenuFlyout
+                        <Flyout
                             Closed="SortMenu_Closed"
                             Opening="SortMenu_Opening"
                             Placement="BottomEdgeAlignedRight">
-                            <RadioMenuFlyoutItem
-                                Click="Sort_Click"
-                                GroupName="Sort"
-                                Tag="Relevance"
-                                Text="Relevancy" />
-                            <RadioMenuFlyoutItem
-                                Click="Sort_Click"
-                                GroupName="Sort"
-                                Tag="Popularity"
-                                Text="Popularity" />
-                            <MenuFlyoutSeparator />
-                            <RadioMenuFlyoutItem
-                                Click="Arrange_Click"
-                                GroupName="Arrange"
-                                Tag="AsRanked"
-                                Text="In that order" />
-                            <RadioMenuFlyoutItem
-                                Click="Arrange_Click"
-                                GroupName="Arrange"
-                                Tag="NewestFirst"
-                                Text="Then newest first" />
-                            <RadioMenuFlyoutItem
-                                Click="Arrange_Click"
-                                GroupName="Arrange"
-                                Tag="OldestFirst"
-                                Text="Then oldest first" />
-                            <RadioMenuFlyoutItem
-                                Click="Arrange_Click"
-                                GroupName="Arrange"
-                                Tag="TitleAToZ"
-                                Text="Then by title, A to Z" />
-                            <RadioMenuFlyoutItem
-                                Click="Arrange_Click"
-                                GroupName="Arrange"
-                                Tag="TitleZToA"
-                                Text="Then by title, Z to A" />
-                        </MenuFlyout>
+                            <StackPanel Width="250" Spacing="12">
+                                <RadioButtons Header="Find the" SelectedIndex="{x:Bind Search.SortIndex, Mode=TwoWay}">
+                                    <RadioButton Content="Most relevant" ToolTipService.ToolTip="Relevancy: the closest matches to what you typed" />
+                                    <RadioButton Content="Most popular" ToolTipService.ToolTip="Popularity: the most played matches" />
+                                </RadioButtons>
+                                <Rectangle Style="{StaticResource DividerStyle}" />
+                                <RadioButtons Header="Show them" SelectedIndex="{x:Bind Search.ArrangementIndex, Mode=TwoWay}">
+                                    <RadioButton Content="In that order" />
+                                    <RadioButton Content="Newest first" />
+                                    <RadioButton Content="Oldest first" />
+                                    <RadioButton Content="By title, A to Z" />
+                                    <RadioButton Content="By title, Z to A" />
+                                </RadioButtons>
+                            </StackPanel>
+                        </Flyout>
                     </DropDownButton.Flyout>
                 </DropDownButton>
             </Grid>

@@ -13,7 +13,7 @@
         VerticalAlignment="Stretch"
         HorizontalContentAlignment="Stretch"
         VerticalContentAlignment="Stretch"
-        AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneWay}"
+        AutomationProperties.Name="{x:Bind AccessibleName}"
         Click="Button_Click"
         CornerRadius="12"
         Style="{StaticResource SubtleButtonStyle}">
@@ -25,7 +25,7 @@
 
             <!-- The card is as wide as its picture's shape asks (see JustifiedLayout), so the picture fills its frame uncropped. -->
             <Grid Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="10">
-                <Image Source="{x:Bind ThumbnailSource, Mode=OneWay}" Stretch="UniformToFill" />
+                <Image Source="{x:Bind ThumbnailSource}" Stretch="UniformToFill" />
                 <Border
                     Margin="6"
                     Padding="6,2,6,3"
@@ -34,8 +34,8 @@
                     Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                     CornerRadius="4"
                     Opacity="0.9"
-                    Visibility="{x:Bind DurationVisibility, Mode=OneWay}">
-                    <TextBlock FontSize="12" Text="{x:Bind DurationText, Mode=OneWay}" />
+                    Visibility="{x:Bind DurationVisibility}">
+                    <TextBlock FontSize="12" Text="{x:Bind DurationText}" />
                 </Border>
             </Grid>
 
@@ -44,10 +44,10 @@
                 <TextBlock
                     FontWeight="SemiBold"
                     MaxLines="2"
-                    Text="{x:Bind TitleText, Mode=OneWay}"
+                    Text="{x:Bind TitleText}"
                     TextTrimming="CharacterEllipsis"
                     TextWrapping="Wrap"
-                    ToolTipService.ToolTip="{x:Bind TitleText, Mode=OneWay}" />
+                    ToolTipService.ToolTip="{x:Bind TitleText}" />
                 <Grid ColumnSpacing="6">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -57,18 +57,18 @@
                         Width="14"
                         Height="14"
                         VerticalAlignment="Center"
-                        Source="{x:Bind ProviderId, Mode=OneWay}" />
+                        Source="{x:Bind ProviderId}" />
                     <TextBlock
                         Grid.Column="1"
                         VerticalAlignment="Center"
                         Style="{StaticResource SecondaryTextStyle}"
-                        Text="{x:Bind CreatorText, Mode=OneWay}"
+                        Text="{x:Bind CreatorText}"
                         TextTrimming="CharacterEllipsis"
                         TextWrapping="NoWrap" />
                 </Grid>
                 <TextBlock
                     Style="{StaticResource SecondaryTextStyle}"
-                    Text="{x:Bind MetaText, Mode=OneWay}"
+                    Text="{x:Bind MetaText}"
                     TextTrimming="CharacterEllipsis"
                     TextWrapping="NoWrap" />
             </StackPanel>

@@ -81,13 +81,26 @@ public sealed partial class SearchViewModel : ObservableObject
     /// Asked of the sources that can order their own, and applied to what comes back.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SortLabel))]
+    [NotifyPropertyChangedFor(nameof(SortLabel), nameof(SortIndex))]
     public partial SearchSort Sort { get; set; }
 
     /// <summary>How those results are then laid out: as ranked, by date, or by title.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SortLabel))]
+    [NotifyPropertyChangedFor(nameof(SortLabel), nameof(ArrangementIndex))]
     public partial SearchArrangement Arrangement { get; set; }
+
+    /// <summary><see cref="Sort"/> and <see cref="Arrangement"/> as positions in their lists of choices.</summary>
+    public int SortIndex
+    {
+        get => (int)Sort;
+        set => Sort = value < 0 ? Sort : (SearchSort)value;
+    }
+
+    public int ArrangementIndex
+    {
+        get => (int)Arrangement;
+        set => Arrangement = value < 0 ? Arrangement : (SearchArrangement)value;
+    }
 
     /// <summary>Both in a few words, e.g. "Relevancy" or "Popularity, newest first".</summary>
     public string SortLabel => (Sort == SearchSort.Popularity ? "Popularity" : "Relevancy") + Arrangement switch

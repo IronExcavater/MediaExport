@@ -262,20 +262,9 @@ public sealed partial class MainWindow : Window
         searchBox.Focus(FocusState.Programmatic);
     }
 
-    private void SortMenu_Opening(object? sender, object args)
-    {
-        Search.IsMenuOpen = true;
-        foreach (RadioMenuFlyoutItem item in ((MenuFlyout)sender!).Items.OfType<RadioMenuFlyoutItem>())
-            item.IsChecked = (string)item.Tag == Search.Sort.ToString() || (string)item.Tag == Search.Arrangement.ToString();
-    }
+    private void SortMenu_Opening(object? sender, object args) => Search.IsMenuOpen = true;
 
     private void SortMenu_Closed(object? sender, object args) => Search.IsMenuOpen = false;
-
-    private void Sort_Click(object sender, RoutedEventArgs args) =>
-        Search.Sort = Enum.Parse<SearchSort>((string)((FrameworkElement)sender).Tag);
-
-    private void Arrange_Click(object sender, RoutedEventArgs args) =>
-        Search.Arrangement = Enum.Parse<SearchArrangement>((string)((FrameworkElement)sender).Tag);
 
     // The box only shows its clear button while focused; this keeps it whenever there's text to clear.
     private void SearchBox_Loaded(object sender, RoutedEventArgs args)

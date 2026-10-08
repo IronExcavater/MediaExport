@@ -53,6 +53,9 @@ public sealed partial class ResultsViewModel : ObservableObject
                 if (args.PropertyName != nameof(SourceFilter.IsPicked) || _isSwitching)
                     return;
 
+                // With every source picked, clicking one means "just this one" rather than "all but this one".
+                if (!source.IsPicked && Sources.All(other => other == source || other.IsPicked))
+                    PickOnly(source);
                 OnPicksChanged();
             };
         }
@@ -68,10 +71,6 @@ public sealed partial class ResultsViewModel : ObservableObject
     public ObservableCollection<MediaSearchResult> Results { get; } = [];
 
     public bool AreAllPicked => Sources.All(source => source.IsPicked);
-
-    /// <summary>What the one button over all the sources does next: picks them all, or once they are, lets go of them all.</summary>
-    public string PickAllLabel => AreAllPicked ? "Clear all" : "Select all";
-    public string PickAllGlyph => AreAllPicked ? "\uE8E6" : "\uE8B3";
 
     /// <summary>What was last searched for.</summary>
     [ObservableProperty]
@@ -118,7 +117,7 @@ public sealed partial class ResultsViewModel : ObservableObject
             {
                 IsSearching = false;
                 Show([]);
-                Message = "No source is picked. Pick one above, or select them all.";
+                Message = "No source is picked. Pick one above, or choose Everywhere.";
                 return;
             }
 
@@ -141,23 +140,23 @@ public sealed partial class ResultsViewModel : ObservableObject
         }
     }
 
-    /// <summary>Picks every source, or if they all are, none, searching once rather than once per source.</summary>
+    /// <summary>Picks every source again, searching once rather than once per source.</summary>
     [RelayCommand]
-    private void PickAll()
+    private void PickAll() => PickOnly(null);
+
+    private void PickOnly(SourceFilter? only)
     {
-        bool pick = !AreAllPicked;
         _isSwitching = true;
         foreach (SourceFilter source in Sources)
-            source.IsPicked = pick;
+            source.IsPicked = only is null || source == only;
         _isSwitching = false;
-        OnPicksChanged();
+        if (only is null)
+            OnPicksChanged();
     }
 
     private void OnPicksChanged()
     {
         OnPropertyChanged(nameof(AreAllPicked));
-        OnPropertyChanged(nameof(PickAllLabel));
-        OnPropertyChanged(nameof(PickAllGlyph));
         _ = SearchAsync(Query);
     }
 

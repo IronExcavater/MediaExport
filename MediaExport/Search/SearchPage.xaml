@@ -96,83 +96,76 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- What was searched, and how much came back. The order is the title bar's to set. -->
-        <StackPanel Orientation="Horizontal" Spacing="12">
+        <!-- What was searched and how much came back; on the right, back to every source in one go. -->
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
             <TextBlock
                 VerticalAlignment="Bottom"
                 Style="{StaticResource SubtitleTextBlockStyle}"
                 Text="{x:Bind ViewModel.Heading, Mode=OneWay}"
                 TextTrimming="CharacterEllipsis" />
             <TextBlock
+                Grid.Column="1"
                 Margin="0,0,0,3"
                 VerticalAlignment="Bottom"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 Text="{x:Bind ViewModel.Summary, Mode=OneWay}" />
-        </StackPanel>
+            <!-- Lit while every source is picked; clicking it picks them all, and never unpicks any. -->
+            <ToggleButton
+                Grid.Column="2"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="Search everywhere"
+                Click="Everywhere_Click"
+                IsChecked="{x:Bind ViewModel.AreAllPicked, Mode=OneWay}"
+                ToolTipService.ToolTip="Search every source">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon FontSize="14" Glyph="&#xE774;" />
+                    <TextBlock Text="Everywhere" />
+                </StackPanel>
+            </ToggleButton>
+        </Grid>
 
         <!--
             Where to look, in place of the title bar's one source: the sources picked, which to begin with is all of them.
             They wrap onto another line when the window's too narrow for one. Each keeps room for its count,
             so the row doesn't reflow as results arrive.
         -->
-        <Grid Grid.Row="1" ColumnSpacing="12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <Button
-                Height="34"
-                MinWidth="112"
-                VerticalAlignment="Top"
-                Command="{x:Bind ViewModel.PickAllCommand}"
-                ToolTipService.ToolTip="Pick every source at once, or let go of them all to pick just a few">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <FontIcon FontSize="14" Glyph="{x:Bind ViewModel.PickAllGlyph, Mode=OneWay}" />
-                    <TextBlock Text="{x:Bind ViewModel.PickAllLabel, Mode=OneWay}" />
-                </StackPanel>
-            </Button>
-            <Rectangle
-                Grid.Column="1"
-                Width="1"
-                Height="22"
-                Margin="0,6"
-                VerticalAlignment="Top"
-                Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
-            <Grid Grid.Column="2">
-                <ItemsControl
-                    Margin="0,0,0,-8"
-                    ItemsPanel="{StaticResource WrapPanelTemplate}"
-                    ItemsSource="{x:Bind ViewModel.Sources}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="local:SourceFilter">
-                            <ToggleButton
-                                Margin="0,0,8,8"
-                                AutomationProperties.Name="{x:Bind Provider.DisplayName}"
-                                IsChecked="{x:Bind IsPicked, Mode=TwoWay}"
-                                Style="{StaticResource SourcePillStyle}"
-                                ToolTipService.ToolTip="Search this source, or leave it out">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <controls:IconView
-                                        Width="18"
-                                        Height="18"
-                                        VerticalAlignment="Center"
-                                        Icon="{x:Bind Provider.Icon}" />
-                                    <TextBlock VerticalAlignment="Center" Text="{x:Bind Provider.DisplayName}" />
-                                    <!-- How many of the results on the page are this source's. -->
-                                    <TextBlock
-                                        MinWidth="14"
-                                        VerticalAlignment="Center"
-                                        FontSize="12"
-                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                        Text="{x:Bind Count, Mode=OneWay}" />
-                                </StackPanel>
-                            </ToggleButton>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </Grid>
-        </Grid>
+        <ItemsControl
+            Grid.Row="1"
+            Margin="0,0,0,-8"
+            ItemsPanel="{StaticResource WrapPanelTemplate}"
+            ItemsSource="{x:Bind ViewModel.Sources}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="local:SourceFilter">
+                    <ToggleButton
+                        Margin="0,0,8,8"
+                        AutomationProperties.Name="{x:Bind Provider.DisplayName}"
+                        IsChecked="{x:Bind IsPicked, Mode=TwoWay}"
+                        Style="{StaticResource SourcePillStyle}"
+                        ToolTipService.ToolTip="Search just this source, or add it to the ones picked">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <controls:IconView
+                                Width="18"
+                                Height="18"
+                                VerticalAlignment="Center"
+                                Icon="{x:Bind Provider.Icon}" />
+                            <TextBlock VerticalAlignment="Center" Text="{x:Bind Provider.DisplayName}" />
+                            <!-- How many of the results on the page are this source's. -->
+                            <TextBlock
+                                MinWidth="14"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Text="{x:Bind Count, Mode=OneWay}" />
+                        </StackPanel>
+                    </ToggleButton>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
 
         <ProgressBar
             Grid.Row="2"
