@@ -87,7 +87,7 @@ public sealed partial class ExportPage : Page, INotifyPropertyChanged
         await Shell.OpenLinkAsync(link);
     }
 
-    private void Recent_ItemClick(object sender, ItemClickEventArgs args) => Shell.Open((MediaSearchResult)args.ClickedItem);
+    private void Recent_Chosen(object? sender, MediaSearchResult media) => Shell.Open(media);
 
     private void SeeAllExports_Click(object sender, RoutedEventArgs args) => Shell.GoToActivity();
 

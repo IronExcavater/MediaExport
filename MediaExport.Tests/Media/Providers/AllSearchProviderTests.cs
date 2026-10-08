@@ -61,7 +61,7 @@ public sealed class AllSearchProviderTests
     }
 
     [Test]
-    public void Sorting_puts_results_without_a_count_or_date_last_and_leaves_one_source_as_it_came()
+    public void Results_are_ranked_then_arranged_with_what_cant_be_placed_last()
     {
         MediaSearchResult old = Result("a", "Old", views: 9, published: new DateTimeOffset(2010, 1, 1, 0, 0, 0, TimeSpan.Zero));
         MediaSearchResult recent = Result("a", "New", views: 2, published: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
@@ -71,10 +71,11 @@ public sealed class AllSearchProviderTests
         Assert.Multiple(() =>
         {
             Assert.That(SearchRanking.Order(sources, "x", SearchSort.Popularity), Is.EqualTo(new[] { old, recent, unknown }));
-            Assert.That(SearchRanking.Order(sources, "x", SearchSort.Recency), Is.EqualTo(new[] { recent, old, unknown }));
-            Assert.That(SearchRanking.Order([[recent, old]], "old", SearchSort.Relevance), Is.EqualTo(new[] { recent, old }));
-            Assert.That(SearchRanking.Order(sources, "x", SearchSort.Recency, ascending: true), Is.EqualTo(new[] { old, recent, unknown }), "turned round, the undated still last");
-            Assert.That(SearchRanking.Order([[recent, old]], "old", SearchSort.Relevance, ascending: true), Is.EqualTo(new[] { old, recent }));
+            Assert.That(SearchRanking.Order([[recent, old]], "old", SearchSort.Relevance), Is.EqualTo(new[] { recent, old }), "one source is left as it came");
+            Assert.That(SearchRanking.Order(sources, "x", SearchSort.Relevance, SearchArrangement.NewestFirst), Is.EqualTo(new[] { recent, old, unknown }));
+            Assert.That(SearchRanking.Order(sources, "x", SearchSort.Relevance, SearchArrangement.OldestFirst), Is.EqualTo(new[] { old, recent, unknown }), "the undated last either way");
+            Assert.That(SearchRanking.Order(sources, "x", SearchSort.Popularity, SearchArrangement.TitleAToZ), Is.EqualTo(new[] { recent, old, unknown }));
+            Assert.That(SearchRanking.Order(sources, "x", SearchSort.Popularity, SearchArrangement.TitleZToA), Is.EqualTo(new[] { unknown, old, recent }));
         });
     }
 

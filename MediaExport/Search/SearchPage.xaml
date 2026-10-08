@@ -6,21 +6,12 @@
     xmlns:controls="using:MediaExport.Controls"
     xmlns:converters="using:MediaExport.Converters"
     xmlns:local="using:MediaExport.Search"
+    xmlns:media="using:MediaExport.Media.Controls"
     xmlns:models="using:MediaExport.Core.Media.Models"
     Background="Transparent"
     NavigationCacheMode="Required">
 
     <Page.Resources>
-        <!-- A result is one big button with nothing of a button's look until it's pointed at. -->
-        <Style x:Key="ResultButtonStyle" BasedOn="{StaticResource SubtleButtonStyle}" TargetType="Button">
-            <Setter Property="Padding" Value="8" />
-            <Setter Property="CornerRadius" Value="12" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="VerticalAlignment" Value="Stretch" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="VerticalContentAlignment" Value="Top" />
-        </Style>
-
         <!--
             A source to search: quiet until picked, then tinted and ringed in the accent colour. A solid accent
             fill would drown the sources' own icons, and a row of nine of them would shout.
@@ -120,7 +111,7 @@
         </StackPanel>
 
         <!--
-            Where to look, in place of the title bar's one source: everywhere, or just the sources picked.
+            Where to look, in place of the title bar's one source: the sources picked, which to begin with is all of them.
             They wrap onto another line when the window's too narrow for one. Each keeps room for its count,
             so the row doesn't reflow as results arrive.
         -->
@@ -130,18 +121,17 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <ToggleButton
+            <Button
+                Height="34"
+                MinWidth="112"
                 VerticalAlignment="Top"
-                AutomationProperties.Name="Every source"
-                Click="EverySource_Click"
-                IsChecked="{x:Bind ViewModel.IsEverySource, Mode=OneWay}"
-                Style="{StaticResource SourcePillStyle}"
-                ToolTipService.ToolTip="Search every source">
+                Command="{x:Bind ViewModel.PickAllCommand}"
+                ToolTipService.ToolTip="Pick every source at once, or let go of them all to pick just a few">
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <FontIcon FontSize="14" Glyph="&#xE774;" />
-                    <TextBlock Text="Everywhere" />
+                    <FontIcon FontSize="14" Glyph="{x:Bind ViewModel.PickAllGlyph, Mode=OneWay}" />
+                    <TextBlock Text="{x:Bind ViewModel.PickAllLabel, Mode=OneWay}" />
                 </StackPanel>
-            </ToggleButton>
+            </Button>
             <Rectangle
                 Grid.Column="1"
                 Width="1"
@@ -161,7 +151,7 @@
                                 AutomationProperties.Name="{x:Bind Provider.DisplayName}"
                                 IsChecked="{x:Bind IsPicked, Mode=TwoWay}"
                                 Style="{StaticResource SourcePillStyle}"
-                                ToolTipService.ToolTip="Search just the sources picked">
+                                ToolTipService.ToolTip="Search this source, or leave it out">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <controls:IconView
                                         Width="18"
@@ -208,96 +198,17 @@
                 TextWrapping="Wrap" />
         </StackPanel>
 
-        <!-- A feed of cards, as many across as fit; their size is set in code so every picture is exactly 16:9. -->
-        <ScrollViewer
-            x:Name="scroller"
-            Grid.Row="2"
-            Margin="-8,4,-8,0"
-            SizeChanged="Scroller_SizeChanged">
+        <!--
+            A feed of cards in rows of one height, each card as wide as its picture's shape: 16:9 for video, square for a cover.
+        -->
+        <ScrollViewer Grid.Row="2" Margin="-8,0,-8,0">
             <ItemsRepeater Margin="0,0,0,24" ItemsSource="{x:Bind ViewModel.Results}">
                 <ItemsRepeater.Layout>
-                    <UniformGridLayout
-                        x:Name="feed"
-                        MinColumnSpacing="4"
-                        MinItemHeight="260"
-                        MinItemWidth="300"
-                        MinRowSpacing="8" />
+                    <media:JustifiedLayout RowHeight="180" Spacing="4" />
                 </ItemsRepeater.Layout>
                 <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="models:MediaSearchResult">
-                        <Button
-                            AutomationProperties.Name="{x:Bind}"
-                            Click="Result_Click"
-                            Style="{StaticResource ResultButtonStyle}"
-                            Tag="{x:Bind}">
-                            <Grid RowSpacing="10">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="*" />
-                                    <RowDefinition Height="84" />
-                                </Grid.RowDefinitions>
-
-                                <!--
-                                    The picture, whole, over a dimmed copy of itself filling the frame: a 16:9 one covers
-                                    the copy entirely, and a square cover sits in the middle with its own colours either side.
-                                -->
-                                <Grid Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="10">
-                                    <Image Opacity="0.3" Stretch="UniformToFill">
-                                        <Image.Source>
-                                            <BitmapImage DecodePixelWidth="96" UriSource="{x:Bind ThumbnailUri}" />
-                                        </Image.Source>
-                                    </Image>
-                                    <Image Stretch="Uniform">
-                                        <Image.Source>
-                                            <BitmapImage DecodePixelWidth="640" UriSource="{x:Bind ThumbnailUri}" />
-                                        </Image.Source>
-                                    </Image>
-                                    <Border
-                                        Margin="8"
-                                        Padding="6,2,6,3"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Bottom"
-                                        Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-                                        CornerRadius="4"
-                                        Opacity="0.9"
-                                        Visibility="{x:Bind converters:Show.WhenSet(Duration)}">
-                                        <TextBlock FontSize="12" Text="{x:Bind converters:Format.Duration(Duration)}" />
-                                    </Border>
-                                </Grid>
-
-                                <!-- Its source's icon beside what it is, who made it, and how played and how old it is. -->
-                                <Grid Grid.Row="1" ColumnSpacing="12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <controls:IconView
-                                        Width="28"
-                                        Height="28"
-                                        Margin="2,2,0,0"
-                                        VerticalAlignment="Top"
-                                        Source="{x:Bind ProviderId}" />
-                                    <StackPanel Grid.Column="1" Spacing="2">
-                                        <TextBlock
-                                            FontWeight="SemiBold"
-                                            MaxLines="2"
-                                            Text="{x:Bind Title}"
-                                            TextTrimming="CharacterEllipsis"
-                                            TextWrapping="Wrap" />
-                                        <TextBlock
-                                            Style="{StaticResource SecondaryTextStyle}"
-                                            Text="{x:Bind Creator}"
-                                            TextTrimming="CharacterEllipsis"
-                                            TextWrapping="NoWrap"
-                                            Visibility="{x:Bind converters:Show.WhenText(Creator)}" />
-                                        <TextBlock
-                                            Style="{StaticResource SecondaryTextStyle}"
-                                            Text="{x:Bind converters:Format.Meta(Views, Published)}"
-                                            TextTrimming="CharacterEllipsis"
-                                            TextWrapping="NoWrap" />
-                                    </StackPanel>
-                                </Grid>
-                            </Grid>
-                        </Button>
+                        <media:MediaCard Chosen="Result_Chosen" Media="{x:Bind}" />
                     </DataTemplate>
                 </ItemsRepeater.ItemTemplate>
             </ItemsRepeater>

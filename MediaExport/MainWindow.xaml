@@ -78,7 +78,7 @@
             </TitleBar.LeftHeader>
 
             <Grid
-                MaxWidth="640"
+                MaxWidth="980"
                 Margin="16,0"
                 VerticalAlignment="Center"
                 ColumnSpacing="8">
@@ -179,53 +179,64 @@
                         Visibility="{x:Bind converters:Show.WhenAny(Search.IsSearching, Results.IsSearching), Mode=OneWay}" />
                 </Grid>
 
-                <!-- What comes first, and which way round: for the suggestions here and the Search page alike. -->
-                <StackPanel
+                <!--
+                    What comes first, for the suggestions here and the Search page alike: what the results are ranked by,
+                    and then how they're laid out. Only laying out by date or title has a direction, so it's chosen there.
+                -->
+                <DropDownButton
                     Grid.Column="2"
+                    Height="32"
                     VerticalAlignment="Center"
-                    Orientation="Horizontal"
-                    Spacing="4">
-                    <DropDownButton
-                        Height="32"
-                        AutomationProperties.Name="Sort results"
-                        ToolTipService.ToolTip="Sort results">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon FontSize="14" Glyph="&#xE8CB;" />
-                            <TextBlock Text="{x:Bind Search.SortLabel, Mode=OneWay}" />
-                        </StackPanel>
-                        <DropDownButton.Flyout>
-                            <MenuFlyout
-                                Closed="SortMenu_Closed"
-                                Opening="SortMenu_Opening"
-                                Placement="BottomEdgeAlignedRight">
-                                <RadioMenuFlyoutItem
-                                    Click="Sort_Click"
-                                    GroupName="Sort"
-                                    Tag="Relevance"
-                                    Text="Best match" />
-                                <RadioMenuFlyoutItem
-                                    Click="Sort_Click"
-                                    GroupName="Sort"
-                                    Tag="Popularity"
-                                    Text="Most played" />
-                                <RadioMenuFlyoutItem
-                                    Click="Sort_Click"
-                                    GroupName="Sort"
-                                    Tag="Recency"
-                                    Text="Newest" />
-                            </MenuFlyout>
-                        </DropDownButton.Flyout>
-                    </DropDownButton>
-                    <Button
-                        Width="36"
-                        Height="32"
-                        Padding="0"
-                        AutomationProperties.Name="Reverse the order"
-                        Click="Direction_Click"
-                        ToolTipService.ToolTip="{x:Bind Search.DirectionLabel, Mode=OneWay}">
-                        <FontIcon FontSize="14" Glyph="{x:Bind Search.DirectionGlyph, Mode=OneWay}" />
-                    </Button>
-                </StackPanel>
+                    AutomationProperties.Name="Sort results"
+                    ToolTipService.ToolTip="Sort results">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="14" Glyph="&#xE8CB;" />
+                        <TextBlock Text="{x:Bind Search.SortLabel, Mode=OneWay}" />
+                    </StackPanel>
+                    <DropDownButton.Flyout>
+                        <MenuFlyout
+                            Closed="SortMenu_Closed"
+                            Opening="SortMenu_Opening"
+                            Placement="BottomEdgeAlignedRight">
+                            <RadioMenuFlyoutItem
+                                Click="Sort_Click"
+                                GroupName="Sort"
+                                Tag="Relevance"
+                                Text="Relevancy" />
+                            <RadioMenuFlyoutItem
+                                Click="Sort_Click"
+                                GroupName="Sort"
+                                Tag="Popularity"
+                                Text="Popularity" />
+                            <MenuFlyoutSeparator />
+                            <RadioMenuFlyoutItem
+                                Click="Arrange_Click"
+                                GroupName="Arrange"
+                                Tag="AsRanked"
+                                Text="In that order" />
+                            <RadioMenuFlyoutItem
+                                Click="Arrange_Click"
+                                GroupName="Arrange"
+                                Tag="NewestFirst"
+                                Text="Then newest first" />
+                            <RadioMenuFlyoutItem
+                                Click="Arrange_Click"
+                                GroupName="Arrange"
+                                Tag="OldestFirst"
+                                Text="Then oldest first" />
+                            <RadioMenuFlyoutItem
+                                Click="Arrange_Click"
+                                GroupName="Arrange"
+                                Tag="TitleAToZ"
+                                Text="Then by title, A to Z" />
+                            <RadioMenuFlyoutItem
+                                Click="Arrange_Click"
+                                GroupName="Arrange"
+                                Tag="TitleZToA"
+                                Text="Then by title, Z to A" />
+                        </MenuFlyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
             </Grid>
         </TitleBar>
 

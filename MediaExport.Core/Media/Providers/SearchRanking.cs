@@ -5,6 +5,19 @@ using MediaExport.Core.Media.Models;
 
 namespace MediaExport.Core.Media.Providers;
 
+/// <summary>
+/// How the results a search brought back are laid out, once <see cref="SearchSort"/> has decided which
+/// results those are. <see cref="AsRanked"/> leaves them in the order that decided it.
+/// </summary>
+public enum SearchArrangement
+{
+    AsRanked,
+    NewestFirst,
+    OldestFirst,
+    TitleAToZ,
+    TitleZToA
+}
+
 /// <summary>Puts results from one or several sources into one order.</summary>
 public static class SearchRanking
 {
@@ -31,38 +44,34 @@ public static class SearchRanking
     }
 
     /// <summary>
-    /// One list from each source's results. By relevance a single source keeps its own order; results
-    /// without a play count or a date go last when sorting by those, in the order they came.
+    /// One list from each source's results, ranked by <paramref name="sort"/> and then laid out by
+    /// <paramref name="arrangement"/>. By relevance a single source keeps its own order. Results without a
+    /// play count go last by popularity, and those without a date go last when arranged by date, either way round.
     /// </summary>
-    /// <param name="ascending">Turns the order round (least played, oldest, loosest match first); what has no count or date still goes last.</param>
     public static IReadOnlyList<MediaSearchResult> Order(
         IReadOnlyList<IReadOnlyList<MediaSearchResult>> sources,
         string query,
         SearchSort sort,
-        bool ascending = false)
+        SearchArrangement arrangement = SearchArrangement.AsRanked)
     {
         var placed = sources.SelectMany(source => source.Select((result, place) => (Result: result, Place: place, Of: source.Count)));
-        var ordered = sort switch
+        var ranked = sort switch
         {
             SearchSort.Popularity => placed.OrderByDescending(item => item.Result.Views ?? -1),
-            SearchSort.Recency => placed.OrderByDescending(item => item.Result.Published ?? DateTimeOffset.MinValue),
             _ when sources.Count == 1 => placed.OrderBy(item => item.Place),
             _ => placed.OrderByDescending(item => Relevance(item.Result, query, item.Place, item.Of))
         };
+        IEnumerable<MediaSearchResult> results = ranked.ThenBy(item => item.Place).Select(item => item.Result).DistinctBy(result => result.SourceUrl);
 
-        MediaSearchResult[] results = ordered.ThenBy(item => item.Place).Select(item => item.Result).DistinctBy(result => result.SourceUrl).ToArray();
-        if (!ascending)
-            return results;
-
-        // Only what could be compared is turned round; the rest keeps its place at the end.
-        int known = sort switch
+        // Sorting keeps the ranking among results it can't tell apart, the undated ones included.
+        return (arrangement switch
         {
-            SearchSort.Popularity => results.Count(result => result.Views is not null),
-            SearchSort.Recency => results.Count(result => result.Published is not null),
-            _ => results.Length
-        };
-        Array.Reverse(results, 0, known);
-        return results;
+            SearchArrangement.NewestFirst => results.OrderBy(result => result.Published is null).ThenByDescending(result => result.Published),
+            SearchArrangement.OldestFirst => results.OrderBy(result => result.Published is null).ThenBy(result => result.Published),
+            SearchArrangement.TitleAToZ => results.OrderBy(result => result.Title, StringComparer.CurrentCultureIgnoreCase),
+            SearchArrangement.TitleZToA => results.OrderByDescending(result => result.Title, StringComparer.CurrentCultureIgnoreCase),
+            _ => results
+        }).ToArray();
     }
 
     private static bool Says(string? text, string words) =>

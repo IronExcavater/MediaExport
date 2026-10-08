@@ -14,14 +14,14 @@ using System.Threading.Tasks;
 
 namespace MediaExport.Search;
 
-/// <summary>A source on the Search page: picked to narrow the search to it, with how much it found.</summary>
+/// <summary>A source on the Search page: asked while it's picked, with how much it found.</summary>
 public sealed partial class SourceFilter(IMediaSearchProvider provider) : ObservableObject
 {
     public IMediaSearchProvider Provider => provider;
 
-    /// <summary>Picked sources are the only ones asked; with none picked, every source is.</summary>
+    /// <summary>Picked sources are the ones asked; they all start out picked.</summary>
     [ObservableProperty]
-    public partial bool IsPicked { get; set; }
+    public partial bool IsPicked { get; set; } = true;
 
     /// <summary>How many of the results on the page are its; nothing while there are none to count.</summary>
     [ObservableProperty]
@@ -40,7 +40,7 @@ public sealed partial class ResultsViewModel : ObservableObject
 
     private readonly SearchViewModel _search;
     private CancellationTokenSource? _running;
-    private bool _isClearingPicks;
+    private bool _isSwitching;
 
     public ResultsViewModel(IEnumerable<IMediaSearchProvider> providers, SearchViewModel search)
     {
@@ -50,17 +50,16 @@ public sealed partial class ResultsViewModel : ObservableObject
         {
             source.PropertyChanged += (_, args) =>
             {
-                if (args.PropertyName != nameof(SourceFilter.IsPicked) || _isClearingPicks)
+                if (args.PropertyName != nameof(SourceFilter.IsPicked) || _isSwitching)
                     return;
 
-                OnPropertyChanged(nameof(IsEverySource));
-                _ = SearchAsync(Query);
+                OnPicksChanged();
             };
         }
 
         search.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName is nameof(SearchViewModel.Sort) or nameof(SearchViewModel.IsAscending))
+            if (args.PropertyName is nameof(SearchViewModel.Sort) or nameof(SearchViewModel.Arrangement))
                 _ = SearchAsync(Query);
         };
     }
@@ -68,8 +67,11 @@ public sealed partial class ResultsViewModel : ObservableObject
     public IReadOnlyList<SourceFilter> Sources { get; }
     public ObservableCollection<MediaSearchResult> Results { get; } = [];
 
-    /// <summary>True while no source is picked, which is how every source gets searched.</summary>
-    public bool IsEverySource => Sources.All(source => !source.IsPicked);
+    public bool AreAllPicked => Sources.All(source => source.IsPicked);
+
+    /// <summary>What the one button over all the sources does next: picks them all, or once they are, lets go of them all.</summary>
+    public string PickAllLabel => AreAllPicked ? "Clear all" : "Select all";
+    public string PickAllGlyph => AreAllPicked ? "\uE8E6" : "\uE8B3";
 
     /// <summary>What was last searched for.</summary>
     [ObservableProperty]
@@ -89,9 +91,9 @@ public sealed partial class ResultsViewModel : ObservableObject
     public partial string? Message { get; private set; } = "Type in the search box above. Every source is searched at once, and what they have shows up here.";
 
     public bool HasMessage => Message is not null;
-    public string Heading => Query.Length > 0 ? $"Results for “{Query}”" : "Search every source";
+    public string Heading => Query.Length > 0 ? $"Results for “{Query}”" : "Search";
 
-    /// <summary>Asks the picked sources, or every source if none is picked; a newer search replaces one still under way.</summary>
+    /// <summary>Asks the picked sources; a newer search replaces one still under way.</summary>
     /// <param name="afterPause">Waits for typing to stop first, so each keystroke doesn't ask every source.</param>
     public async Task SearchAsync(string query, bool afterPause = false)
     {
@@ -111,8 +113,16 @@ public sealed partial class ResultsViewModel : ObservableObject
             Message = null;
             IsSearching = true;
 
-            IMediaSearchProvider[] asked = Sources.Where(source => IsEverySource || source.IsPicked).Select(source => source.Provider).ToArray();
-            var everything = new AllSearchProvider(asked, PerSource, _search.IsAscending);
+            IMediaSearchProvider[] asked = Sources.Where(source => source.IsPicked).Select(source => source.Provider).ToArray();
+            if (asked.Length == 0)
+            {
+                IsSearching = false;
+                Show([]);
+                Message = "No source is picked. Pick one above, or select them all.";
+                return;
+            }
+
+            var everything = new AllSearchProvider(asked, PerSource, _search.Arrangement);
             await foreach (IReadOnlyList<MediaSearchResult> soFar in everything.SearchEachAsync(query, _search.Sort, running.Token))
                 Show(soFar);
 
@@ -131,15 +141,23 @@ public sealed partial class ResultsViewModel : ObservableObject
         }
     }
 
-    /// <summary>Goes back to searching every source, searching once rather than once per source let go of.</summary>
+    /// <summary>Picks every source, or if they all are, none, searching once rather than once per source.</summary>
     [RelayCommand]
-    private void SearchEverySource()
+    private void PickAll()
     {
-        _isClearingPicks = true;
+        bool pick = !AreAllPicked;
+        _isSwitching = true;
         foreach (SourceFilter source in Sources)
-            source.IsPicked = false;
-        _isClearingPicks = false;
-        OnPropertyChanged(nameof(IsEverySource));
+            source.IsPicked = pick;
+        _isSwitching = false;
+        OnPicksChanged();
+    }
+
+    private void OnPicksChanged()
+    {
+        OnPropertyChanged(nameof(AreAllPicked));
+        OnPropertyChanged(nameof(PickAllLabel));
+        OnPropertyChanged(nameof(PickAllGlyph));
         _ = SearchAsync(Query);
     }
 

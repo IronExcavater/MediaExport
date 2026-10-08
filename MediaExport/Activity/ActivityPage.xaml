@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:converters="using:MediaExport.Converters"
     xmlns:local="using:MediaExport.Activity"
+    xmlns:media="using:MediaExport.Media.Controls"
     Background="Transparent"
     NavigationCacheMode="Required">
 
@@ -174,7 +175,7 @@
                             </Grid.ColumnDefinitions>
 
                             <Border
-                                Width="112"
+                                Width="{x:Bind media:MediaViewBase.WidthFor(Media.Kind, 63)}"
                                 Height="63"
                                 VerticalAlignment="Center"
                                 Background="{ThemeResource ControlFillColorSecondaryBrush}"

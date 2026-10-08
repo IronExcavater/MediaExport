@@ -5,12 +5,11 @@ using MediaExport.Core.Media.Models;
 
 namespace MediaExport.Core.Media.Providers;
 
-/// <summary>Which results come first.</summary>
+/// <summary>What decides which results a search brings back, and so which come first.</summary>
 public enum SearchSort
 {
     Relevance,
-    Popularity,
-    Recency
+    Popularity
 }
 
 public interface IMediaSearchProvider

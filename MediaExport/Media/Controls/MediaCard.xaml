@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<local:MediaViewBase
+    x:Class="MediaExport.Media.Controls.MediaCard"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:MediaExport.Controls"
+    xmlns:local="using:MediaExport.Media.Controls">
+
+    <!-- One big button with nothing of a button's look until it's pointed at. -->
+    <Button
+        Padding="8"
+        HorizontalAlignment="Stretch"
+        VerticalAlignment="Stretch"
+        HorizontalContentAlignment="Stretch"
+        VerticalContentAlignment="Stretch"
+        AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneWay}"
+        Click="Button_Click"
+        CornerRadius="12"
+        Style="{StaticResource SubtleButtonStyle}">
+        <Grid RowSpacing="10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="84" />
+            </Grid.RowDefinitions>
+
+            <!-- The card is as wide as its picture's shape asks (see JustifiedLayout), so the picture fills its frame uncropped. -->
+            <Grid Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="10">
+                <Image Source="{x:Bind ThumbnailSource, Mode=OneWay}" Stretch="UniformToFill" />
+                <Border
+                    Margin="6"
+                    Padding="6,2,6,3"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                    CornerRadius="4"
+                    Opacity="0.9"
+                    Visibility="{x:Bind DurationVisibility, Mode=OneWay}">
+                    <TextBlock FontSize="12" Text="{x:Bind DurationText, Mode=OneWay}" />
+                </Border>
+            </Grid>
+
+            <!-- What it is; where it's from and who made it; how played and how old it is. -->
+            <StackPanel Grid.Row="1" Spacing="3">
+                <TextBlock
+                    FontWeight="SemiBold"
+                    MaxLines="2"
+                    Text="{x:Bind TitleText, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="Wrap"
+                    ToolTipService.ToolTip="{x:Bind TitleText, Mode=OneWay}" />
+                <Grid ColumnSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <controls:IconView
+                        Width="14"
+                        Height="14"
+                        VerticalAlignment="Center"
+                        Source="{x:Bind ProviderId, Mode=OneWay}" />
+                    <TextBlock
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource SecondaryTextStyle}"
+                        Text="{x:Bind CreatorText, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap" />
+                </Grid>
+                <TextBlock
+                    Style="{StaticResource SecondaryTextStyle}"
+                    Text="{x:Bind MetaText, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap" />
+            </StackPanel>
+        </Grid>
+    </Button>
+</local:MediaViewBase>

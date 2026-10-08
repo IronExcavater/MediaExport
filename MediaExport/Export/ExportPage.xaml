@@ -89,71 +89,16 @@
 
                 <StackPanel Spacing="12" Visibility="{x:Bind Search.HasRecents, Mode=OneWay}">
                     <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Jump back in" />
-                    <GridView
-                        IsItemClickEnabled="True"
-                        ItemClick="Recent_ItemClick"
-                        ItemsSource="{x:Bind Search.Recents}"
-                        SelectionMode="None">
-                        <GridView.ItemTemplate>
+                    <ItemsRepeater Margin="-8,0" ItemsSource="{x:Bind Search.Recents}">
+                        <ItemsRepeater.Layout>
+                            <media:JustifiedLayout RowHeight="140" Spacing="4" />
+                        </ItemsRepeater.Layout>
+                        <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="models:MediaSearchResult">
-                                <StackPanel Width="232" Spacing="8">
-                                    <Grid
-                                        Height="130"
-                                        Background="{ThemeResource ControlFillColorSecondaryBrush}"
-                                        CornerRadius="8">
-                                        <Image Stretch="UniformToFill">
-                                            <Image.Source>
-                                                <BitmapImage UriSource="{x:Bind ThumbnailUri}" />
-                                            </Image.Source>
-                                        </Image>
-                                        <Border
-                                            Margin="6"
-                                            Padding="5,2,5,3"
-                                            HorizontalAlignment="Right"
-                                            VerticalAlignment="Bottom"
-                                            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-                                            CornerRadius="4"
-                                            Opacity="0.9"
-                                            Visibility="{x:Bind converters:Show.WhenSet(Duration)}">
-                                            <TextBlock FontSize="12" Text="{x:Bind converters:Format.Duration(Duration)}" />
-                                        </Border>
-                                    </Grid>
-                                    <StackPanel Spacing="2">
-                                        <TextBlock
-                                            MaxLines="2"
-                                            Text="{x:Bind Title}"
-                                            TextTrimming="CharacterEllipsis"
-                                            TextWrapping="Wrap" />
-                                        <!-- Where it's from, then who made it. -->
-                                        <Grid ColumnSpacing="6">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <controls:IconView
-                                                Width="14"
-                                                Height="14"
-                                                VerticalAlignment="Center"
-                                                Source="{x:Bind ProviderId}" />
-                                            <TextBlock
-                                                Grid.Column="1"
-                                                VerticalAlignment="Center"
-                                                Style="{StaticResource SecondaryTextStyle}"
-                                                Text="{x:Bind Creator}"
-                                                TextTrimming="CharacterEllipsis"
-                                                TextWrapping="NoWrap" />
-                                        </Grid>
-                                    </StackPanel>
-                                </StackPanel>
+                                <media:MediaCard Chosen="Recent_Chosen" Media="{x:Bind}" />
                             </DataTemplate>
-                        </GridView.ItemTemplate>
-                        <GridView.ItemContainerStyle>
-                            <Style BasedOn="{StaticResource DefaultGridViewItemStyle}" TargetType="GridViewItem">
-                                <Setter Property="Margin" Value="0,0,12,12" />
-                                <Setter Property="Padding" Value="6" />
-                            </Style>
-                        </GridView.ItemContainerStyle>
-                    </GridView>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
                 </StackPanel>
 
                 <StackPanel Spacing="12" Visibility="{x:Bind Activity.HasJobs, Mode=OneWay}">
@@ -182,7 +127,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <Border
-                                        Width="64"
+                                        Width="{x:Bind media:MediaViewBase.WidthFor(Media.Kind, 36)}"
                                         Height="36"
                                         Background="{ThemeResource ControlFillColorSecondaryBrush}"
                                         CornerRadius="4">

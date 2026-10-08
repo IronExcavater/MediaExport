@@ -157,11 +157,11 @@ public sealed class WebApiSearchProviderTests
         var http = new HttpClient(handler);
 
         await new DailymotionSearchProvider(http).SearchAsync("clip", SearchSort.Popularity);
-        await new InternetArchiveSearchProvider(http).SearchAsync("clip", SearchSort.Recency);
+        await new InternetArchiveSearchProvider(http).SearchAsync("clip", SearchSort.Popularity);
         await new NiconicoSearchProvider(http).SearchAsync("clip");
 
         Assert.That(handler.Queries, Has.Exactly(1).Contains("sort=visited")
-            .And.Exactly(1).Contains("sort[]=publicdate+desc")
+            .And.Exactly(1).Contains("sort[]=downloads+desc")
             .And.Exactly(1).Contains("_sort=-viewCounter"));
     }
 

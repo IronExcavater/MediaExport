@@ -230,7 +230,7 @@ public sealed class VimeoSearchProvider(HttpClient http) : WebApiSearchProvider(
 
     protected override string GetSearchUrl(string query, SearchSort sort) =>
         $"https://api.vimeo.com/videos?query={Uri.EscapeDataString(query)}&per_page={ResultCount}"
-        + $"&sort={sort switch { SearchSort.Popularity => "plays", SearchSort.Recency => "date", _ => "relevant" }}&direction=desc"
+        + $"&sort={(sort == SearchSort.Popularity ? "plays" : "relevant")}&direction=desc"
         + "&fields=uri,name,link,duration,created_time,stats.plays,pictures.sizes.link,pictures.sizes.width,user.name,user.link";
 
     protected override async Task<HttpRequestMessage> CreateRequestAsync(string query, SearchSort sort, CancellationToken cancellationToken)
@@ -287,7 +287,7 @@ public sealed class DailymotionSearchProvider(HttpClient http) : WebApiSearchPro
 
     protected override string GetSearchUrl(string query, SearchSort sort) =>
         $"https://api.dailymotion.com/videos?search={Uri.EscapeDataString(query)}&limit={ResultCount}"
-        + $"&sort={sort switch { SearchSort.Popularity => "visited", SearchSort.Recency => "recent", _ => "relevance" }}"
+        + $"&sort={(sort == SearchSort.Popularity ? "visited" : "relevance")}"
         + "&fields=id,title,duration,thumbnail_480_url,owner.screenname,owner.url,url,views_total,created_time";
 
     protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
@@ -325,7 +325,7 @@ public sealed class BilibiliSearchProvider(HttpClient http) : WebApiSearchProvid
 
     protected override string GetSearchUrl(string query, SearchSort sort) =>
         $"https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword={Uri.EscapeDataString(query)}&page_size={ResultCount}"
-        + $"&order={sort switch { SearchSort.Popularity => "click", SearchSort.Recency => "pubdate", _ => "totalrank" }}";
+        + $"&order={(sort == SearchSort.Popularity ? "click" : "totalrank")}";
 
     protected override async Task<HttpRequestMessage> CreateRequestAsync(string query, SearchSort sort, CancellationToken cancellationToken)
     {
@@ -380,7 +380,7 @@ public sealed class NiconicoSearchProvider(HttpClient http) : WebApiSearchProvid
     protected override string GetSearchUrl(string query, SearchSort sort) =>
         $"https://snapshot.search.nicovideo.jp/api/v2/snapshot/video/contents/search?q={Uri.EscapeDataString(query)}"
         + "&targets=title,description,tags&fields=contentId,title,lengthSeconds,thumbnailUrl,viewCounter,startTime"
-        + $"&_sort={(sort == SearchSort.Recency ? "-startTime" : "-viewCounter")}&_limit={ResultCount}&_context=MediaExport";
+        + $"&_sort=-viewCounter&_limit={ResultCount}&_context=MediaExport";
 
     protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
     {
@@ -417,7 +417,7 @@ public sealed class InternetArchiveSearchProvider(HttpClient http) : WebApiSearc
     protected override string GetSearchUrl(string query, SearchSort sort) =>
         $"https://archive.org/advancedsearch.php?q={Uri.EscapeDataString($"({query}) AND mediatype:(movies OR audio)")}"
         + $"&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=mediatype&fl[]=downloads&fl[]=publicdate&rows={ResultCount}&output=json"
-        + sort switch { SearchSort.Popularity => "&sort[]=downloads+desc", SearchSort.Recency => "&sort[]=publicdate+desc", _ => "" };
+        + (sort == SearchSort.Popularity ? "&sort[]=downloads+desc" : "");
 
     protected override IEnumerable<MediaSearchResult> ReadResults(JsonElement root)
     {
