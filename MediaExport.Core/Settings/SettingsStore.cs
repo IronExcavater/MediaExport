@@ -3,6 +3,7 @@
 
 using MediaExport.Core.Exporting;
 using MediaExport.Core.Media.Models;
+using MediaExport.Core.Media.Providers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -35,6 +36,7 @@ public sealed class AppSettings
 
     // The export page's choices, so the next export starts from the last one.
     public string? ProviderId { get; set; }
+    public SearchSort Sort { get; set; }
     public string? OutputFolder { get; set; }
     public bool IncludeVideo { get; set; } = true;
     public bool IncludeAudio { get; set; } = true;

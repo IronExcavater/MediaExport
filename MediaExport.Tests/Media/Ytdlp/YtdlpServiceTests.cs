@@ -159,7 +159,7 @@ public sealed class YtdlpServiceTests
         Stopwatch stopwatch = Stopwatch.StartNew();
 
         Assert.ThrowsAsync<OperationCanceledException>(async () =>
-            await service.SearchAsync("ytsearch1:gan", cancellation.Token));
+            await service.SearchAsync("ytsearch1:gan", 1, cancellation.Token));
 
         Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(1)));
     }

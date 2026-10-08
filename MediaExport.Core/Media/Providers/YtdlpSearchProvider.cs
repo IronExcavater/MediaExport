@@ -18,16 +18,17 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
     public abstract string Icon { get; }
 
     /// <summary>What yt-dlp is asked to read for <paramref name="query"/>.</summary>
-    protected abstract string GetSearchTarget(string query);
+    protected abstract string GetSearchTarget(string query, SearchSort sort);
 
     public async Task<IReadOnlyList<MediaSearchResult>> SearchAsync(
         string query,
+        SearchSort sort = SearchSort.Relevance,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(query))
             return [];
 
-        IReadOnlyList<YtdlpSearchResult> results = await ytdlp.SearchAsync(GetSearchTarget(query.Trim()), cancellationToken);
+        IReadOnlyList<YtdlpSearchResult> results = await ytdlp.SearchAsync(GetSearchTarget(query.Trim(), sort), ResultCount, cancellationToken);
         return results.Take(ResultCount).Select(MapSearchResult).OfType<MediaSearchResult>().ToArray();
     }
 
@@ -47,7 +48,9 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
             Kind,
             result.CreatorUrl,
             EmbedLinks.For(Id, result.Identity, sourceUrl),
-            Id);
+            Id,
+            result.Views,
+            result.Published);
     }
 
     protected virtual string? GetSourceUrl(YtdlpSearchResult result) => result.SourceUrl;

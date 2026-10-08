@@ -11,7 +11,10 @@ public sealed class YouTubeSearchProvider(YtdlpService ytdlp) : YtdlpSearchProvi
     public override string DisplayName => "YouTube";
     public override string Icon => "youtube";
 
-    protected override string GetSearchTarget(string query) => $"ytsearch{ResultCount}:{query}";
+    // The most played are read off the site's search page, whose "sp" names the order. It no longer offers newest first.
+    protected override string GetSearchTarget(string query, SearchSort sort) => sort == SearchSort.Popularity
+        ? $"https://www.youtube.com/results?search_query={Uri.EscapeDataString(query)}&sp=CAM%253D"
+        : $"ytsearch{ResultCount}:{query}";
 
     protected override string GetSourceUrl(YtdlpSearchResult result) =>
         result.SourceUrl ?? $"https://www.youtube.com/watch?v={Uri.EscapeDataString(result.Identity)}";

@@ -13,18 +13,18 @@ public static class EmbedLinks
         "youtube" or "youtubemusic" => new Uri($"https://www.youtube.com/embed/{Uri.EscapeDataString(identity)}"
             + "?rel=0&fs=0&iv_load_policy=3&playsinline=1&enablejsapi=1"),
 
-        // The visual widget (artwork backdrop) with everything but playback and the waveform switched off.
+        // The strip with the waveform, and everything but playback switched off.
         "soundcloud" => new Uri($"https://w.soundcloud.com/player/?url={Uri.EscapeDataString(sourceUrl)}"
-            + "&visual=true&auto_play=false&hide_related=true&show_comments=false&show_reposts=false"
+            + "&visual=false&auto_play=false&hide_related=true&show_comments=false&show_reposts=false"
             + "&show_teaser=false&sharing=false&buying=false&download=false&show_playcount=false"),
-
-        "dailymotion" => new Uri($"https://geo.dailymotion.com/player.html?video={Uri.EscapeDataString(identity)}"),
-
-        "vimeo" => new Uri($"https://player.vimeo.com/video/{Uri.EscapeDataString(identity)}"),
 
         // The show is named by its path on the site: /uploader/show/
         "mixcloud" when Uri.TryCreate(sourceUrl, UriKind.Absolute, out Uri? show) =>
             new Uri($"https://player-widget.mixcloud.com/widget/iframe/?hide_cover=1&feed={Uri.EscapeDataString(show.AbsolutePath)}"),
+
+        "vimeo" => new Uri($"https://player.vimeo.com/video/{Uri.EscapeDataString(identity)}"),
+
+        "dailymotion" => new Uri($"https://geo.dailymotion.com/player.html?video={Uri.EscapeDataString(identity)}"),
 
         "bilibili" => new Uri($"https://player.bilibili.com/player.html?bvid={Uri.EscapeDataString(identity)}&autoplay=0"),
 
@@ -32,6 +32,14 @@ public static class EmbedLinks
 
         "internetarchive" => new Uri($"https://archive.org/embed/{Uri.EscapeDataString(identity)}"),
 
+        _ => null
+    };
+
+    /// <summary>How tall a site's player is when it's a strip rather than a picture; <c>null</c> for players that are 16:9.</summary>
+    public static double? HeightFor(string? providerId) => providerId switch
+    {
+        "soundcloud" => 166,
+        "mixcloud" => 60,
         _ => null
     };
 }

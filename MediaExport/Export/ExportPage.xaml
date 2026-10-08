@@ -108,16 +108,6 @@
                                         </Image>
                                         <Border
                                             Margin="6"
-                                            Padding="4,1,4,2"
-                                            HorizontalAlignment="Left"
-                                            VerticalAlignment="Bottom"
-                                            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-                                            CornerRadius="4"
-                                            Opacity="0.9">
-                                            <controls:IconView Width="18" Height="18" Source="{x:Bind ProviderId}" />
-                                        </Border>
-                                        <Border
-                                            Margin="6"
                                             Padding="5,2,5,3"
                                             HorizontalAlignment="Right"
                                             VerticalAlignment="Bottom"
@@ -134,11 +124,25 @@
                                             Text="{x:Bind Title}"
                                             TextTrimming="CharacterEllipsis"
                                             TextWrapping="Wrap" />
-                                        <TextBlock
-                                            Style="{StaticResource SecondaryTextStyle}"
-                                            Text="{x:Bind Creator}"
-                                            TextTrimming="CharacterEllipsis"
-                                            TextWrapping="NoWrap" />
+                                        <!-- Where it's from, then who made it. -->
+                                        <Grid ColumnSpacing="6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <controls:IconView
+                                                Width="14"
+                                                Height="14"
+                                                VerticalAlignment="Center"
+                                                Source="{x:Bind ProviderId}" />
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                VerticalAlignment="Center"
+                                                Style="{StaticResource SecondaryTextStyle}"
+                                                Text="{x:Bind Creator}"
+                                                TextTrimming="CharacterEllipsis"
+                                                TextWrapping="NoWrap" />
+                                        </Grid>
                                     </StackPanel>
                                 </StackPanel>
                             </DataTemplate>
@@ -315,32 +319,45 @@
                         ColumnSpacing="12"
                         SizeChanged="Layout_SizeChanged">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <!-- Where it's from, as big as the two lines beside it. -->
-                        <controls:IconView
-                            Width="40"
-                            Height="40"
-                            VerticalAlignment="Center"
-                            Source="{x:Bind ViewModel.Media.ProviderId, Mode=OneWay}"
-                            ToolTipService.ToolTip="{x:Bind ViewModel.ProviderName, Mode=OneWay}" />
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <StackPanel VerticalAlignment="Center" Spacing="2">
                             <TextBlock
                                 Style="{StaticResource SubtitleTextBlockStyle}"
                                 Text="{x:Bind ViewModel.Media.Title, Mode=OneWay}"
                                 TextTrimming="CharacterEllipsis"
                                 TextWrapping="NoWrap"
                                 ToolTipService.ToolTip="{x:Bind ViewModel.Media.Title, Mode=OneWay}" />
+                            <!-- Where it's from, who made it, how long it is. -->
                             <StackPanel Orientation="Horizontal" Spacing="8">
+                                <StackPanel
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Spacing="6">
+                                    <controls:IconView
+                                        Width="16"
+                                        Height="16"
+                                        VerticalAlignment="Center"
+                                        Source="{x:Bind ViewModel.Media.ProviderId, Mode=OneWay}" />
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{x:Bind ViewModel.ProviderName, Mode=OneWay}" />
+                                </StackPanel>
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Text="·"
+                                    Visibility="{x:Bind converters:Show.WhenText(ViewModel.Media.Creator), Mode=OneWay}" />
                                 <HyperlinkButton
                                     Padding="0"
                                     VerticalAlignment="Center"
                                     Click="Creator_Click"
                                     Content="{x:Bind ViewModel.Media.Creator, Mode=OneWay}"
                                     IsEnabled="{x:Bind ViewModel.HasCreatorLink, Mode=OneWay}"
-                                    ToolTipService.ToolTip="Open their page" />
+                                    ToolTipService.ToolTip="Open their page"
+                                    Visibility="{x:Bind converters:Show.WhenText(ViewModel.Media.Creator), Mode=OneWay}" />
                                 <Border
                                     Padding="6,1,6,2"
                                     VerticalAlignment="Center"
@@ -352,7 +369,7 @@
                             </StackPanel>
                         </StackPanel>
                         <StackPanel
-                            Grid.Column="2"
+                            Grid.Column="1"
                             VerticalAlignment="Center"
                             Orientation="Horizontal"
                             Spacing="4">

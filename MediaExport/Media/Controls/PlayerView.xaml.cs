@@ -1,20 +1,21 @@
 // Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
+using MediaExport.Core.Media.Providers;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.Web.WebView2.Core;
 using System;
-using Microsoft.UI.Xaml.Media.Imaging;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
-using Windows.Storage.Streams;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Windows.Foundation;
+using Windows.Storage.Streams;
 
 namespace MediaExport.Media.Controls;
 
@@ -62,12 +63,16 @@ public sealed partial class PlayerView : MediaViewBase
         Post($$"""{"type":"seek","seconds":{{time.TotalSeconds.ToString(CultureInfo.InvariantCulture)}}}""");
     }
 
-    // Always 16:9, as big as the space allows.
+    // 16:9 and as big as the space allows, or for sites whose player is a strip, as tall as that across the full width.
     protected override Size MeasureOverride(Size available)
     {
         double width = double.IsInfinity(available.Width) ? 640 : available.Width;
         double height = width * 9 / 16;
-        if (!double.IsInfinity(available.Height) && height > available.Height)
+        if (EmbedLinks.HeightFor(Media?.ProviderId) is { } strip)
+        {
+            height = Math.Min(strip, available.Height);
+        }
+        else if (!double.IsInfinity(available.Height) && height > available.Height)
         {
             height = available.Height;
             width = height * 16 / 9;
@@ -81,6 +86,7 @@ public sealed partial class PlayerView : MediaViewBase
     protected override void RefreshMediaBindings()
     {
         Bindings.Update();
+        InvalidateMeasure();
         Position = TimeSpan.Zero;
         _ = ShowPlayerAsync();
     }

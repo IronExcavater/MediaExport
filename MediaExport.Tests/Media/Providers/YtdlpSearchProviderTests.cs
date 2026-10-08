@@ -29,7 +29,7 @@ public sealed class YtdlpSearchProviderTests
     }
 
     [Test]
-    public void SoundCloud_provider_returns_audio_with_its_visual_widget()
+    public void SoundCloud_provider_returns_audio_with_its_strip_of_a_player()
     {
         var provider = new SoundCloudSearchProvider(YtdlpServiceTests.CreateService());
         var result = new YtdlpSearchResult("track-id", "https://soundcloud.com/artist/track", null, "Track", null, null);
@@ -41,7 +41,9 @@ public sealed class YtdlpSearchProviderTests
         {
             Assert.That(media!.Kind, Is.EqualTo(MediaKind.Audio));
             Assert.That(media.ProviderId, Is.EqualTo("soundcloud"));
-            Assert.That(media.EmbedUri?.AbsoluteUri, Does.StartWith("https://w.soundcloud.com/player/?url=https%3A%2F%2Fsoundcloud.com%2Fartist%2Ftrack&visual=true&auto_play=false"));
+            Assert.That(media.EmbedUri?.AbsoluteUri, Does.StartWith("https://w.soundcloud.com/player/?url=https%3A%2F%2Fsoundcloud.com%2Fartist%2Ftrack&visual=false&auto_play=false"));
+            Assert.That(EmbedLinks.HeightFor(media.ProviderId), Is.EqualTo(166));
+            Assert.That(EmbedLinks.HeightFor("youtube"), Is.Null, "pictures stay 16:9");
         });
     }
 }

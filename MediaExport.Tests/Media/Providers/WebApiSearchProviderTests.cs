@@ -150,6 +150,28 @@ public sealed class WebApiSearchProviderTests
         });
     }
 
+    [Test]
+    public async Task Sources_that_can_order_their_own_results_are_asked_to()
+    {
+        var handler = new FixedResponse("{}");
+        var http = new HttpClient(handler);
+
+        await new DailymotionSearchProvider(http).SearchAsync("clip", SearchSort.Popularity);
+        await new InternetArchiveSearchProvider(http).SearchAsync("clip", SearchSort.Recency);
+        await new NiconicoSearchProvider(http).SearchAsync("clip");
+
+        Assert.That(handler.Queries, Has.Exactly(1).Contains("sort=visited")
+            .And.Exactly(1).Contains("sort[]=publicdate+desc")
+            .And.Exactly(1).Contains("_sort=-viewCounter"));
+    }
+
+    [TestCase("1.9B plays", 1_900_000_000)]
+    [TestCase("727K plays", 727_000)]
+    [TestCase("812 plays", 812)]
+    [TestCase("Album", null)]
+    public void YouTube_Music_plays_are_read_from_their_short_form(string text, long? plays) =>
+        Assert.That(YouTubeMusicSearchProvider.ReadPlays(text), Is.EqualTo(plays));
+
     private static HttpClient Serve(string json) => new(new FixedResponse(json));
 
     private sealed class FixedResponse(string json) : HttpMessageHandler
@@ -157,9 +179,12 @@ public sealed class WebApiSearchProviderTests
         /// <summary>Each request's host and what it authorised with.</summary>
         public List<string> Requests { get; } = [];
 
+        public List<string> Queries { get; } = [];
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Add($"{request.RequestUri!.Host} {request.Headers.Authorization}");
+            Queries.Add(Uri.UnescapeDataString(request.RequestUri.Query));
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") });
         }
     }

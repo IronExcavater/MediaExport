@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
+using MediaExport.Converters;
 using MediaExport.Core.Media.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -16,7 +17,7 @@ public abstract partial class MediaViewBase : UserControl
         nameof(Media),
         typeof(MediaSearchResult),
         typeof(MediaViewBase),
-        new PropertyMetadata(null, OnMediaChanged));
+        new PropertyMetadata(null, (view, _) => ((MediaViewBase)view).RefreshMediaBindings()));
 
     public MediaSearchResult? Media
     {
@@ -27,21 +28,9 @@ public abstract partial class MediaViewBase : UserControl
     public bool IsAudio => Media?.Kind == MediaKind.Audio;
     public string TitleText => Media?.Title ?? string.Empty;
     public string CreatorText => Media?.Creator ?? string.Empty;
-    public Uri? SourceUri => ToUri(Media?.SourceUrl);
-    public Uri? CreatorUri => ToUri(Media?.CreatorUrl);
     public ImageSource? ThumbnailSource => Media?.ThumbnailUri is Uri uri ? new BitmapImage(uri) : null;
-
-    public string DurationText => Media?.Duration is TimeSpan duration
-        ? duration.ToString(duration.TotalHours >= 1 ? @"h\:mm\:ss" : @"m\:ss")
-        : string.Empty;
-
-    public Visibility DurationVisibility => string.IsNullOrEmpty(DurationText) ? Visibility.Collapsed : Visibility.Visible;
+    public string DurationText => Format.Duration(Media?.Duration);
+    public Visibility DurationVisibility => Media?.Duration is null ? Visibility.Collapsed : Visibility.Visible;
 
     protected abstract void RefreshMediaBindings();
-
-    private static Uri? ToUri(string? url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) ? uri : null;
-
-    private static void OnMediaChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args) =>
-        ((MediaViewBase)dependencyObject).RefreshMediaBindings();
 }

@@ -24,7 +24,7 @@ public sealed class SearchViewModelTests
 
         search.ShowSuggestions();
         MediaSearchResult?[] onYouTube = search.Suggestions.Select(suggestion => suggestion.Media).ToArray();
-        search.SelectedProvider = search.Providers[1];
+        search.SelectedProvider = search.Providers.Single(provider => provider.Id == "soundcloud");
         search.ShowSuggestions();
 
         Assert.Multiple(() =>
@@ -128,7 +128,7 @@ public sealed class SearchViewModelTests
         public List<string> Queries { get; } = [];
         public TaskCompletionSource Searched { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, SearchSort sort = SearchSort.Relevance, CancellationToken cancellationToken = default)
         {
             Queries.Add(query);
             Searched.TrySetResult();

@@ -1,1 +1,54 @@
-<svg fill="#5000FF" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><title>Mixcloud</title><path d="M2.462 8.596l1.372 6.49h.319l1.372-6.49h2.462v6.808H6.742v-5.68l.232-.81h-.402l-1.43 6.49H2.854l-1.44-6.49h-.391l.222.81v5.68H0V8.596zM24 8.63v1.429L21.257 12 24 13.941v1.43l-3.235-2.329h-.348l-3.226 2.329v-1.43l2.734-1.94-2.733-1.942V8.63l3.225 2.338h.348zm-7.869 2.75v1.24H9.304v-1.24z"/></svg>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   fill="#5000ff"
+   role="img"
+   viewBox="0 0 7.987 6.8080001"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="mixcloud.svg"
+   width="7.987"
+   height="6.8080001"
+   inkscape:version="1.4.4 (dcaf3e7, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <defs
+     id="defs1" />
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#505050"
+     inkscape:zoom="47.208333"
+     inkscape:cx="12.010591"
+     inkscape:cy="3.3998235"
+     inkscape:window-width="2560"
+     inkscape:window-height="1351"
+     inkscape:window-x="-9"
+     inkscape:window-y="-9"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg1" />
+  <title
+     id="title1">Mixcloud</title>
+  <path
+     d="M 2.462,0 3.834,6.49 H 4.153 L 5.525,0 H 7.987 V 6.808 H 6.742 V 1.128 L 6.974,0.318 H 6.572 l -1.43,6.49 H 2.854 L 1.414,0.318 H 1.023 l 0.222,0.81 v 5.68 H 0 V 0 Z"
+     id="path1"
+     sodipodi:nodetypes="ccccccccccccccccccc" />
+  <metadata
+     id="metadata1">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:title>Mixcloud</dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+</svg>

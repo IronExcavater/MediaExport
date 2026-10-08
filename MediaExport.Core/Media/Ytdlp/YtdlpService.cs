@@ -23,13 +23,59 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
     private const string SponsorCategories = "sponsor,selfpromo,interaction";
     private const string SignInProblem = "The site wants you signed in for this one. Choose a browser you're signed in with under Settings, then try again.";
 
-    public async Task<IReadOnlyList<YtdlpSearchResult>> SearchAsync(string searchTarget, CancellationToken cancellationToken = default)
+    /// <param name="limit">How many results to read; a search page would otherwise be read to its end.</param>
+    public async Task<IReadOnlyList<YtdlpSearchResult>> SearchAsync(string searchTarget, int limit, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(searchTarget))
             return [];
 
         cancellationToken.ThrowIfCancellationRequested();
-        return ReadSearchResults(await ReadMetadataAsync(searchTarget, "The search returned nothing.", cancellationToken));
+        return ReadSearchResults(await ReadSearchAsync(searchTarget, limit, cancellationToken));
+    }
+
+    // yt-dlp is run directly here: the library's metadata call can't be told when to stop, and reads a search page to its end.
+    private async Task<string> ReadSearchAsync(string target, int limit, CancellationToken cancellationToken)
+    {
+        var start = new ProcessStartInfo(tools.Locate("yt-dlp") ?? "yt-dlp.exe")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+        foreach (string argument in (string[])["--dump-single-json", "--flat-playlist", "--playlist-end", $"{limit}", "--quiet", "--no-warnings", "--encoding", "utf-8", target])
+            start.ArgumentList.Add(argument);
+
+        Process? started;
+        try
+        {
+            started = Process.Start(start);
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            started = null; // It isn't installed.
+        }
+
+        using Process process = started ?? throw new InvalidOperationException("yt-dlp couldn't be started.");
+        try
+        {
+            Task<string> output = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            Task<string> errors = process.StandardError.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken);
+            string json = await output;
+            if (!string.IsNullOrWhiteSpace(json))
+                return json;
+
+            string? error = (await errors).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault();
+            throw new InvalidOperationException(error is null ? "The search returned nothing." : DescribeError(error));
+        }
+        catch (OperationCanceledException)
+        {
+            process.Kill(entireProcessTree: true);
+            throw;
+        }
     }
 
     /// <summary>Reads a link someone pasted: what it is, and what can be exported from it.</summary>
@@ -447,7 +493,8 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
             string? identity = GetString(entry, "id");
             string? title = GetString(entry, "title");
 
-            if (string.IsNullOrWhiteSpace(identity) || string.IsNullOrWhiteSpace(title))
+            // A search page also lists playlists and channels (as "tabs"), which can't be opened as media.
+            if (string.IsNullOrWhiteSpace(identity) || string.IsNullOrWhiteSpace(title) || GetString(entry, "ie_key") == "YoutubeTab")
                 continue;
 
             results.Add(new YtdlpSearchResult(
@@ -457,7 +504,9 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
                 title,
                 GetString(entry, "uploader") ?? GetString(entry, "channel"),
                 GetDuration(entry),
-                GetString(entry, "channel_url") ?? GetString(entry, "uploader_url")));
+                GetString(entry, "channel_url") ?? GetString(entry, "uploader_url"),
+                GetNumber(entry, "view_count") is { } views ? (long)views : null,
+                GetNumber(entry, "timestamp") is { } time ? DateTimeOffset.FromUnixTimeSeconds((long)time) : null));
         }
 
         return results;
@@ -473,6 +522,10 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
 
     private static int? GetInt(JsonElement entry, string propertyName) =>
         entry.TryGetProperty(propertyName, out JsonElement value) && value.TryGetInt32(out int number) ? number : null;
+
+    // Missing numbers are often written out as null rather than left out.
+    private static double? GetNumber(JsonElement entry, string propertyName) =>
+        entry.TryGetProperty(propertyName, out JsonElement value) && value.ValueKind == JsonValueKind.Number ? value.GetDouble() : null;
 
     private static string? GetTrackName(JsonProperty language) =>
         language.Value.ValueKind == JsonValueKind.Array && language.Value.GetArrayLength() > 0

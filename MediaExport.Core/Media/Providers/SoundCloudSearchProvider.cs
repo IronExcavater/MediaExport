@@ -14,5 +14,6 @@ public sealed class SoundCloudSearchProvider(YtdlpService ytdlp) : YtdlpSearchPr
 
     protected override MediaKind Kind => MediaKind.Audio;
 
-    protected override string GetSearchTarget(string query) => $"scsearch{ResultCount}:{query}";
+    // Its search has one order.
+    protected override string GetSearchTarget(string query, SearchSort sort) => $"scsearch{ResultCount}:{query}";
 }

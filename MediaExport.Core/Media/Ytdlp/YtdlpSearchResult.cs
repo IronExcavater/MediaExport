@@ -10,4 +10,6 @@ public sealed record YtdlpSearchResult(
     string Title,
     string? Creator,
     TimeSpan? Duration,
-    string? CreatorUrl = null);
+    string? CreatorUrl = null,
+    long? Views = null,
+    DateTimeOffset? Published = null);
