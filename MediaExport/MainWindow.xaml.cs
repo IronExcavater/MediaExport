@@ -262,9 +262,23 @@ public sealed partial class MainWindow : Window
         searchBox.Focus(FocusState.Programmatic);
     }
 
-    private void SortMenu_Opening(object? sender, object args) => Search.IsMenuOpen = true;
+    private void SortMenu_Opening(object? sender, object args)
+    {
+        Search.IsMenuOpen = true;
+        foreach (RadioMenuFlyoutItem item in ((MenuFlyout)sender!).Items.OfType<RadioMenuFlyoutItem>())
+            item.IsChecked = (string)item.Tag == Search.Sort.ToString() || (string)item.Tag == Search.Arrangement.ToString();
+    }
 
-    private void SortMenu_Closed(object? sender, object args) => Search.IsMenuOpen = false;
+    private void Menu_Closed(object? sender, object args) => Search.IsMenuOpen = false;
+
+    private void Sort_Click(object sender, RoutedEventArgs args)
+    {
+        string choice = (string)((FrameworkElement)sender).Tag;
+        if (Enum.TryParse(choice, out SearchSort sort))
+            Search.Sort = sort;
+        else
+            Search.Arrangement = Enum.Parse<SearchArrangement>(choice);
+    }
 
     // The box only shows its clear button while focused; this keeps it whenever there's text to clear.
     private void SearchBox_Loaded(object sender, RoutedEventArgs args)
@@ -282,6 +296,63 @@ public sealed partial class MainWindow : Window
         textBox.LostFocus += (_, _) => DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, ShowClearButton);
         textBox.TextChanged += (_, _) => DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, ShowClearButton);
         ShowClearButton();
+
+        // What's pasted is all there, so a source named at its very end counts too; queued, to run once it's in the box.
+        textBox.Paste += (_, _) => DispatcherQueue.TryEnqueue(() => ResolveSources(includeUnfinished: true));
+
+        // Copying or cutting the whole box takes the whole search: its text and the source it's aimed at.
+        textBox.CopyingToClipboard += (_, copy) => copy.Handled = CopyWholeSearch(textBox);
+        textBox.CuttingToClipboard += (_, cut) =>
+        {
+            if (cut.Handled = CopyWholeSearch(textBox))
+                Search.SearchText = string.Empty;
+        };
+    }
+
+    private bool CopyWholeSearch(TextBox textBox)
+    {
+        if (textBox.SelectionLength > 0 && textBox.SelectionLength < textBox.Text.Length)
+            return false; // Part of the text is just that text.
+
+        var package = new DataPackage();
+        package.SetText(Search.FullText);
+        Clipboard.SetContent(package);
+        return true;
+    }
+
+    // A source named in the box is chosen and its term taken out; the caret then goes to the end, where it was being typed.
+    private void ResolveSources(bool includeUnfinished)
+    {
+        if (Search.ResolveSources(includeUnfinished) && FindDescendant<TextBox>(searchBox) is { } textBox)
+            textBox.SelectionStart = textBox.Text.Length;
+    }
+
+    // Each kind of term is offered by its menu item's tag: the text to add, with any stand-in value after a bar.
+    private void AddTerm_Click(object sender, RoutedEventArgs args)
+    {
+        string[] term = ((string)((FrameworkElement)sender).Tag).Split('|');
+        string text = $"{Search.SearchText.TrimEnd()} {term[0]}".TrimStart();
+        string standIn = term.Length > 1 ? term[1] : string.Empty;
+        Search.SearchText = text + standIn + (term[0].EndsWith('"') ? "\"" : string.Empty);
+        FocusSearch();
+        ResolveSources(includeUnfinished: true);
+
+        // The stand-in is selected, so typing replaces it; with none, the caret waits where the value goes.
+        if (FindDescendant<TextBox>(searchBox) is { } textBox && Search.SearchText.StartsWith(text, StringComparison.Ordinal))
+            textBox.Select(text.Length, standIn.Length);
+    }
+
+    // The sources there are to name, listed as the menu opens.
+    private void TermsMenu_Opening(object? sender, object args)
+    {
+        Search.IsMenuOpen = true;
+        sourceTerms.Items.Clear();
+        foreach (IMediaSearchProvider provider in Search.Providers)
+        {
+            var item = new MenuFlyoutItem { Text = provider.DisplayName, Tag = $"source:{provider.Id}" };
+            item.Click += AddTerm_Click;
+            sourceTerms.Items.Add(item);
+        }
     }
 
     private static T? FindDescendant<T>(DependencyObject parent, string? name = null) where T : FrameworkElement
@@ -322,9 +393,10 @@ public sealed partial class MainWindow : Window
             return;
 
         Search.SearchText = sender.Text;
+        ResolveSources(includeUnfinished: false);
         // On the Search page what's typed fills the page (links aside, which still open from the list).
-        if (Search.IsPageSearch && !SearchViewModel.IsLink(sender.Text.Trim()))
-            _ = Results.SearchAsync(sender.Text, afterPause: true);
+        if (Search.IsPageSearch && !SearchViewModel.IsLink(Search.SearchText.Trim()))
+            _ = Results.SearchAsync(Search.SearchText, afterPause: true);
         else
             _ = Search.SearchAsync();
     }
@@ -341,10 +413,11 @@ public sealed partial class MainWindow : Window
 
         // A link opens; anything else is searched for everywhere, on the Search page.
         Search.SearchText = sender.Text;
-        if (SearchViewModel.IsLink(sender.Text.Trim()))
+        ResolveSources(includeUnfinished: true);
+        if (SearchViewModel.IsLink(Search.SearchText.Trim()))
             _ = Search.SearchAsync(debounce: false);
-        else if (sender.Text.Trim().Length > 0)
-            ShowResults(sender.Text);
+        else if (Search.SearchText.Trim().Length > 0)
+            ShowResults(Search.SearchText);
     }
 
     private void NavView_Loaded(object sender, RoutedEventArgs args)

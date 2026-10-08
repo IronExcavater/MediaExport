@@ -55,11 +55,17 @@ public sealed partial class ResultsViewModel : ObservableObject
 
                 // With every source picked, clicking one means "just this one" rather than "all but this one".
                 if (!source.IsPicked && Sources.All(other => other == source || other.IsPicked))
-                    PickOnly(source);
+                    Pick(candidate => candidate == source);
                 OnPicksChanged();
             };
         }
 
+        search.PageSources = () => AreAllPicked ? [] : Sources.Where(source => source.IsPicked).Select(source => source.Provider);
+        search.SourcesNamed += (_, named) =>
+        {
+            Pick(source => named.Contains(source.Provider));
+            OnPicksChanged();
+        };
         search.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName is nameof(SearchViewModel.Sort) or nameof(SearchViewModel.Arrangement))
@@ -122,8 +128,16 @@ public sealed partial class ResultsViewModel : ObservableObject
             }
 
             var everything = new AllSearchProvider(asked, PerSource, _search.Arrangement);
-            var terms = new SearchTerms(query);
-            await foreach (IReadOnlyList<MediaSearchResult> soFar in everything.SearchEachAsync(terms.Query, _search.Sort, running.Token))
+            // The sources are asked for the query's words; its other terms are then held against what comes back.
+            SearchQuery terms = SearchQuery.Parse(query);
+            if (terms.Words.Length == 0)
+            {
+                IsSearching = false;
+                Message = "Add a word or two to search for.";
+                return;
+            }
+
+            await foreach (IReadOnlyList<MediaSearchResult> soFar in everything.SearchEachAsync(terms.Words, _search.Sort, running.Token))
                 Show(terms.Keep(soFar));
 
             if (Results.Count == 0)
@@ -143,16 +157,19 @@ public sealed partial class ResultsViewModel : ObservableObject
 
     /// <summary>Picks every source again, searching once rather than once per source.</summary>
     [RelayCommand]
-    private void PickAll() => PickOnly(null);
+    private void PickAll()
+    {
+        Pick(_ => true);
+        OnPicksChanged();
+    }
 
-    private void PickOnly(SourceFilter? only)
+    // Set in one go, so the search that follows runs once rather than once per source.
+    private void Pick(Func<SourceFilter, bool> isPicked)
     {
         _isSwitching = true;
         foreach (SourceFilter source in Sources)
-            source.IsPicked = only is null || source == only;
+            source.IsPicked = isPicked(source);
         _isSwitching = false;
-        if (only is null)
-            OnPicksChanged();
     }
 
     private void OnPicksChanged()

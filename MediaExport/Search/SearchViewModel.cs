@@ -81,26 +81,13 @@ public sealed partial class SearchViewModel : ObservableObject
     /// Asked of the sources that can order their own, and applied to what comes back.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SortLabel), nameof(SortIndex))]
+    [NotifyPropertyChangedFor(nameof(SortLabel))]
     public partial SearchSort Sort { get; set; }
 
     /// <summary>How those results are then laid out: as ranked, by date, or by title.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SortLabel), nameof(ArrangementIndex))]
+    [NotifyPropertyChangedFor(nameof(SortLabel))]
     public partial SearchArrangement Arrangement { get; set; }
-
-    /// <summary><see cref="Sort"/> and <see cref="Arrangement"/> as positions in their lists of choices.</summary>
-    public int SortIndex
-    {
-        get => (int)Sort;
-        set => Sort = value < 0 ? Sort : (SearchSort)value;
-    }
-
-    public int ArrangementIndex
-    {
-        get => (int)Arrangement;
-        set => Arrangement = value < 0 ? Arrangement : (SearchArrangement)value;
-    }
 
     /// <summary>Both in a few words, e.g. "Relevancy" or "Popularity, newest first".</summary>
     public string SortLabel => (Sort == SearchSort.Popularity ? "Popularity" : "Relevancy") + Arrangement switch
@@ -135,6 +122,21 @@ public sealed partial class SearchViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(Placeholder))]
     public partial bool IsPageSearch { get; set; }
 
+    /// <summary>The sources the Search page has narrowed its search to (none when it's searching them all); that page keeps this up to date.</summary>
+    public Func<IEnumerable<IMediaSearchProvider>> PageSources { get; set; } = () => [];
+
+    /// <summary>On the Search page, <c>source:</c> terms were typed; that page picks the sources they name.</summary>
+    public event EventHandler<IReadOnlyList<IMediaSearchProvider>>? SourcesNamed;
+
+    /// <summary>
+    /// The whole search as text, for copying: what's in the box plus the source it's aimed at, which the box
+    /// itself doesn't show. Pasted back in, it's the same search again.
+    /// </summary>
+    public string FullText => string.Join(' ', (IsPageSearch ? PageSources() : [SelectedProvider])
+        .Select(source => $"source:{source.Id}")
+        .Prepend(SearchText.Trim())
+        .Where(term => term.Length > 0));
+
     public string Placeholder => IsPageSearch ? "Search every source, or paste a link" : $"Search {SelectedProvider.DisplayName} or paste a link";
 
     /// <summary>Details already read while opening a pasted link, so they aren't read twice.</summary>
@@ -154,6 +156,27 @@ public sealed partial class SearchViewModel : ObservableObject
             _ = SearchAsync(debounce: false);
         else if (Suggestions.Count > 0)
             IsSuggestionListOpen = true;
+    }
+
+    /// <summary>
+    /// Acts on any <c>source:</c> terms in the box and takes them out of it: a source is chosen with the
+    /// source picker (or the Search page's own), so the term has done its job once that's set.
+    /// </summary>
+    /// <param name="includeUnfinished">Whether a term at the very end counts; it doesn't while it may still be being typed.</param>
+    /// <returns>Whether the box's text changed.</returns>
+    public bool ResolveSources(bool includeUnfinished)
+    {
+        (string rest, IReadOnlyList<string> named) = SearchQuery.TakeSources(SearchText, includeUnfinished, name => FindSource(name) is not null);
+        if (named.Count == 0)
+            return false;
+
+        IMediaSearchProvider[] sources = named.Select(name => FindSource(name)!).Distinct().ToArray();
+        SearchText = rest;
+        if (IsPageSearch)
+            SourcesNamed?.Invoke(this, sources);
+        else
+            SelectedProvider = sources[^1];
+        return true;
     }
 
     /// <summary>Searches once typing pauses; each keystroke restarts the wait.</summary>
@@ -258,7 +281,7 @@ public sealed partial class SearchViewModel : ObservableObject
 
             IReadOnlyList<MediaSearchResult> results = IsLink(query)
                 ? [await OpenLinkAsync(query, token)]
-                : await SearchSourceAsync(provider, new SearchTerms(query), sort, arrangement, token);
+                : await SearchSourceAsync(provider, SearchQuery.Parse(query), sort, arrangement, token);
             token.ThrowIfCancellationRequested();
 
             if (!IsLink(query))
@@ -286,9 +309,10 @@ public sealed partial class SearchViewModel : ObservableObject
         }
     }
 
+    // The source is asked for the query's words; its other terms are then held against what comes back.
     private static async Task<IReadOnlyList<MediaSearchResult>> SearchSourceAsync(
-        IMediaSearchProvider provider, SearchTerms terms, SearchSort sort, SearchArrangement arrangement, CancellationToken token) =>
-        terms.Keep(SearchRanking.Order([await provider.SearchAsync(terms.Query, sort, token)], terms.Query, sort, arrangement));
+        IMediaSearchProvider provider, SearchQuery query, SearchSort sort, SearchArrangement arrangement, CancellationToken token) =>
+        query.Words.Length == 0 ? [] : query.Keep(SearchRanking.Order([await provider.SearchAsync(query.Words, sort, token)], query.Words, sort, arrangement));
 
     /// <summary>Reads a pasted link into media, keeping its details for when it's opened.</summary>
     public async Task<MediaSearchResult> OpenLinkAsync(string url, CancellationToken token = default)
@@ -326,6 +350,13 @@ public sealed partial class SearchViewModel : ObservableObject
         foreach (MediaSearchResult result in results.Where(result => shownRecents.All(recent => recent.SourceUrl != result.SourceUrl)))
             Suggestions.Add(new SearchSuggestion(result, Query: query));
     }
+
+    // By its id or its name, however it's spaced or cased: youtubemusic, "YouTube Music".
+    private IMediaSearchProvider? FindSource(string name) =>
+        Providers.FirstOrDefault(provider => IsSame(provider.Id, name) || IsSame(provider.DisplayName, name));
+
+    private static bool IsSame(string one, string other) =>
+        string.Equals(one.Replace(" ", string.Empty), other.Replace(" ", string.Empty), StringComparison.OrdinalIgnoreCase);
 
     internal static bool IsLink(string text) =>
         Uri.TryCreate(text, UriKind.Absolute, out Uri? uri) && uri.Scheme is "http" or "https";

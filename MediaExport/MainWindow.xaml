@@ -180,42 +180,129 @@
                         Visibility="{x:Bind converters:Show.WhenAny(Search.IsSearching, Results.IsSearching), Mode=OneWay}" />
                 </Grid>
 
-                <!--
-                    What comes first, for the suggestions here and the Search page alike, as the two questions it is:
-                    which results to find, and what order to show them in.
-                -->
-                <DropDownButton
+                <StackPanel
                     Grid.Column="2"
-                    Height="32"
                     VerticalAlignment="Center"
-                    AutomationProperties.Name="Sort results"
-                    ToolTipService.ToolTip="Sort results">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon FontSize="14" Glyph="&#xE8CB;" />
-                        <TextBlock Text="{x:Bind Search.SortLabel, Mode=OneWay}" />
-                    </StackPanel>
-                    <DropDownButton.Flyout>
-                        <Flyout
-                            Closed="SortMenu_Closed"
-                            Opening="SortMenu_Opening"
-                            Placement="BottomEdgeAlignedRight">
-                            <StackPanel Width="250" Spacing="12">
-                                <RadioButtons Header="Find the" SelectedIndex="{x:Bind Search.SortIndex, Mode=TwoWay}">
-                                    <RadioButton Content="Most relevant" ToolTipService.ToolTip="Relevancy: the closest matches to what you typed" />
-                                    <RadioButton Content="Most popular" ToolTipService.ToolTip="Popularity: the most played matches" />
-                                </RadioButtons>
-                                <Rectangle Style="{StaticResource DividerStyle}" />
-                                <RadioButtons Header="Show them" SelectedIndex="{x:Bind Search.ArrangementIndex, Mode=TwoWay}">
-                                    <RadioButton Content="In that order" />
-                                    <RadioButton Content="Newest first" />
-                                    <RadioButton Content="Oldest first" />
-                                    <RadioButton Content="By title, A to Z" />
-                                    <RadioButton Content="By title, Z to A" />
-                                </RadioButtons>
-                            </StackPanel>
-                        </Flyout>
-                    </DropDownButton.Flyout>
-                </DropDownButton>
+                    Orientation="Horizontal"
+                    Spacing="4">
+                    <!--
+                        Terms that narrow a search, added to the box as the text they are (creator:name, longer:10m),
+                        so they can be typed, edited, copied and pasted like the rest of it.
+                    -->
+                    <DropDownButton
+                        Height="32"
+                        AutomationProperties.Name="Narrow the search"
+                        ToolTipService.ToolTip="Narrow the search">
+                        <FontIcon FontSize="14" Glyph="&#xE71C;" />
+                        <DropDownButton.Flyout>
+                            <MenuFlyout
+                                Closed="Menu_Closed"
+                                Opening="TermsMenu_Opening"
+                                Placement="BottomEdgeAlignedRight">
+                                <MenuFlyoutItem
+                                    Click="AddTerm_Click"
+                                    Tag="&quot;|exact words"
+                                    Text="Exact phrase" />
+                                <MenuFlyoutItem
+                                    Click="AddTerm_Click"
+                                    Tag="-|word"
+                                    Text="Without a word" />
+                                <MenuFlyoutItem
+                                    Click="AddTerm_Click"
+                                    Tag="creator:|name"
+                                    Text="Creator" />
+                                <MenuFlyoutSubItem x:Name="sourceTerms" Text="Source" />
+                                <MenuFlyoutSubItem Text="Kind">
+                                    <MenuFlyoutItem
+                                        Click="AddTerm_Click"
+                                        Tag="kind:video"
+                                        Text="Video" />
+                                    <MenuFlyoutItem
+                                        Click="AddTerm_Click"
+                                        Tag="kind:audio"
+                                        Text="Audio" />
+                                </MenuFlyoutSubItem>
+                                <MenuFlyoutSeparator />
+                                <MenuFlyoutItem
+                                    Click="AddTerm_Click"
+                                    Tag="longer:|10m"
+                                    Text="Longer than" />
+                                <MenuFlyoutItem
+                                    Click="AddTerm_Click"
+                                    Tag="shorter:|10m"
+                                    Text="Shorter than" />
+                                <MenuFlyoutSeparator />
+                                <MenuFlyoutItem
+                                    Click="AddTerm_Click"
+                                    Tag="after:|2020"
+                                    Text="After a date" />
+                                <MenuFlyoutItem
+                                    Click="AddTerm_Click"
+                                    Tag="before:|2020"
+                                    Text="Before a date" />
+                            </MenuFlyout>
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
+
+                    <!--
+                        What comes first, for the suggestions here and the Search page alike. Two choices in one menu,
+                        as File Explorer's sort has: what the results are ranked by, then what order they're shown in.
+                    -->
+                    <DropDownButton
+                        Height="32"
+                        AutomationProperties.Name="Sort results"
+                        ToolTipService.ToolTip="Sort results">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="14" Glyph="&#xE8CB;" />
+                            <TextBlock Text="{x:Bind Search.SortLabel, Mode=OneWay}" />
+                        </StackPanel>
+                        <DropDownButton.Flyout>
+                            <MenuFlyout
+                                Closed="Menu_Closed"
+                                Opening="SortMenu_Opening"
+                                Placement="BottomEdgeAlignedRight">
+                                <MenuFlyoutItem IsEnabled="False" Text="Rank by" />
+                                <RadioMenuFlyoutItem
+                                    Click="Sort_Click"
+                                    GroupName="Rank"
+                                    Tag="Relevance"
+                                    Text="Relevancy" />
+                                <RadioMenuFlyoutItem
+                                    Click="Sort_Click"
+                                    GroupName="Rank"
+                                    Tag="Popularity"
+                                    Text="Popularity" />
+                                <MenuFlyoutSeparator />
+                                <MenuFlyoutItem IsEnabled="False" Text="Then show" />
+                                <RadioMenuFlyoutItem
+                                    Click="Sort_Click"
+                                    GroupName="Show"
+                                    Tag="AsRanked"
+                                    Text="In that order" />
+                                <RadioMenuFlyoutItem
+                                    Click="Sort_Click"
+                                    GroupName="Show"
+                                    Tag="NewestFirst"
+                                    Text="Newest first" />
+                                <RadioMenuFlyoutItem
+                                    Click="Sort_Click"
+                                    GroupName="Show"
+                                    Tag="OldestFirst"
+                                    Text="Oldest first" />
+                                <RadioMenuFlyoutItem
+                                    Click="Sort_Click"
+                                    GroupName="Show"
+                                    Tag="TitleAToZ"
+                                    Text="Title, A to Z" />
+                                <RadioMenuFlyoutItem
+                                    Click="Sort_Click"
+                                    GroupName="Show"
+                                    Tag="TitleZToA"
+                                    Text="Title, Z to A" />
+                            </MenuFlyout>
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
+                </StackPanel>
             </Grid>
         </TitleBar>
 
