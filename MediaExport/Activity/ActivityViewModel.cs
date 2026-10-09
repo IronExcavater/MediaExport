@@ -7,7 +7,7 @@ using MediaExport.Core.Settings;
 
 namespace MediaExport.Activity;
 
-/// <summary>The exports that are waiting, running and finished. It runs them, so they carry on whichever page is showing.</summary>
+/// <summary>Owns queued, running, and completed exports for the application session.</summary>
 public sealed partial class ActivityViewModel : ObservableObject
 {
     private readonly IMediaDownloader _downloader;

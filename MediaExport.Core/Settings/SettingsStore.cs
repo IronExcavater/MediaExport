@@ -6,16 +6,14 @@ using System.Text.Json.Serialization;
 
 namespace MediaExport.Core.Settings;
 
-/// <summary>Everything the app remembers between runs. Something new to remember is a property here, with its default.</summary>
+/// <summary>Application settings persisted between runs.</summary>
 public sealed class AppSettings
 {
     public bool IsPaneOpen { get; set; } = true;
 }
 
-/// <summary>
-/// Keeps <see cref="AppSettings"/> in a JSON file; a <c>null</c> path keeps them in memory only (for tests).
-/// Change <see cref="Current"/>, then call <see cref="Save"/>.
-/// </summary>
+/// <summary>Loads and saves <see cref="AppSettings"/> as JSON.</summary>
+/// <param name="path">The settings file, or <c>null</c> for an in-memory store.</param>
 public sealed class SettingsStore(string? path)
 {
     public AppSettings Current { get; } = Load(path);
