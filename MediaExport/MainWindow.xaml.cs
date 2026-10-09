@@ -85,7 +85,7 @@ public sealed partial class MainWindow : Window
 
     private void FocusSearch_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        searchInput.FocusEditor();
+        searchInput.FocusQueryBox();
         args.Handled = true;
     }
 

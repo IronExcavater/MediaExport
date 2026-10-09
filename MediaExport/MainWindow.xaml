@@ -11,7 +11,7 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <!-- The app shell: title bar on top, navigation pane on the left, and the selected page. -->
+    <!-- The app shell has the title bar on top, the navigation pane on the left, and the selected page beside it. -->
     <Grid x:Name="root" Loaded="Root_Loaded">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
