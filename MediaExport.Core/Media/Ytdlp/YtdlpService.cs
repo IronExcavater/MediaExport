@@ -6,7 +6,7 @@ using MediaExport.Core.Tooling;
 
 namespace MediaExport.Core.Media.Ytdlp;
 
-/// <summary>Everything done by running yt-dlp: downloading, and searching the sources it can search.</summary>
+/// <summary>Searches and downloads media through yt-dlp.</summary>
 public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
 {
     public Task<IReadOnlyList<string>> DownloadAsync(
@@ -15,7 +15,7 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
         IProgress<ExportProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        _ = tools; // Where yt-dlp and ffmpeg are: tools.Locate("yt-dlp.exe").
+        _ = tools;
         throw new NotImplementedException();
     }
 }

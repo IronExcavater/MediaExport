@@ -9,7 +9,7 @@ public enum MediaKind
     Audio
 }
 
-/// <summary>One piece of media a source knows about: what a search brings back, and what an export starts from.</summary>
+/// <summary>A media item returned by a provider and available for export.</summary>
 /// <param name="Identity">The source's own name for it, e.g. a video id.</param>
 /// <param name="ProviderId">The source it came from, e.g. <c>youtube</c>.</param>
 public sealed record MediaSearchResult(
