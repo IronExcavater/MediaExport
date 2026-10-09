@@ -4,14 +4,15 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:shell="using:MediaExport.Shell"
+    xmlns:search="using:MediaExport.Search"
     Title="MediaExport">
 
     <Window.SystemBackdrop>
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <!-- The shell: the title bar across the top, the pages' names down the side, and the page that's chosen. -->
-    <Grid>
+    <!-- The app shell: title bar on top, navigation pane on the left, and the selected page. -->
+    <Grid x:Name="root" Loaded="Root_Loaded">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -19,17 +20,19 @@
 
         <TitleBar
             x:Name="titleBar"
-            IsBackButtonVisible="False"
             IsPaneToggleButtonVisible="True"
-            PaneToggleRequested="TitleBar_PaneToggleRequested">
+            PaneToggleRequested="TitleBar_PaneToggleRequested"
+            SizeChanged="TitleBar_SizeChanged">
             <TitleBar.Resources>
                 <HorizontalAlignment x:Key="TitleBarContentHorizontalAlignment">Stretch</HorizontalAlignment>
+                <!-- The window can still be dragged by the app header, so no extra drag area is needed beside the search. -->
+                <x:Double x:Key="TitleBarMinDragRegionWidth">0</x:Double>
             </TitleBar.Resources>
-            <!-- The app's own icon and name, larger than the title bar's caption-sized title and centred together. -->
+
+            <!-- Used instead of TitleBar's Icon and Title, which are fixed at a smaller caption size. -->
             <TitleBar.LeftHeader>
                 <StackPanel
-                    Margin="4,0,8,0"
-                    VerticalAlignment="Center"
+                    Margin="4,0,0,0"
                     Orientation="Horizontal"
                     Spacing="10">
                     <Image
@@ -38,6 +41,7 @@
                         VerticalAlignment="Center"
                         Source="{StaticResource AppLogo}" />
                     <TextBlock
+                        x:Name="appName"
                         VerticalAlignment="Center"
                         FontSize="16"
                         FontWeight="SemiBold"
@@ -45,30 +49,31 @@
                 </StackPanel>
             </TitleBar.LeftHeader>
 
-            <AutoSuggestBox
-                MaxWidth="640"
-                Margin="16,0"
-                VerticalAlignment="Center"
-                AutomationProperties.Name="Search"
-                PlaceholderText="Search"
-                QueryIcon="Find" />
+            <search:SearchInput
+                x:Name="searchInput"
+                Margin="4,0"
+                Submitted="SearchInput_Submitted"
+                ViewModel="{x:Bind Search}">
+                <search:SearchInput.KeyboardAccelerators>
+                    <KeyboardAccelerator
+                        Key="K"
+                        Invoked="FocusSearch_Invoked"
+                        Modifiers="Control" />
+                </search:SearchInput.KeyboardAccelerators>
+            </search:SearchInput>
         </TitleBar>
 
-        <!-- Each item's Tag is its page's name in MainWindow.Pages. -->
+        <!-- Each item's Tag is the key of its page in MainWindow.Pages. -->
         <shell:SmoothNavigationView
             x:Name="navView"
             Grid.Row="1"
-            CollapseDuration="0:0:0.18"
-            CollapsedPaneLength="50"
-            ExpandDuration="0:0:0.25"
-            ExpandedPaneLength="240"
-            IsSettingsVisible="True"
+            AutoCollapseWidth="{x:Bind shell:WindowSizes.Compact}"
             Loaded="NavView_Loaded"
             SelectionChanged="NavView_SelectionChanged">
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="Export" Icon="Download" Tag="Export" />
                 <NavigationViewItem Content="Search" Icon="Find" Tag="Search" />
-                <!-- The history clock has no name among the symbols, so it's given as its character in the icon font. -->
+                <!-- The History glyph isn't in the Symbol enum, so it's given by its code in the icon font. -->
                 <NavigationViewItem Content="Activity" Tag="Activity">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE81C;" />

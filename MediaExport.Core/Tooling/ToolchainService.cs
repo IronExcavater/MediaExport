@@ -3,8 +3,8 @@
 
 namespace MediaExport.Core.Tooling;
 
-/// <summary>Finds, installs and updates the programs the app runs (yt-dlp, ffmpeg).</summary>
-/// <param name="folder">Where the app keeps the copies it installs itself.</param>
+/// <summary>Finds, installs and updates the external programs the app runs (yt-dlp, ffmpeg).</summary>
+/// <param name="folder">The folder holding the copies the app installs itself.</param>
 public sealed class ToolchainService(string folder)
 {
     public string Folder { get; } = folder;
