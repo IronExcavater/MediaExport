@@ -27,7 +27,7 @@ public sealed class SettingsStore(string? path)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             // Write a temporary file and then swap it in, so a crash mid-write can't corrupt the real one.
-            string temporary = path + ".tmp";
+            var temporary = path + ".tmp";
             File.WriteAllText(temporary, JsonSerializer.Serialize(Current, SettingsJson.Default.AppSettings));
             File.Move(temporary, path, overwrite: true);
         }
@@ -44,7 +44,7 @@ public sealed class SettingsStore(string? path)
             if (path is null || !File.Exists(path))
                 return new AppSettings();
 
-            string json = File.ReadAllText(path);
+            var json = File.ReadAllText(path);
             return JsonSerializer.Deserialize(json, SettingsJson.Default.AppSettings) ?? new AppSettings();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)

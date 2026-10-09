@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <ResourceDictionary>
-            <!-- The app's own dictionaries come after the controls', so what they redefine (the accent colours) wins. -->
+            <!-- The app's dictionaries are merged after the WinUI controls' so their overrides (the accent colours) win. -->
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <ResourceDictionary Source="Resources/Theme.xaml" />
