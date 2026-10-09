@@ -1,14 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Every picture the app ships, by name, so nothing else needs to know where the files are:
+    Every image the app ships, as a named resource, so no other file needs a path:
         <Image Source="{ThemeResource DailymotionIcon}" />
-    Use ThemeResource rather than StaticResource for the icons, so those with a light and a dark drawing
-    follow the theme (the others are the same either way, and work with both).
-    A new icon is a file in a folder of Assets/Icons (Brands for sources and browsers) and a line here.
+    Use ThemeResource, not StaticResource, so icons with separate light and dark versions follow the theme.
+    To add an icon, put the file under Assets/Icons and add a line here.
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <ResourceDictionary.ThemeDictionaries>
-        <!-- One-colour marks, drawn light for dark backgrounds and dark for light ones. -->
+        <!-- Single-colour logos, with a light version for the dark theme and a dark version for the light theme. -->
         <ResourceDictionary x:Key="Default">
             <SvgImageSource x:Key="DailymotionIcon" UriSource="ms-appx:///Assets/Icons/Brands/dailymotion.dark.svg" />
             <SvgImageSource x:Key="InternetArchiveIcon" UriSource="ms-appx:///Assets/Icons/Brands/internet-archive.dark.svg" />
@@ -21,7 +20,7 @@
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
-    <!-- Marks in their own colours, which read on either theme. -->
+    <!-- Full-colour logos that work on both themes. -->
     <SvgImageSource x:Key="BilibiliIcon" UriSource="ms-appx:///Assets/Icons/Brands/bilibili.svg" />
     <SvgImageSource x:Key="MixcloudIcon" UriSource="ms-appx:///Assets/Icons/Brands/mixcloud.svg" />
     <SvgImageSource x:Key="SoundCloudIcon" UriSource="ms-appx:///Assets/Icons/Brands/soundcloud.svg" />
@@ -29,7 +28,7 @@
     <SvgImageSource x:Key="YouTubeIcon" UriSource="ms-appx:///Assets/Icons/Brands/youtube.svg" />
     <SvgImageSource x:Key="YouTubeMusicIcon" UriSource="ms-appx:///Assets/Icons/Brands/youtube-music.svg" />
 
-    <!-- Browsers, for choosing whose sign-in to use. -->
+    <!-- Browsers, for choosing which browser's sign-in cookies to use. -->
     <SvgImageSource x:Key="BraveIcon" UriSource="ms-appx:///Assets/Icons/Brands/brave.svg" />
     <SvgImageSource x:Key="ChromeIcon" UriSource="ms-appx:///Assets/Icons/Brands/google-chrome.svg" />
     <SvgImageSource x:Key="EdgeIcon" UriSource="ms-appx:///Assets/Icons/Brands/microsoft-edge.svg" />

@@ -2,125 +2,151 @@
 // SPDX-License-Identifier: MPL-2.0
 
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace MediaExport.Shell;
 
-/// <summary>
-/// A navigation view whose pane eases between wide and narrow, the page beside it resizing with it.
-/// NavigationView's own collapse snaps the page to its new width while the pane animates
-/// (microsoft-ui-xaml#9370, closed as won't fix). Here the pane stays "open" the whole time and only
-/// its width changes, a little each frame, so the page is laid out again at every step.
-/// <code>
-/// &lt;shell:SmoothNavigationView IsExpanded="True" ExpandedPaneLength="240" CollapsedPaneLength="56"
-///                             ExpandDuration="0:0:0.25" CollapseDuration="0:0:0.18" /&gt;
-/// </code>
-/// </summary>
+/// <summary>A navigation view whose pane slides between two widths, resizing the page beside it as it goes.</summary>
+/// <remarks>
+/// NavigationView's own collapse snaps the page to its new width before the pane has finished moving
+/// (microsoft-ui-xaml#9370). This control keeps the pane open and animates its width instead, so the pane
+/// and the page move together.
+/// </remarks>
 public sealed partial class SmoothNavigationView : NavigationView
 {
-    public static readonly DependencyProperty IsExpandedProperty = Register(nameof(IsExpanded), true);
-    public static readonly DependencyProperty ExpandedPaneLengthProperty = Register(nameof(ExpandedPaneLength), 240d);
-    public static readonly DependencyProperty CollapsedPaneLengthProperty = Register(nameof(CollapsedPaneLength), 56d);
-    public static readonly DependencyProperty ExpandDurationProperty = Register(nameof(ExpandDuration), TimeSpan.FromMilliseconds(250));
-    public static readonly DependencyProperty CollapseDurationProperty = Register(nameof(CollapseDuration), TimeSpan.FromMilliseconds(180));
-
-    private TimeSpan? _start;
+    // The animation in progress.
+    private TimeSpan? _startTime;
     private TimeSpan _duration;
-    private double _from;
-    private double _to;
+    private double _startLength;
+    private double _targetLength;
 
     public SmoothNavigationView()
     {
-        // Always "open": narrowing is done by OpenPaneLength alone.
+        // As far as NavigationView knows the pane is always open; only OpenPaneLength changes.
         PaneDisplayMode = NavigationViewPaneDisplayMode.Left;
         IsPaneOpen = true;
         IsPaneToggleButtonVisible = false;
         IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed;
         OpenPaneLength = ExpandedPaneLength;
-        Loaded += (_, _) => LabelItems();
+
+        Loaded += (_, _) => UpdateToolTips();
+        SizeChanged += (_, _) => UpdatePane();
     }
 
-    /// <summary>Whether the pane shows its items' names, or only their icons.</summary>
+    /// <summary>Whether the user wants the pane expanded. It still collapses below <see cref="AutoCollapseWidth"/>.</summary>
     public bool IsExpanded
     {
-        get => (bool)GetValue(IsExpandedProperty);
-        set => SetValue(IsExpandedProperty, value);
+        get;
+        set { field = value; UpdatePane(); }
+    } = true;
+
+    /// <summary>The control width below which the pane collapses by itself. 0 turns this off.</summary>
+    public double AutoCollapseWidth
+    {
+        get;
+        set { field = value; UpdatePane(); }
     }
 
-    /// <summary>The pane's width showing icons and names.</summary>
+    /// <summary>Whether the pane is collapsed right now, by the user's choice or for lack of room.</summary>
+    public bool IsCompact { get; private set; }
+
+    public event EventHandler? IsCompactChanged;
+
+    /// <summary>The pane's width when it shows icons and names.</summary>
     public double ExpandedPaneLength
     {
-        get => (double)GetValue(ExpandedPaneLengthProperty);
-        set => SetValue(ExpandedPaneLengthProperty, value);
-    }
+        get;
+        set { field = value; UpdatePane(); }
+    } = 240;
 
-    /// <summary>
-    /// The pane's width showing icons only. At the 48 a navigation view narrows to by itself,
-    /// the highlight of an "open" item runs a few pixels past the pane's edge.
-    /// </summary>
+    /// <summary>The pane's width when it shows icons only. Below about 50 the selection highlight is clipped.</summary>
     public double CollapsedPaneLength
     {
-        get => (double)GetValue(CollapsedPaneLengthProperty);
-        set => SetValue(CollapsedPaneLengthProperty, value);
-    }
+        get;
+        set { field = value; UpdatePane(); }
+    } = 50;
 
-    /// <summary>How long the pane takes to open all the way.</summary>
-    public TimeSpan ExpandDuration
+    /// <summary>How long a full expand takes.</summary>
+    public TimeSpan ExpandDuration { get; set; } = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>How long a full collapse takes.</summary>
+    public TimeSpan CollapseDuration { get; set; } = TimeSpan.FromMilliseconds(180);
+
+    // Decides whether the pane should be compact and, if its width has to change, starts animating to it.
+    // Called whenever a property or the control's size changes.
+    private void UpdatePane()
     {
-        get => (TimeSpan)GetValue(ExpandDurationProperty);
-        set => SetValue(ExpandDurationProperty, value);
-    }
+        bool isTooNarrow = ActualWidth < AutoCollapseWidth;
+        bool isCompact = !IsExpanded || isTooNarrow;
+        if (isCompact != IsCompact)
+        {
+            IsCompact = isCompact;
+            UpdateToolTips();
+            IsCompactChanged?.Invoke(this, EventArgs.Empty);
+        }
 
-    /// <summary>How long the pane takes to narrow all the way. Shorter than opening by default: it's getting out of the way.</summary>
-    public TimeSpan CollapseDuration
-    {
-        get => (TimeSpan)GetValue(CollapseDurationProperty);
-        set => SetValue(CollapseDurationProperty, value);
-    }
+        double targetLength = isCompact ? CollapsedPaneLength : ExpandedPaneLength;
+        if (targetLength == _targetLength)
+            return;
 
-    // Any of the properties changing moves the pane to where it should now be.
-    private static DependencyProperty Register<T>(string name, T defaultValue) => DependencyProperty.Register(
-        name, typeof(T), typeof(SmoothNavigationView),
-        new PropertyMetadata(defaultValue, (view, _) => ((SmoothNavigationView)view).MoveToLength()));
-
-    private void MoveToLength()
-    {
-        _to = IsExpanded ? ExpandedPaneLength : CollapsedPaneLength;
-        LabelItems();
+        _targetLength = targetLength;
         if (!IsLoaded)
         {
-            OpenPaneLength = _to; // Nothing's on screen yet to animate.
+            // Not on screen yet, so there is nothing to animate.
+            OpenPaneLength = targetLength;
             return;
         }
 
-        // Partway through an earlier move only the rest of the distance is left, so it takes that much less time.
-        _from = OpenPaneLength;
-        double whole = Math.Abs(ExpandedPaneLength - CollapsedPaneLength);
-        _duration = whole > 0 ? (IsExpanded ? ExpandDuration : CollapseDuration) * Math.Min(1, Math.Abs(_to - _from) / whole) : TimeSpan.Zero;
-        _start = null;
-        CompositionTarget.Rendering -= Step;
-        CompositionTarget.Rendering += Step;
+        // An animation interrupted partway has less distance left, so it gets the same share of the time.
+        double fullDistance = Math.Abs(ExpandedPaneLength - CollapsedPaneLength);
+        double distance = Math.Abs(targetLength - OpenPaneLength);
+        TimeSpan fullDuration = isCompact ? CollapseDuration : ExpandDuration;
+        _duration = fullDistance > 0 ? fullDuration * Math.Min(1, distance / fullDistance) : TimeSpan.Zero;
+        _startLength = OpenPaneLength;
+        _startTime = null;
+
+        CompositionTarget.Rendering -= OnRendering;
+        CompositionTarget.Rendering += OnRendering;
     }
 
-    // Timed by the frames themselves, so every frame drawn gets its own step.
-    private void Step(object? sender, object args)
+    // Moves the pane one step. Runs once per frame until the animation finishes.
+    private void OnRendering(object? sender, object args)
     {
         TimeSpan now = ((RenderingEventArgs)args).RenderingTime;
-        _start ??= now;
-        double progress = _duration > TimeSpan.Zero ? Math.Min(1, (now - _start.Value) / _duration) : 1;
-        double eased = 1 - Math.Pow(1 - progress, 4); // Fluent's decelerate: quick to start, gentle to land.
-        OpenPaneLength = _from + (_to - _from) * eased;
+        _startTime ??= now;
+
+        TimeSpan elapsed = now - _startTime.Value;
+        double progress = _duration > TimeSpan.Zero ? Math.Min(1, elapsed / _duration) : 1;
+        // Ease out: fast at first, slowing to a stop.
+        double eased = 1 - Math.Pow(1 - progress, 4);
+        OpenPaneLength = _startLength + (_targetLength - _startLength) * eased;
+
         if (progress >= 1)
-            CompositionTarget.Rendering -= Step;
+            CompositionTarget.Rendering -= OnRendering;
     }
 
-    // Narrowed, the items' names are hidden, so each says what it is on hover instead.
-    private void LabelItems()
+    // A compact pane hides the items' names, so each item shows its name as a tooltip instead.
+    private void UpdateToolTips()
     {
-        foreach (NavigationViewItem item in MenuItems.Append(SettingsItem).OfType<NavigationViewItem>())
-            ToolTipService.SetToolTip(item, IsExpanded ? null : item.Content ?? "Settings");
+        var entries = new List<object?>();
+        entries.AddRange(MenuItems);
+        entries.AddRange(FooterMenuItems);
+        entries.Add(SettingsItem);
+
+        // Headers and separators are skipped, as is the settings item before it has been created.
+        foreach (NavigationViewItem item in entries.OfType<NavigationViewItem>())
+        {
+            // An item whose content is a control rather than text is named by its accessible name.
+            string name = item.Content as string ?? AutomationProperties.GetName(item);
+            if (name.Length == 0)
+                name = "Settings";
+
+            ToolTipService.SetToolTip(item, IsCompact ? name : null);
+        }
     }
 }

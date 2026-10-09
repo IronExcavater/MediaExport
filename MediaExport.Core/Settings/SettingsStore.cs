@@ -26,14 +26,14 @@ public sealed class SettingsStore(string? path)
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            // Written aside then swapped in, so a crash mid-write can't leave a half-written file.
+            // Write a temporary file and then swap it in, so a crash mid-write can't corrupt the real one.
             string temporary = path + ".tmp";
             File.WriteAllText(temporary, JsonSerializer.Serialize(Current, SettingsJson.Default.AppSettings));
             File.Move(temporary, path, overwrite: true);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // Settings are a convenience; failing to save them shouldn't interrupt anything.
+            // Losing a settings change is better than interrupting the user with an error.
         }
     }
 
@@ -41,19 +41,21 @@ public sealed class SettingsStore(string? path)
     {
         try
         {
-            return path is not null && File.Exists(path)
-                ? JsonSerializer.Deserialize(File.ReadAllText(path), SettingsJson.Default.AppSettings) ?? new AppSettings()
-                : new AppSettings();
+            if (path is null || !File.Exists(path))
+                return new AppSettings();
+
+            string json = File.ReadAllText(path);
+            return JsonSerializer.Deserialize(json, SettingsJson.Default.AppSettings) ?? new AppSettings();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
         {
-            // A file that can't be read or understood is treated as no file: the defaults.
+            // An unreadable or corrupt file falls back to the defaults.
             return new AppSettings();
         }
     }
 }
 
-// Source-generated so the settings survive trimming in Release builds.
+// Source-generated serialization, because reflection-based JSON breaks when Release builds are trimmed.
 [JsonSourceGenerationOptions(WriteIndented = true)]
 [JsonSerializable(typeof(AppSettings))]
 internal sealed partial class SettingsJson : JsonSerializerContext;

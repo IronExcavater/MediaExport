@@ -2,8 +2,9 @@
 <!-- The app's colours. -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
-        The logo's cyan, whatever accent Windows uses: a grey or pale accent makes selected and accent
-        controls hard to read. Controls pick Light2 on dark and Dark1 on light, so both stay readable.
+        The app always uses the logo's cyan as its accent, instead of the user's Windows accent colour,
+        because a grey or pale system accent makes selected controls hard to read.
+        WinUI uses the Light2 shade on the dark theme and Dark1 on the light theme.
     -->
     <Color x:Key="SystemAccentColor">#14A596</Color>
     <Color x:Key="SystemAccentColorLight1">#37C2B3</Color>
