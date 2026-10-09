@@ -10,8 +10,8 @@ public enum MediaKind
 }
 
 /// <summary>A media item returned by a provider and available for export.</summary>
-/// <param name="Identity">The source's own name for it, e.g. a video id.</param>
-/// <param name="ProviderId">The source it came from, e.g. <c>youtube</c>.</param>
+/// <param name="Identity">The provider's own identifier for the item, e.g. a video id.</param>
+/// <param name="ProviderId">The <see cref="Providers.IMediaSearchProvider.Id"/> of the provider it came from.</param>
 public sealed record MediaSearchResult(
     string Identity,
     string SourceUrl,
@@ -22,6 +22,6 @@ public sealed record MediaSearchResult(
     MediaKind Kind = MediaKind.Video,
     string? ProviderId = null)
 {
-    // List items are announced by screen readers using ToString.
+    // Screen readers announce list items by their ToString.
     public override string ToString() => Creator is null ? Title : $"{Title}, {Creator}";
 }
