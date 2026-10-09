@@ -3,10 +3,12 @@
 
 using MediaExport.Controls;
 using MediaExport.Core.Media.Providers;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
+using System.Runtime.InteropServices;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 
@@ -21,9 +23,23 @@ public sealed partial class SearchInput : UserControl
         typeof(SearchInput),
         new PropertyMetadata(null));
 
+    // How long the query must stay unchanged before a search starts. This debounces the search, so typing
+    // a word doesn't start one search per letter.
+    private static readonly TimeSpan SearchDebounce = TimeSpan.FromMilliseconds(400);
+
+    private readonly DispatcherQueueTimer _debounceTimer;
+
     public SearchInput()
     {
         InitializeComponent();
+
+        _debounceTimer = DispatcherQueue.CreateTimer();
+        _debounceTimer.Interval = SearchDebounce;
+        _debounceTimer.IsRepeating = false;
+        _debounceTimer.Tick += (_, _) => ViewModel?.SearchCommand.Execute(null);
+
+        // A search that is still waiting shouldn't start after the control has gone.
+        Unloaded += (_, _) => _debounceTimer.Stop();
     }
 
     public SearchViewModel? ViewModel
@@ -36,7 +52,7 @@ public sealed partial class SearchInput : UserControl
     public event EventHandler? Submitted;
 
     /// <summary>Moves keyboard focus to the text box.</summary>
-    public void FocusEditor() => editor.Focus(FocusState.Keyboard);
+    public void FocusQueryBox() => queryBox.Focus(FocusState.Keyboard);
 
     // Used by {x:Bind} to hide the provider button when there is no provider.
     private Visibility VisibleWith(object? value) => value is null ? Visibility.Collapsed : Visibility.Visible;
@@ -50,9 +66,9 @@ public sealed partial class SearchInput : UserControl
         return new Size(MinWidth, desired.Height);
     }
 
-    // A horizontal ScrollViewer gives its content only the width it asks for, so the strip is made at least
+    // A horizontal ScrollViewer gives its content only the width it asks for, so fieldContent is made at least
     // as wide as the field. The text box's star column then takes whatever room is spare.
-    private void FieldScroll_SizeChanged(object sender, SizeChangedEventArgs args) => strip.MinWidth = args.NewSize.Width;
+    private void FieldScroll_SizeChanged(object sender, SizeChangedEventArgs args) => fieldContent.MinWidth = args.NewSize.Width;
 
     // MenuFlyout has no ItemsSource, so the providers are listed as it opens, the selected one in bold.
     private void ProviderMenu_Opening(object? sender, object args)
@@ -75,11 +91,36 @@ public sealed partial class SearchInput : UserControl
         }
     }
 
-    // Enter runs the search and lists the results under the box.
-    private void Editor_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args) =>
-        ViewModel?.SearchCommand.Execute(null);
+    // AutoSuggestBox closes its list when it loses focus and doesn't reopen it by itself, so coming back
+    // to the box shows the results that are still there.
+    private void QueryBox_GotFocus(object sender, RoutedEventArgs args)
+    {
+        var hasResults = ViewModel?.Results.Count > 0;
+        if (hasResults)
+            queryBox.IsSuggestionListOpen = true;
+    }
 
-    private async void QueryActionsMenu_Opening(object? sender, object args)
+    // Restarts the debounce timer on every change to the query.
+    private void QueryBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        // Moving through the results with the arrow keys also reports a change, but isn't a new query.
+        if (args.Reason == AutoSuggestionBoxTextChangeReason.SuggestionChosen)
+            return;
+
+        _debounceTimer.Stop();
+        _debounceTimer.Start();
+    }
+
+    // Enter searches straight away instead of waiting for the debounce. Choosing a result from the list
+    // doesn't do anything yet, because there is nowhere to open it. That belongs in this handler.
+    private void QueryBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        _debounceTimer.Stop();
+        if (args.ChosenSuggestion is null)
+            ViewModel?.SearchCommand.Execute(null);
+    }
+
+    private async void ClipboardMenu_Opening(object? sender, object args)
     {
         var hasQuery = ViewModel?.FullText.Length > 0;
         copyQueryItem.IsEnabled = hasQuery;
@@ -91,9 +132,9 @@ public sealed partial class SearchInput : UserControl
             var hasText = content.Contains(StandardDataFormats.Text);
             pasteQueryItem.IsEnabled = hasText && !string.IsNullOrWhiteSpace(await content.GetTextAsync());
         }
-        catch (Exception)
+        catch (Exception exception) when (IsClipboardUnavailable(exception))
         {
-            // Another app can have the clipboard locked. Paste stays disabled until the menu is opened again.
+            // Paste stays disabled until the menu is opened again.
         }
     }
 
@@ -121,18 +162,23 @@ public sealed partial class SearchInput : UserControl
                 return;
 
             ViewModel.Replace(query);
-            FocusEditor();
+            FocusQueryBox();
         }
-        catch (Exception)
+        catch (Exception exception) when (IsClipboardUnavailable(exception))
         {
-            // The clipboard can change or be locked by another app between opening the menu and pasting.
+            // The clipboard changed or was locked between opening the menu and choosing Paste, so nothing is pasted.
         }
     }
+
+    // Windows reports a clipboard that another app has locked, or that this app isn't allowed to read while
+    // it is in the background, with one of these two exceptions.
+    private static bool IsClipboardUnavailable(Exception exception) =>
+        exception is COMException or UnauthorizedAccessException;
 
     private void ClearQuery_Click(object sender, RoutedEventArgs args)
     {
         ViewModel?.Clear();
-        FocusEditor();
+        FocusQueryBox();
     }
 
     private void Search_Click(object sender, RoutedEventArgs args) => Submitted?.Invoke(this, EventArgs.Empty);

@@ -199,7 +199,7 @@ public sealed partial class SmoothNavigationView : NavigationView
 
         var elapsed = now - _startTime.Value;
         var progress = _duration > TimeSpan.Zero ? Math.Min(1, elapsed / _duration) : 1;
-        // Ease out: fast at first, slowing to a stop.
+        // Eases out, so the pane moves fast at first and slows to a stop.
         var eased = 1 - Math.Pow(1 - progress, 4);
         OpenPaneLength = _startLength + (_targetLength - _startLength) * eased;
 

@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:MediaExport.Controls"
+    xmlns:media="using:MediaExport.Media.Controls"
     xmlns:models="using:MediaExport.Core.Media.Models"
     Height="36"
     MinWidth="240"
@@ -11,7 +12,6 @@
 
     <!-- A single field holding the provider button, the text box, and the clipboard and Search buttons. -->
     <Border
-        x:Name="field"
         Height="36"
         Background="{ThemeResource ControlFillColorDefaultBrush}"
         BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
@@ -25,8 +25,8 @@
             </Grid.ColumnDefinitions>
 
             <!--
-                The provider and text box form one strip that scrolls sideways when it is longer
-                than the field; the buttons after it stay in place. FieldScroll_SizeChanged keeps the strip
+                The provider and text box (fieldContent) scroll sideways together when they are longer
+                than the field; the buttons after them stay in place. FieldScroll_SizeChanged keeps fieldContent
                 at least as wide as the field, so the text box fills any spare room.
             -->
             <controls:EdgeFade Orientation="Horizontal">
@@ -38,7 +38,7 @@
                     VerticalScrollBarVisibility="Disabled"
                     VerticalScrollMode="Disabled"
                     ZoomMode="Disabled">
-                    <Grid x:Name="strip">
+                    <Grid x:Name="fieldContent">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
@@ -47,7 +47,6 @@
 
                         <!-- The selected provider. Clicking it opens the list of providers. -->
                         <Button
-                            x:Name="providerButton"
                             Height="34"
                             MaxWidth="180"
                             Padding="8,0"
@@ -77,14 +76,13 @@
                             </StackPanel>
                         </Button>
                         <Border
-                            x:Name="providerDivider"
                             Grid.Column="1"
                             Style="{StaticResource FieldDividerStyle}"
                             Visibility="{x:Bind VisibleWith(ViewModel.SelectedProvider), Mode=OneWay}" />
 
-                        <!-- The query text. Enter searches and lists the results underneath. -->
+                        <!-- The query text. Typing searches after a pause, and the results are listed underneath. -->
                         <AutoSuggestBox
-                            x:Name="editor"
+                            x:Name="queryBox"
                             Grid.Column="2"
                             Height="34"
                             Padding="0"
@@ -93,26 +91,21 @@
                             Background="Transparent"
                             BorderThickness="0"
                             CornerRadius="0"
+                            GotFocus="QueryBox_GotFocus"
                             ItemsSource="{x:Bind ViewModel.Results, Mode=OneWay}"
                             PlaceholderText="Search or paste a link"
-                            QuerySubmitted="Editor_QuerySubmitted"
+                            QuerySubmitted="QueryBox_QuerySubmitted"
                             Text="{x:Bind ViewModel.Query, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                             TextBoxStyle="{StaticResource SearchTextBoxStyle}"
-                            TextMemberPath="Title">
+                            TextChanged="QueryBox_TextChanged"
+                            UpdateTextOnSelect="False">
                             <AutoSuggestBox.ItemTemplate>
                                 <DataTemplate x:DataType="models:MediaSearchResult">
-                                    <StackPanel Padding="0,6">
-                                        <TextBlock Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock
-                                            Style="{StaticResource SecondaryTextStyle}"
-                                            Text="{x:Bind Creator}"
-                                            TextWrapping="NoWrap" />
-                                    </StackPanel>
+                                    <media:RowMediaView Media="{x:Bind}" />
                                 </DataTemplate>
                             </AutoSuggestBox.ItemTemplate>
                         </AutoSuggestBox>
                         <ProgressBar
-                            x:Name="busy"
                             Grid.Column="2"
                             Margin="4,0"
                             VerticalAlignment="Bottom"
@@ -124,14 +117,13 @@
             </controls:EdgeFade>
 
             <Button
-                x:Name="queryActionsButton"
                 Grid.Column="1"
                 AutomationProperties.Name="Clipboard actions"
                 Style="{StaticResource RowActionButtonStyle}"
                 ToolTipService.ToolTip="Copy to clipboard, paste from clipboard, or clear">
                 <FontIcon FontSize="14" Glyph="&#xE77F;" />
                 <Button.Flyout>
-                    <MenuFlyout Opening="QueryActionsMenu_Opening" Placement="BottomEdgeAlignedRight">
+                    <MenuFlyout Opening="ClipboardMenu_Opening" Placement="BottomEdgeAlignedRight">
                         <MenuFlyoutItem
                             x:Name="copyQueryItem"
                             Click="CopyQuery_Click"
@@ -163,7 +155,6 @@
 
             <!-- Runs the search and opens the Search page with the results. -->
             <Button
-                x:Name="searchButton"
                 Grid.Column="2"
                 AutomationProperties.Name="Search"
                 Click="Search_Click"

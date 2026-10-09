@@ -3,6 +3,7 @@
 
 using MediaExport.Activity;
 using MediaExport.Core.Exporting;
+using MediaExport.Core.Media.Providers;
 using MediaExport.Core.Media.Ytdlp;
 using MediaExport.Core.Settings;
 using MediaExport.Core.Tooling;
@@ -28,7 +29,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<YtdlpService>();
         services.AddSingleton<IMediaDownloader>(provider => provider.GetRequiredService<YtdlpService>());
 
-        // Sources, in the order they're listed: services.AddSingleton<IMediaSearchProvider, YouTubeSearchProvider>();
+        // Search providers, in the order they are listed in the search field.
+        services.AddSingleton<IMediaSearchProvider, YouTubeSearchProvider>();
 
         services.AddSingleton<ExportViewModel>();
         services.AddSingleton<SearchViewModel>();
