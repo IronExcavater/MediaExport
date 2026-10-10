@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
+using System;
 using System.Numerics;
 using Windows.Foundation;
 using Windows.UI;
@@ -159,7 +160,7 @@ public sealed partial class EdgeFade : Grid
 
         var hasRoom = length > FadeLength * 2;
         var isVisible = _child.Visibility == Visibility.Visible;
-        _mask.IsApplied = (fadeStart || fadeEnd) && hasRoom && isVisible;
+        _mask.IsApplied = (fadeStart > 0 || fadeEnd > 0) && hasRoom && isVisible;
         if (!_mask.IsApplied)
             return;
 
@@ -170,9 +171,10 @@ public sealed partial class EdgeFade : Grid
         _gradient.Width = _child.ActualWidth;
         _gradient.Height = _child.ActualHeight;
 
-        // Opaque in the middle, transparent at each edge that fades.
+        // Opaque in the middle, and as transparent at each edge as that edge is faded.
         var opaque = Color.FromArgb(255, 0, 0, 0);
-        var transparent = Color.FromArgb(0, 0, 0, 0);
+        var startAlpha = (byte)Math.Round(255 * (1 - fadeStart));
+        var endAlpha = (byte)Math.Round(255 * (1 - fadeEnd));
         var fadeFraction = FadeLength / length;
         _gradient.Fill = new LinearGradientBrush
         {
@@ -180,26 +182,29 @@ public sealed partial class EdgeFade : Grid
             EndPoint = isVertical ? new Point(0, 1) : new Point(1, 0),
             GradientStops =
             {
-                new GradientStop { Offset = 0, Color = fadeStart ? transparent : opaque },
+                new GradientStop { Offset = 0, Color = Color.FromArgb(startAlpha, 0, 0, 0) },
                 new GradientStop { Offset = fadeFraction, Color = opaque },
                 new GradientStop { Offset = 1 - fadeFraction, Color = opaque },
-                new GradientStop { Offset = 1, Color = fadeEnd ? transparent : opaque }
+                new GradientStop { Offset = 1, Color = Color.FromArgb(endAlpha, 0, 0, 0) }
             }
         };
     }
 
-    private (bool Start, bool End) FindEdgesToFade(bool isVertical) => Mode switch
+    // How faded each edge is, from 0 (not at all) to 1 (fully).
+    private (double Start, double End) FindEdgesToFade(bool isVertical) => Mode switch
     {
-        EdgeFadeMode.Start => (true, false),
-        EdgeFadeMode.End => (false, true),
-        EdgeFadeMode.Both => (true, true),
+        EdgeFadeMode.Start => (1, 0),
+        EdgeFadeMode.End => (0, 1),
+        EdgeFadeMode.Both => (1, 1),
         _ => FindScrolledEdges(isVertical)
     };
 
-    private (bool Start, bool End) FindScrolledEdges(bool isVertical)
+    // An edge fades in over the first FadeLength of content scrolled out beyond it, so the fade comes and goes
+    // with the scrolling instead of switching on and off.
+    private (double Start, double End) FindScrolledEdges(bool isVertical)
     {
         if (_scroller is null)
-            return (false, false);
+            return (0, 0);
 
         var extent = isVertical ? _scroller.ExtentHeight : _scroller.ExtentWidth;
         var viewport = isVertical ? _scroller.ViewportHeight : _scroller.ViewportWidth;
@@ -207,7 +212,9 @@ public sealed partial class EdgeFade : Grid
 
         var hiddenBefore = offset;
         var hiddenAfter = extent - viewport - offset;
-        return (hiddenBefore > ScrollTolerance, hiddenAfter > ScrollTolerance);
+        var fadeStart = hiddenBefore > ScrollTolerance ? Math.Min(1, hiddenBefore / FadeLength) : 0;
+        var fadeEnd = hiddenAfter > ScrollTolerance ? Math.Min(1, hiddenAfter / FadeLength) : 0;
+        return (fadeStart, fadeEnd);
     }
 
     private static ScrollViewer? FindScroller(DependencyObject parent)
