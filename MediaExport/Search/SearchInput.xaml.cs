@@ -7,10 +7,14 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using System;
+using System.Collections.Specialized;
 using System.Runtime.InteropServices;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
+using VirtualKey = Windows.System.VirtualKey;
 
 namespace MediaExport.Search;
 
@@ -21,13 +25,19 @@ public sealed partial class SearchInput : UserControl
         nameof(ViewModel),
         typeof(SearchViewModel),
         typeof(SearchInput),
-        new PropertyMetadata(null));
+        new PropertyMetadata(null, OnViewModelChanged));
 
-    // How long the query must stay unchanged before a search starts. This debounces the search, so typing
-    // a word doesn't start one search per letter.
+    // The query must stay unchanged this long before a search starts, so typing a word is one search.
     private static readonly TimeSpan SearchDebounce = TimeSpan.FromMilliseconds(400);
 
+    private const double ResultsGap = 2;
+
+    private static readonly TimeSpan FadeDuration = TimeSpan.FromMilliseconds(200);
+
+    private readonly ScalarTransition _fade = new() { Duration = FadeDuration };
     private readonly DispatcherQueueTimer _debounceTimer;
+    private bool _isPasting;
+    private readonly PointerEventHandler _windowPressed;
 
     public SearchInput()
     {
@@ -40,6 +50,27 @@ public sealed partial class SearchInput : UserControl
 
         // A search that is still waiting shouldn't start after the control has gone.
         Unloaded += (_, _) => _debounceTimer.Stop();
+
+        // Presses anywhere in the window close the results, including ones a control has already handled.
+        _windowPressed = new PointerEventHandler(Window_PointerPressed);
+        Loaded += (_, _) => XamlRoot.Content.AddHandler(PointerPressedEvent, _windowPressed, handledEventsToo: true);
+        Unloaded += (_, _) => XamlRoot?.Content?.RemoveHandler(PointerPressedEvent, _windowPressed);
+
+        SizeChanged += (_, _) => UpdateResultsPopup();
+
+        Loaded += (_, _) =>
+        {
+            Clipboard.ContentChanged += Clipboard_ContentChanged;
+            UpdateClipboardButton();
+
+            // Fades added in the XAML would also run on the first values, so they are added after them.
+            var clearButton = FindClearButton();
+            clearButton.Opacity = 0;
+            clearButton.RegisterPropertyChangedCallback(VisibilityProperty, (_, _) => FadeWithVisibility(clearButton));
+            clearButton.OpacityTransition = _fade;
+            clipboardButton.OpacityTransition = _fade;
+        };
+        Unloaded += (_, _) => Clipboard.ContentChanged -= Clipboard_ContentChanged;
     }
 
     public SearchViewModel? ViewModel
@@ -51,23 +82,21 @@ public sealed partial class SearchInput : UserControl
     /// <summary>Raised when the Search button is pressed, to show the results as a page.</summary>
     public event EventHandler? Submitted;
 
-    /// <summary>Moves keyboard focus to the text box.</summary>
     public void FocusQueryBox() => queryBox.Focus(FocusState.Keyboard);
 
     // Used by {x:Bind} to hide the provider button when there is no provider.
     private Visibility VisibleWith(object? value) => value is null ? Visibility.Collapsed : Visibility.Visible;
 
-    // Reports MinWidth as the desired width, rather than the width it was last laid out at. The field is
-    // stretched to fill the title bar either way, but TitleBar stops stretching its content (its "Compact"
-    // state) once the content's desired width reaches the space available, which left the field stuck short.
+    // TitleBar stops stretching its content once the content's desired width reaches the space available.
+    // Asking only for MinWidth keeps the field stretched across the title bar.
     protected override Size MeasureOverride(Size availableSize)
     {
         var desired = base.MeasureOverride(availableSize);
         return new Size(MinWidth, desired.Height);
     }
 
-    // A horizontal ScrollViewer gives its content only the width it asks for, so fieldContent is made at least
-    // as wide as the field. The text box's star column then takes whatever room is spare.
+    // A horizontal ScrollViewer gives its content only the width it asks for, so fieldContent is kept at
+    // least as wide as the field and the query box fills the spare room.
     private void FieldScroll_SizeChanged(object sender, SizeChangedEventArgs args) => fieldContent.MinWidth = args.NewSize.Width;
 
     // MenuFlyout has no ItemsSource, so the providers are listed as it opens, the selected one in bold.
@@ -91,61 +120,196 @@ public sealed partial class SearchInput : UserControl
         }
     }
 
-    // AutoSuggestBox closes its list when it loses focus and doesn't reopen it by itself, so coming back
-    // to the box shows the results that are still there.
-    private void QueryBox_GotFocus(object sender, RoutedEventArgs args)
+    private static void OnViewModelChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
-        var hasResults = ViewModel?.Results.Count > 0;
-        if (hasResults)
-            queryBox.IsSuggestionListOpen = true;
+        var input = (SearchInput)sender;
+        if (args.OldValue is SearchViewModel oldViewModel)
+            oldViewModel.Results.CollectionChanged -= input.Results_CollectionChanged;
+        if (args.NewValue is SearchViewModel newViewModel)
+            newViewModel.Results.CollectionChanged += input.Results_CollectionChanged;
     }
 
-    // Restarts the debounce timer on every change to the query.
-    private void QueryBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
-    {
-        // Moving through the results with the arrow keys also reports a change, but isn't a new query.
-        if (args.Reason == AutoSuggestionBoxTextChangeReason.SuggestionChosen)
-            return;
+    private void Results_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args) => UpdateResultsPopup();
 
+    // The results are open while there are some and focus is in the query box or the results.
+    private void UpdateResultsPopup()
+    {
+        var hasResults = ViewModel?.Results.Count > 0;
+        var hasFocus = IsFocusWithin(queryBox) || IsFocusWithin(resultsList);
+
+        resultsPanel.Width = ActualWidth;
+        resultsPopup.VerticalOffset = ActualHeight + ResultsGap;
+        resultsPopup.IsOpen = hasResults && hasFocus;
+    }
+
+    private bool IsFocusWithin(DependencyObject ancestor)
+    {
+        var focused = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        return IsWithin(focused, ancestor);
+    }
+
+    private static bool IsWithin(DependencyObject? element, DependencyObject ancestor)
+    {
+        while (element is not null)
+        {
+            if (element == ancestor)
+                return true;
+
+            element = VisualTreeHelper.GetParent(element);
+        }
+        return false;
+    }
+
+    // Also handles the results list losing focus.
+    private void QueryBox_FocusChanged(object sender, RoutedEventArgs args)
+    {
+        var isQueryBoxFocused = queryBox.FocusState != FocusState.Unfocused;
+        VisualStateManager.GoToState(this, isQueryBoxFocused ? "Focused" : "Unfocused", useTransitions: false);
+        UpdateResultsPopup();
+        UpdateClipboardButton();
+    }
+
+    // Presses on the results never get here, because a popup isn't part of the window's content.
+    private void Window_PointerPressed(object sender, PointerRoutedEventArgs args)
+    {
+        var isOnThisControl = IsWithin(args.OriginalSource as DependencyObject, this);
+        if (!isOnThisControl)
+            resultsPopup.IsOpen = false;
+    }
+
+    // Pasted text may be a whole search with terms. The text box does the paste, and QueryBox_TextChanged
+    // then resolves the terms.
+    private void QueryBox_Paste(object sender, TextControlPasteEventArgs args) => _isPasting = true;
+
+    private void QueryBox_TextChanged(object sender, TextChangedEventArgs args)
+    {
+        if (_isPasting)
+        {
+            _isPasting = false;
+            ViewModel?.Replace(queryBox.Text);
+            queryBox.SelectionStart = queryBox.Text.Length;
+        }
+
+        // Restarting the timer is what debounces the search.
         _debounceTimer.Stop();
         _debounceTimer.Start();
     }
 
-    // Enter searches straight away instead of waiting for the debounce. Choosing a result from the list
-    // doesn't do anything yet, because there is nowhere to open it. That belongs in this handler.
-    private void QueryBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    // TextChanging is raised before the new text is drawn, so the clipboard button appears in the same frame
+    // as the clear button instead of pushing it aside a moment later.
+    private void QueryBox_TextChanging(TextBox sender, TextBoxTextChangingEventArgs args) => UpdateClipboardButton();
+
+    private void QueryBox_KeyDown(object sender, KeyRoutedEventArgs args)
     {
-        _debounceTimer.Stop();
-        if (args.ChosenSuggestion is null)
-            ViewModel?.SearchCommand.Execute(null);
+        switch (args.Key)
+        {
+            // Enter searches without waiting for the debounce.
+            case VirtualKey.Enter:
+                _debounceTimer.Stop();
+                ViewModel?.SearchCommand.Execute(null);
+                args.Handled = true;
+                break;
+
+            case VirtualKey.Down when resultsPopup.IsOpen:
+                var firstResult = resultsList.ContainerFromIndex(0) as Control;
+                firstResult?.Focus(FocusState.Keyboard);
+                args.Handled = true;
+                break;
+
+            case VirtualKey.Escape:
+                resultsPopup.IsOpen = false;
+                args.Handled = true;
+                break;
+        }
     }
 
-    private async void ClipboardMenu_Opening(object? sender, object args)
+    // Escape in the results returns to the query box.
+    private void ResultsList_PreviewKeyDown(object sender, KeyRoutedEventArgs args)
     {
-        var hasQuery = ViewModel?.FullText.Length > 0;
-        copyQueryItem.IsEnabled = hasQuery;
-        clearQueryItem.IsEnabled = hasQuery;
-        pasteQueryItem.IsEnabled = false;
+        if (args.Key != VirtualKey.Escape)
+            return;
+
+        resultsPopup.IsOpen = false;
+        FocusQueryBox();
+        args.Handled = true;
+    }
+
+    // Opening the chosen result belongs here once there is somewhere to open it.
+    private void ResultsList_ItemClick(object sender, ItemClickEventArgs args) => resultsPopup.IsOpen = false;
+
+    private void Clipboard_ContentChanged(object? sender, object args) => DispatcherQueue.TryEnqueue(UpdateClipboardButton);
+
+    // The clipboard button is hidden when there is neither a query to copy nor text to paste.
+    private void UpdateClipboardButton()
+    {
+        var canCopy = HasQuery(queryBox.Text);
+        var isUseful = canCopy || HasClipboardText();
+
+        // The two icons cross-fade when the action changes while the button is showing. A button that is
+        // only now appearing shows the right icon from the start.
+        var wasHidden = clipboardButton.Visibility == Visibility.Collapsed;
+        var iconFade = wasHidden ? null : _fade;
+        copyIcon.OpacityTransition = iconFade;
+        pasteIcon.OpacityTransition = iconFade;
+        copyIcon.Opacity = canCopy ? 1 : 0;
+        pasteIcon.Opacity = canCopy ? 0 : 1;
+
+        clipboardButton.Visibility = isUseful ? Visibility.Visible : Visibility.Collapsed;
+        FadeWithVisibility(clipboardButton);
+    }
+
+    // Fades a button in when it is shown. Its opacity is put back to 0 when it is collapsed, ready for the
+    // next time; collapsing hides it at once, so there is no fade out.
+    private static void FadeWithVisibility(Button button) => button.Opacity = button.Visibility == Visibility.Visible ? 1 : 0;
+
+    // The query box's own clear button, which TextBox's template names DeleteButton.
+    private Button FindClearButton()
+    {
+        var templateRoot = (FrameworkElement)VisualTreeHelper.GetChild(queryBox, 0);
+        return (Button)templateRoot.FindName("DeleteButton");
+    }
+
+    private static bool HasClipboardText()
+    {
         try
         {
-            var content = Clipboard.GetContent();
-            var hasText = content.Contains(StandardDataFormats.Text);
-            pasteQueryItem.IsEnabled = hasText && !string.IsNullOrWhiteSpace(await content.GetTextAsync());
+            return Clipboard.GetContent().Contains(StandardDataFormats.Text);
         }
         catch (Exception exception) when (IsClipboardUnavailable(exception))
         {
-            // Paste stays disabled until the menu is opened again.
+            // The clipboard may still hold text, so pasting stays on offer.
+            return true;
         }
     }
 
+    private static bool HasQuery(string? query) => !string.IsNullOrWhiteSpace(query);
+
+    // The clipboard button copies when there is a query and pastes when there is none.
+    private string ClipboardActionName(string? query) => HasQuery(query) ? "Copy to clipboard" : "Paste from clipboard";
+
+    private void ClipboardButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (HasQuery(queryBox.Text))
+            CopyQuery_Click(sender, args);
+        else
+            PasteQuery_Click(sender, args);
+    }
+
+    private void ClipboardMenu_Opening(object? sender, object args)
+    {
+        copyQueryItem.IsEnabled = HasQuery(queryBox.Text);
+        pasteQueryItem.IsEnabled = HasClipboardText();
+    }
+
+    // The provider is copied with the query, as a term, so pasting restores both.
     private void CopyQuery_Click(object sender, RoutedEventArgs args)
     {
-        var query = ViewModel?.FullText;
-        if (string.IsNullOrEmpty(query))
+        var viewModel = ViewModel;
+        if (viewModel is null)
             return;
 
         var package = new DataPackage();
-        package.SetText(query);
+        package.SetText(viewModel.FullText);
         Clipboard.SetContent(package);
     }
 
@@ -157,29 +321,19 @@ public sealed partial class SearchInput : UserControl
             if (ViewModel is null || !content.Contains(StandardDataFormats.Text))
                 return;
 
-            var query = await content.GetTextAsync();
-            if (string.IsNullOrWhiteSpace(query))
-                return;
-
-            ViewModel.Replace(query);
+            var text = await content.GetTextAsync();
+            ViewModel.Replace(text);
             FocusQueryBox();
         }
         catch (Exception exception) when (IsClipboardUnavailable(exception))
         {
-            // The clipboard changed or was locked between opening the menu and choosing Paste, so nothing is pasted.
+            // The clipboard changed or was locked before it could be read, so nothing is pasted.
         }
     }
 
-    // Windows reports a clipboard that another app has locked, or that this app isn't allowed to read while
-    // it is in the background, with one of these two exceptions.
+    // Thrown when another app has the clipboard locked, or this app is in the background.
     private static bool IsClipboardUnavailable(Exception exception) =>
         exception is COMException or UnauthorizedAccessException;
-
-    private void ClearQuery_Click(object sender, RoutedEventArgs args)
-    {
-        ViewModel?.Clear();
-        FocusQueryBox();
-    }
 
     private void Search_Click(object sender, RoutedEventArgs args) => Submitted?.Invoke(this, EventArgs.Empty);
 }

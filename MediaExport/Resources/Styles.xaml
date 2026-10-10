@@ -4,7 +4,6 @@
     <!-- Page content stops growing at this width and is centred instead. -->
     <x:Double x:Key="PageMaxWidth">1400</x:Double>
 
-    <!-- The padding around a page's content. -->
     <Thickness x:Key="PagePadding">24,12,24,24</Thickness>
     <CornerRadius x:Key="ControlCornerRadius">10</CornerRadius>
 
@@ -60,30 +59,40 @@
         <Setter Property="Width" Value="1" />
     </Style>
 
-    <Style x:Key="SearchTextBoxStyle" BasedOn="{StaticResource AutoSuggestBoxTextBoxStyle}" TargetType="TextBox">
+    <Style x:Key="SearchTextBoxStyle" BasedOn="{StaticResource DefaultTextBoxStyle}" TargetType="TextBox">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="CornerRadius" Value="0" />
+        <!-- The box has no background or border to round, so this only rounds its clear button. -->
+        <Setter Property="CornerRadius" Value="6" />
         <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="IsSpellCheckEnabled" Value="False" />
-        <Setter Property="MinHeight" Value="34" />
         <Setter Property="Padding" Value="10,7,4,7" />
         <Setter Property="TextAlignment" Value="Left" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
 
-    <Style x:Key="SegmentButtonStyle" BasedOn="{StaticResource SubtleButtonStyle}" TargetType="Button">
-        <Setter Property="CornerRadius" Value="0" />
-        <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <!--
+        A button inside a field such as the search field. It is set in from the field's edges and rounded,
+        and takes its height from the field, so every button in a field looks and sizes the same.
+    -->
+    <Style x:Key="FieldButtonStyle" BasedOn="{StaticResource SubtleButtonStyle}" TargetType="Button">
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Margin" Value="2" />
         <Setter Property="MinHeight" Value="0" />
         <Setter Property="MinWidth" Value="0" />
-        <Setter Property="Padding" Value="0" />
+        <Setter Property="Padding" Value="8,0" />
         <Setter Property="VerticalAlignment" Value="Stretch" />
     </Style>
 
-    <Style x:Key="RowActionButtonStyle" BasedOn="{StaticResource SegmentButtonStyle}" TargetType="Button">
-        <Setter Property="Width" Value="34" />
+    <!-- A field button that holds only an icon, so it is square. -->
+    <Style x:Key="FieldIconButtonStyle" BasedOn="{StaticResource FieldButtonStyle}" TargetType="Button">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Width" Value="30" />
+    </Style>
+
+    <Style x:Key="FieldIconStyle" TargetType="FontIcon">
+        <Setter Property="FontSize" Value="14" />
     </Style>
 
     <Style x:Key="SecondaryTextStyle" BasedOn="{StaticResource CaptionTextBlockStyle}" TargetType="TextBlock">
