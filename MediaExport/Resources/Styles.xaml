@@ -34,6 +34,7 @@
         <Setter Property="Margin" Value="4,2" />
         <Setter Property="MinHeight" Value="36" />
         <Setter Property="Padding" Value="8,6" />
+        <Setter Property="BackgroundSizing" Value="OuterBorderEdge" />
     </Style>
     <Style TargetType="TextBox">
         <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
@@ -111,5 +112,22 @@
     <Style x:Key="SecondaryTextStyle" BasedOn="{StaticResource CaptionTextBlockStyle}" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!-- Style for each settings item card. -->
+    <Style x:Key="SettingsItemStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
+        <Setter Property="Margin" Value="0,0,0,0"/>
+    </Style>
+
+    <Style x:Key="SettingsGroupTitleStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Margin" Value="0,20,0,5"/>
+    </Style>
+
+    <Style x:Key="SettingsItemDescriptionStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontWeight" Value="Normal"/>
+        <Setter Property="Margin" Value="0,4,0,0"/>
     </Style>
 </ResourceDictionary>
