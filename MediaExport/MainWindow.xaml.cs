@@ -24,14 +24,15 @@ public sealed partial class MainWindow : Window
     // Maps each navigation item's Tag to the page it opens.
     private static readonly Dictionary<string, Type> Pages = new()
     {
-        ["Export"] = typeof(ExportPage),
         ["Search"] = typeof(SearchPage),
+        ["Export"] = typeof(ExportPage),
         ["Activity"] = typeof(ActivityPage)
     };
 
     // The window must keep its size this long before the app name slides. Sliding while the window is
-    // still being resized makes both stutter, because each lays the title bar out again on every frame.
-    private static readonly TimeSpan ResizeDebounce = TimeSpan.FromMilliseconds(150);
+    // still being resized makes both stutter, and a resize that wavers around the compact width would
+    // slide the name in and out.
+    private static readonly TimeSpan ResizeDebounce = TimeSpan.FromMilliseconds(400);
 
     private readonly SettingsStore _settings = App.Current.Services.GetRequiredService<SettingsStore>();
     private readonly DispatcherQueueTimer _resizeDebounceTimer;
@@ -93,7 +94,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    // When the search input is submitted, open the Search page with the results.
     private void SearchInput_Submitted(object? sender, EventArgs args)
     {
         GoTo("Search");
@@ -132,7 +132,7 @@ public sealed partial class MainWindow : Window
         slide.Begin();
     }
 
-    private void NavView_Loaded(object sender, RoutedEventArgs args) => GoTo("Export");
+    private void NavView_Loaded(object sender, RoutedEventArgs args) => GoTo("Search");
 
     private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
