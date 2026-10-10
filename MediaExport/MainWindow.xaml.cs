@@ -16,6 +16,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using System;
 using System.Collections.Generic;
+using Windows.Graphics;
 
 namespace MediaExport;
 
@@ -53,6 +54,9 @@ public sealed partial class MainWindow : Window
         // The window icon has to be given as a file path; it can't come from Icons.xaml.
         AppWindow.SetIcon("Assets/App/Square44x44Logo.ico");
 
+        RestoreWindowSize();
+        Closed += (_, _) => SaveWindowSize();
+
         _resizeDebounceTimer = DispatcherQueue.CreateTimer();
         _resizeDebounceTimer.Interval = ResizeDebounce;
         _resizeDebounceTimer.IsRepeating = false;
@@ -82,6 +86,34 @@ public sealed partial class MainWindow : Window
         double reservedWidth = AppWindow.TitleBar.RightInset;
         var neededWidth = reservedWidth / scale;
         titleBar.Margin = new Thickness(0, 0, neededWidth - reservedWidth, 0);
+    }
+
+    // Windows doesn't remember the size of a WinUI window between runs, so the app does.
+    private void RestoreWindowSize()
+    {
+        var settings = _settings.Current;
+        if (settings.WindowWidth is not null && settings.WindowHeight is not null)
+            AppWindow.Resize(new SizeInt32(settings.WindowWidth.Value, settings.WindowHeight.Value));
+
+        if (settings.IsWindowMaximized && AppWindow.Presenter is OverlappedPresenter presenter)
+            presenter.Maximize();
+    }
+
+    private void SaveWindowSize()
+    {
+        var settings = _settings.Current;
+        var presenter = AppWindow.Presenter as OverlappedPresenter;
+        var state = presenter?.State;
+        settings.IsWindowMaximized = state == OverlappedPresenterState.Maximized;
+
+        // A maximised or minimised window keeps the size saved before, which is the size it returns to.
+        if (state == OverlappedPresenterState.Restored)
+        {
+            settings.WindowWidth = AppWindow.Size.Width;
+            settings.WindowHeight = AppWindow.Size.Height;
+        }
+
+        _settings.Save();
     }
 
     /// <summary>Navigates to a page by its key in <see cref="Pages"/>.</summary>
