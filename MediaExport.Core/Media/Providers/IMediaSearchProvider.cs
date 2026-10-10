@@ -17,6 +17,7 @@ public interface IMediaSearchProvider
     /// <summary>The resource key of its icon in the app's Resources/Icons.xaml, e.g. <c>YouTubeIcon</c>.</summary>
     string Icon { get; }
 
-    /// <param name="limit">The maximum number of results to return.</param>
+    /// <summary>Searches the source. A failure is thrown, not returned as an empty list.</summary>
+    /// <param name="limit">The most results wanted. The source may have fewer.</param>
     Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, int limit = 10, CancellationToken cancellationToken = default);
 }

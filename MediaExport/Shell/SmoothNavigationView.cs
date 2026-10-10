@@ -27,7 +27,8 @@ namespace MediaExport.Shell;
 /// </remarks>
 public sealed partial class SmoothNavigationView : NavigationView
 {
-    // The animation in progress.
+    // The pane's width animation: when it started, how long it lasts, and the widths it runs between.
+    // _startTime is null while the pane is still.
     private TimeSpan? _startTime;
     private TimeSpan _duration;
     private double _startLength;
