@@ -7,6 +7,34 @@
     NavigationCacheMode="Required">
 
     <Grid MaxWidth="{StaticResource PageMaxWidth}" Padding="{StaticResource PagePadding}">
-        <TextBlock Style="{StaticResource PageTitleStyle}" Text="Settings" />
+        
+        <StackPanel Spacing="5">
+            <TextBlock Style="{StaticResource PageTitleStyle}" Text="Settings" />
+            <TextBlock Text="Appearence" Style="{StaticResource SettingsGroupTitleStyle}"/>
+            <Border Style="{StaticResource SettingsItemStyle}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Icon -->
+                    <FontIcon Grid.Column="0" Glyph="&#xE790;" Margin="0,0,16,0"/>
+
+                    <!-- Title and Description -->
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="Themes" Style="{StaticResource SettingsItemDescriptionStyle}"/>
+                    </StackPanel>
+
+                    <!-- Control on the right (e.g., ComboBox or ToggleSwitch) -->
+                    <ComboBox Grid.Column="2" SelectedIndex="0" Width="100">
+                        <ComboBoxItem>System</ComboBoxItem>
+                        <ComboBoxItem>Dark</ComboBoxItem>
+                        <ComboBoxItem>Light</ComboBoxItem>
+                    </ComboBox>
+                </Grid>
+            </Border>
+        </StackPanel>
     </Grid>
 </Page>
