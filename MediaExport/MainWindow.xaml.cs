@@ -9,6 +9,7 @@ using MediaExport.Settings;
 using MediaExport.Shell;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -28,7 +29,13 @@ public sealed partial class MainWindow : Window
         ["Activity"] = typeof(ActivityPage)
     };
 
+    // The window must keep its size this long before the app name slides. Sliding while the window is
+    // still being resized makes both stutter, because each lays the title bar out again on every frame.
+    private static readonly TimeSpan ResizeDebounce = TimeSpan.FromMilliseconds(150);
+
     private readonly SettingsStore _settings = App.Current.Services.GetRequiredService<SettingsStore>();
+    private readonly DispatcherQueueTimer _resizeDebounceTimer;
+    private bool _isAppNameHidden;
 
     /// <summary>The search state shared by the title bar and Search page.</summary>
     public SearchViewModel Search { get; } = App.Current.Services.GetRequiredService<SearchViewModel>();
@@ -44,6 +51,11 @@ public sealed partial class MainWindow : Window
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
         // The window icon has to be given as a file path; it can't come from Icons.xaml.
         AppWindow.SetIcon("Assets/App/Square44x44Logo.ico");
+
+        _resizeDebounceTimer = DispatcherQueue.CreateTimer();
+        _resizeDebounceTimer.Interval = ResizeDebounce;
+        _resizeDebounceTimer.IsRepeating = false;
+        _resizeDebounceTimer.Tick += (_, _) => UpdateAppName();
     }
 
     // The window's minimum size and the caption buttons' width are both measured in screen pixels, so
@@ -59,8 +71,13 @@ public sealed partial class MainWindow : Window
 
         // TitleBar reserves room for the caption buttons using their width in screen pixels as if it
         // were view pixels, so above 100% display scale it reserves too much and leaves a gap beside
-        // them (microsoft-ui-xaml#10344). This workaround adds a negative right margin takes the
+        // them (microsoft-ui-xaml#10344). A negative right margin takes the
         // excess back.
+        // The app name slides between no width and its full width. A storyboard can't animate from
+        // MaxWidth's default, infinity, so the full width is set as a number.
+        appName.MaxWidth = appNameText.ActualWidth;
+        showAppNameWidth.To = appNameText.ActualWidth;
+
         double reservedWidth = AppWindow.TitleBar.RightInset;
         var neededWidth = reservedWidth / scale;
         titleBar.Margin = new Thickness(0, 0, neededWidth - reservedWidth, 0);
@@ -96,11 +113,23 @@ public sealed partial class MainWindow : Window
         _settings.Save();
     }
 
-    // Hides the app name on a compact window, leaving its space to the search field.
     private void TitleBar_SizeChanged(object sender, SizeChangedEventArgs args)
     {
-        var isCompact = args.NewSize.Width < WindowSizes.Compact;
-        appName.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
+        _resizeDebounceTimer.Stop();
+        _resizeDebounceTimer.Start();
+    }
+
+    // Slides the app name away behind the logo on a compact window, leaving its space to the search field,
+    // and slides it back out on a wider one.
+    private void UpdateAppName()
+    {
+        var isCompact = titleBar.ActualWidth < WindowSizes.Compact;
+        if (isCompact == _isAppNameHidden)
+            return;
+
+        _isAppNameHidden = isCompact;
+        var slide = isCompact ? hideAppName : showAppName;
+        slide.Begin();
     }
 
     private void NavView_Loaded(object sender, RoutedEventArgs args) => GoTo("Export");
