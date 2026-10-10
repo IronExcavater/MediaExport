@@ -31,21 +31,66 @@
 
             <!-- Used instead of TitleBar's Icon and Title, which are fixed at a smaller caption size. -->
             <TitleBar.LeftHeader>
+                <!-- MinWidth is the logo's width, which stops the search field sliding over the logo. -->
                 <StackPanel
+                    MinWidth="22"
                     Margin="4,0,0,0"
-                    Orientation="Horizontal"
-                    Spacing="10">
+                    Orientation="Horizontal">
+                    <!--
+                        Narrowing the app name's grid hides the name, and the search field follows because
+                        the width is part of the layout. The storyboards find the grid by name, which only
+                        works from resources this close to it.
+                    -->
+                    <StackPanel.Resources>
+                        <CubicEase x:Key="SlideEase" EasingMode="EaseInOut" />
+                        <Storyboard x:Name="hideAppName">
+                            <DoubleAnimation
+                                EasingFunction="{StaticResource SlideEase}"
+                                EnableDependentAnimation="True"
+                                Storyboard.TargetName="appName"
+                                Storyboard.TargetProperty="MaxWidth"
+                                To="0"
+                                Duration="0:0:0.4" />
+                        </Storyboard>
+                        <Storyboard x:Name="showAppName">
+                            <DoubleAnimation
+                                x:Name="showAppNameWidth"
+                                EasingFunction="{StaticResource SlideEase}"
+                                EnableDependentAnimation="True"
+                                Storyboard.TargetName="appName"
+                                Storyboard.TargetProperty="MaxWidth"
+                                Duration="0:0:0.4" />
+                        </Storyboard>
+                    </StackPanel.Resources>
+
+                    <!--
+                        The logo is drawn over the app name, and its negative margin starts the name's grid
+                        at the logo's middle, so that is where the name is cut off as it slides away.
+                    -->
                     <Image
-                        Width="22"
                         Height="22"
+                        Margin="0,0,-11,0"
                         VerticalAlignment="Center"
+                        Canvas.ZIndex="1"
                         Source="{StaticResource AppLogo}" />
-                    <TextBlock
-                        x:Name="appName"
-                        VerticalAlignment="Center"
-                        FontSize="16"
-                        FontWeight="SemiBold"
-                        Text="MediaExport" />
+
+                    <!--
+                        The StackPanel keeps the name at full width, so it overflows the narrowing grid and
+                        is cut off. An overflowing element is held at its parent's start, which is the right
+                        edge of a right-to-left grid, so the name slides left as the grid narrows.
+                    -->
+                    <Grid x:Name="appName" FlowDirection="RightToLeft">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock
+                                x:Name="appNameText"
+                                Padding="21,0,0,0"
+                                VerticalAlignment="Center"
+                                FlowDirection="LeftToRight"
+                                FontSize="16"
+                                FontWeight="SemiBold"
+                                Text="MediaExport" />
+                        </StackPanel>
+                    </Grid>
                 </StackPanel>
             </TitleBar.LeftHeader>
 
