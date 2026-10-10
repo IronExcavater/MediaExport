@@ -2,8 +2,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
 using MediaExport.Core.Media.Models;
+using MediaExport.Core.Media.Providers;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using System.Linq;
 
 namespace MediaExport.Media.Controls;
 
@@ -16,7 +19,7 @@ namespace MediaExport.Media.Controls;
 /// <item><see cref="CardMediaView"/>: a card, for grids.</item>
 /// </list>
 /// The variants share their words too: the <b>thumbnail</b> is the picture, the <b>title</b> is its name, and
-/// the <b>byline</b> is the line under it saying who made it, its views and its age.
+/// the <b>byline</b> is the line under it saying who made it, its views and its age, after its provider's icon.
 /// </summary>
 public abstract partial class MediaView : UserControl
 {
@@ -31,6 +34,17 @@ public abstract partial class MediaView : UserControl
     {
         get => (MediaSearchResult?)GetValue(MediaProperty);
         set => SetValue(MediaProperty, value);
+    }
+
+    /// <summary>
+    /// The icon of the provider with this id, as a resource key for an <c>IconView</c>. A variant shows where
+    /// its media came from with <c>{x:Bind ProviderIcon(Media.ProviderId), Mode=OneWay}</c>.
+    /// </summary>
+    protected string? ProviderIcon(string? providerId)
+    {
+        var providers = App.Current.Services.GetServices<IMediaSearchProvider>();
+        var provider = providers.FirstOrDefault(candidate => candidate.Id == providerId);
+        return provider?.Icon;
     }
 
     /// <summary>
