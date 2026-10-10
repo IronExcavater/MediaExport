@@ -21,13 +21,15 @@ public static class ServiceCollectionExtensions
     /// Registers what the app is made of. Everything is a singleton: one of each for the app's life, so a page
     /// that's left and come back to finds its view model as it was. Each asks for what it needs in its constructor.
     /// </summary>
-    /// <param name="dataFolder">Where settings and the tools the app installs are kept.</param>
+    /// <param name="dataFolder">Where settings, remembered searches and the tools the app installs are kept.</param>
     public static IServiceCollection AddMediaExport(this IServiceCollection services, string dataFolder)
     {
         services.AddSingleton(new SettingsStore(Path.Combine(dataFolder, "settings.json")));
         services.AddSingleton(new ToolchainService(Path.Combine(dataFolder, "Tools")));
         services.AddSingleton<YtdlpService>();
         services.AddSingleton<IMediaDownloader>(provider => provider.GetRequiredService<YtdlpService>());
+
+        services.AddSingleton(new SearchCache(Path.Combine(dataFolder, "search-cache.json")));
 
         // Search providers, in the order they are listed in the search field.
         services.AddSingleton<IMediaSearchProvider, YouTubeSearchProvider>();
