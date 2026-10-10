@@ -4,7 +4,8 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:shell="using:MediaExport.Shell"
-    xmlns:search="using:MediaExport.Search"
+    xmlns:shellControls="using:MediaExport.Shell.Controls"
+    xmlns:search="using:MediaExport.Search.Controls"
     Title="MediaExport">
 
     <Window.SystemBackdrop>
@@ -109,7 +110,7 @@
         </TitleBar>
 
         <!-- Each item's Tag is the key of its page in MainWindow.Pages. -->
-        <shell:SmoothNavigationView
+        <shellControls:SmoothNavigationView
             x:Name="navView"
             Grid.Row="1"
             AutoCollapseWidth="{x:Bind shell:WindowSizes.Compact}"
@@ -127,6 +128,6 @@
             </NavigationView.MenuItems>
 
             <Frame x:Name="navFrame" />
-        </shell:SmoothNavigationView>
+        </shellControls:SmoothNavigationView>
     </Grid>
 </Window>
