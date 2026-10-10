@@ -116,8 +116,8 @@
             Loaded="NavView_Loaded"
             SelectionChanged="NavView_SelectionChanged">
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="Export" Icon="Download" Tag="Export" />
                 <NavigationViewItem Content="Search" Icon="Find" Tag="Search" />
+                <NavigationViewItem Content="Export" Icon="Download" Tag="Export" />
                 <!-- The History glyph isn't in the Symbol enum, so it's given by its code in the icon font. -->
                 <NavigationViewItem Content="Activity" Tag="Activity">
                     <NavigationViewItem.Icon>
