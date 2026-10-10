@@ -110,7 +110,7 @@
                                 <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
                                 <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
 
-                                <!-- The box's clear button, made to match FieldIconButtonStyle. -->
+                                <!-- The box's delete button, made to match FieldIconButtonStyle. -->
                                 <Thickness x:Key="TextBoxInnerButtonMargin">4,2,0,2</Thickness>
                                 <x:Double x:Key="TextBoxIconFontSize">14</x:Double>
                                 <StaticResource x:Key="TextControlButtonForeground" ResourceKey="TextFillColorPrimaryBrush" />

@@ -3,10 +3,12 @@
 
 using MediaExport.Controls;
 using MediaExport.Core.Media.Providers;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
@@ -63,12 +65,8 @@ public sealed partial class SearchInput : UserControl
             Clipboard.ContentChanged += Clipboard_ContentChanged;
             UpdateClipboardButton();
 
-            // Fades added in the XAML would also run on the first values, so they are added after them.
-            var clearButton = FindClearButton();
-            clearButton.Opacity = 0;
-            clearButton.RegisterPropertyChangedCallback(VisibilityProperty, (_, _) => FadeWithVisibility(clearButton));
-            clearButton.OpacityTransition = _fade;
-            clipboardButton.OpacityTransition = _fade;
+            FadeOnShowHide(FindDeleteButton());
+            FadeOnShowHide(clipboardButton);
         };
         Unloaded += (_, _) => Clipboard.ContentChanged -= Clipboard_ContentChanged;
     }
@@ -84,7 +82,6 @@ public sealed partial class SearchInput : UserControl
 
     public void FocusQueryBox() => queryBox.Focus(FocusState.Keyboard);
 
-    // Used by {x:Bind} to hide the provider button when there is no provider.
     private Visibility VisibleWith(object? value) => value is null ? Visibility.Collapsed : Visibility.Visible;
 
     // TitleBar stops stretching its content once the content's desired width reaches the space available.
@@ -196,7 +193,7 @@ public sealed partial class SearchInput : UserControl
     }
 
     // TextChanging is raised before the new text is drawn, so the clipboard button appears in the same frame
-    // as the clear button instead of pushing it aside a moment later.
+    // as the delete button instead of pushing it aside a moment later.
     private void QueryBox_TextChanging(TextBox sender, TextBoxTextChangingEventArgs args) => UpdateClipboardButton();
 
     private void QueryBox_KeyDown(object sender, KeyRoutedEventArgs args)
@@ -255,15 +252,31 @@ public sealed partial class SearchInput : UserControl
         pasteIcon.Opacity = canCopy ? 0 : 1;
 
         clipboardButton.Visibility = isUseful ? Visibility.Visible : Visibility.Collapsed;
-        FadeWithVisibility(clipboardButton);
     }
 
-    // Fades a button in when it is shown. Its opacity is put back to 0 when it is collapsed, ready for the
-    // next time; collapsing hides it at once, so there is no fade out.
-    private static void FadeWithVisibility(Button button) => button.Opacity = button.Visibility == Visibility.Visible ? 1 : 0;
+    // Makes an element fade in when it is shown and fade out when it is collapsed. Collapsing hides an element
+    // at once, so an OpacityTransition can't fade it out; the composition layer's show and hide animations run
+    // on the picture of the element, which stays until the animation ends.
+    private static void FadeOnShowHide(UIElement element)
+    {
+        var compositor = ElementCompositionPreview.GetElementVisual(element).Compositor;
 
-    // The query box's own clear button, which TextBox's template names DeleteButton.
-    private Button FindClearButton()
+        ScalarKeyFrameAnimation CreateFade(float from, float to)
+        {
+            var fade = compositor.CreateScalarKeyFrameAnimation();
+            fade.Target = nameof(Visual.Opacity);
+            fade.Duration = FadeDuration;
+            fade.InsertKeyFrame(0f, from);
+            fade.InsertKeyFrame(1f, to);
+            return fade;
+        }
+
+        ElementCompositionPreview.SetImplicitShowAnimation(element, CreateFade(from: 0, to: 1));
+        ElementCompositionPreview.SetImplicitHideAnimation(element, CreateFade(from: 1, to: 0));
+    }
+
+    // DeleteButton is the name TextBox's template gives the button that clears the box.
+    private Button FindDeleteButton()
     {
         var templateRoot = (FrameworkElement)VisualTreeHelper.GetChild(queryBox, 0);
         return (Button)templateRoot.FindName("DeleteButton");
