@@ -11,7 +11,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Windows.System;
 
-namespace MediaExport.Shell;
+namespace MediaExport.Shell.Controls;
 
 /// <summary>A navigation view whose pane slides between two widths, resizing the page beside it as it goes.</summary>
 /// <remarks>

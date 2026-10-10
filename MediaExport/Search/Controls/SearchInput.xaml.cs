@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
 using MediaExport.Controls;
+using MediaExport.Converters;
 using MediaExport.Core.Media.Providers;
-using Microsoft.UI.Composition;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
@@ -18,7 +17,7 @@ using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using VirtualKey = Windows.System.VirtualKey;
 
-namespace MediaExport.Search;
+namespace MediaExport.Search.Controls;
 
 /// <summary>Edits a search and tells its host when the Search button is pressed.</summary>
 public sealed partial class SearchInput : UserControl
@@ -34,9 +33,7 @@ public sealed partial class SearchInput : UserControl
 
     private const double ResultsGap = 2;
 
-    private static readonly TimeSpan FadeDuration = TimeSpan.FromMilliseconds(200);
-
-    private readonly ScalarTransition _fade = new() { Duration = FadeDuration };
+    private readonly ScalarTransition _fade = new() { Duration = VisibilityTransition.Duration };
     private readonly DispatcherQueueTimer _debounceTimer;
     private bool _isPasting;
     private readonly PointerEventHandler _windowPressed;
@@ -65,8 +62,7 @@ public sealed partial class SearchInput : UserControl
             Clipboard.ContentChanged += Clipboard_ContentChanged;
             UpdateClipboardButton();
 
-            FadeOnShowHide(FindDeleteButton());
-            FadeOnShowHide(clipboardButton);
+            VisibilityTransition.SetFade(FindDeleteButton(), true);
         };
         Unloaded += (_, _) => Clipboard.ContentChanged -= Clipboard_ContentChanged;
     }
@@ -81,8 +77,6 @@ public sealed partial class SearchInput : UserControl
     public event EventHandler? Submitted;
 
     public void FocusQueryBox() => queryBox.Focus(FocusState.Keyboard);
-
-    private Visibility VisibleWith(object? value) => value is null ? Visibility.Collapsed : Visibility.Visible;
 
     // TitleBar stops stretching its content once the content's desired width reaches the space available.
     // Asking only for MinWidth keeps the field stretched across the title bar.
@@ -239,7 +233,7 @@ public sealed partial class SearchInput : UserControl
     // The clipboard button is hidden when there is neither a query to copy nor text to paste.
     private void UpdateClipboardButton()
     {
-        var canCopy = HasQuery(queryBox.Text);
+        var canCopy = Is.NotBlank(queryBox.Text);
         var isUseful = canCopy || HasClipboardText();
 
         // The two icons cross-fade when the action changes while the button is showing. A button that is
@@ -252,27 +246,6 @@ public sealed partial class SearchInput : UserControl
         pasteIcon.Opacity = canCopy ? 0 : 1;
 
         clipboardButton.Visibility = isUseful ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    // Makes an element fade in when it is shown and fade out when it is collapsed. Collapsing hides an element
-    // at once, so an OpacityTransition can't fade it out; the composition layer's show and hide animations run
-    // on the picture of the element, which stays until the animation ends.
-    private static void FadeOnShowHide(UIElement element)
-    {
-        var compositor = ElementCompositionPreview.GetElementVisual(element).Compositor;
-
-        ScalarKeyFrameAnimation CreateFade(float from, float to)
-        {
-            var fade = compositor.CreateScalarKeyFrameAnimation();
-            fade.Target = nameof(Visual.Opacity);
-            fade.Duration = FadeDuration;
-            fade.InsertKeyFrame(0f, from);
-            fade.InsertKeyFrame(1f, to);
-            return fade;
-        }
-
-        ElementCompositionPreview.SetImplicitShowAnimation(element, CreateFade(from: 0, to: 1));
-        ElementCompositionPreview.SetImplicitHideAnimation(element, CreateFade(from: 1, to: 0));
     }
 
     // DeleteButton is the name TextBox's template gives the button that clears the box.
@@ -295,14 +268,12 @@ public sealed partial class SearchInput : UserControl
         }
     }
 
-    private static bool HasQuery(string? query) => !string.IsNullOrWhiteSpace(query);
-
     // The clipboard button copies when there is a query and pastes when there is none.
-    private string ClipboardActionName(string? query) => HasQuery(query) ? "Copy to clipboard" : "Paste from clipboard";
+    private string ClipboardActionName(string? query) => Is.NotBlank(query) ? "Copy to clipboard" : "Paste from clipboard";
 
     private void ClipboardButton_Click(object sender, RoutedEventArgs args)
     {
-        if (HasQuery(queryBox.Text))
+        if (Is.NotBlank(queryBox.Text))
             CopyQuery_Click(sender, args);
         else
             PasteQuery_Click(sender, args);
@@ -310,7 +281,7 @@ public sealed partial class SearchInput : UserControl
 
     private void ClipboardMenu_Opening(object? sender, object args)
     {
-        copyQueryItem.IsEnabled = HasQuery(queryBox.Text);
+        copyQueryItem.IsEnabled = Is.NotBlank(queryBox.Text);
         pasteQueryItem.IsEnabled = HasClipboardText();
     }
 
