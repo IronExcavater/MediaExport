@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:MediaExport.Media.Controls">
 
-    <!-- The picture, with the duration over its bottom-right corner when it is known. -->
+    <!-- The grid's background shows until the picture has loaded. The duration badge is hidden for media with no known duration. -->
     <Grid Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="4">
         <Image x:Name="image" Stretch="UniformToFill" />
         <Border

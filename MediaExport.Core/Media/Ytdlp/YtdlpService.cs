@@ -18,7 +18,7 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
 
     /// <summary>Reads a search without downloading anything.</summary>
     /// <param name="target">What yt-dlp should read: a search such as <c>ytsearch10:cats</c>, or a page's URL.</param>
-    /// <param name="limit">The maximum number of results to read.</param>
+    /// <param name="limit">Where yt-dlp stops reading entries, so a long search page isn't read to its end.</param>
     /// <exception cref="InvalidOperationException">yt-dlp isn't installed, or reported an error.</exception>
     public async Task<IReadOnlyList<YtdlpSearchResult>> SearchAsync(string target, int limit, CancellationToken cancellationToken = default)
     {

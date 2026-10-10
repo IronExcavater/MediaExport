@@ -27,7 +27,7 @@ public sealed class OpacityMask(FrameworkElement host, FrameworkElement mask)
     // The number of the newest fade, so an older one that finishes late doesn't remove the copy.
     private int _fadeCount;
 
-    /// <summary>The element to mask.</summary>
+    /// <summary>The element shown through the mask. Changing it takes the mask off the previous element.</summary>
     public UIElement? Target
     {
         get;

@@ -52,8 +52,6 @@ public sealed partial class MediaThumbnail : MediaView
         return size;
     }
 
-    // The functions below are used by {x:Bind} in the XAML.
-
     private string DurationText(TimeSpan? duration) => duration is null ? string.Empty : Format.Time(duration.Value);
 
     private Visibility VisibleWith(TimeSpan? duration) => duration is null ? Visibility.Collapsed : Visibility.Visible;
