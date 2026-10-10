@@ -42,7 +42,7 @@
         <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
     </Style>
 
-    <!-- A bordered surface that groups related content. -->
+    <!-- A panel in WinUI's card colours, for setting a group of related content apart from the page. -->
     <Style x:Key="CardStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
@@ -62,7 +62,7 @@
     <Style x:Key="SearchTextBoxStyle" BasedOn="{StaticResource DefaultTextBoxStyle}" TargetType="TextBox">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
-        <!-- The box has no background or border to round, so this only rounds its clear button. -->
+        <!-- The box has no background or border to round, so this only rounds its delete button. -->
         <Setter Property="CornerRadius" Value="6" />
         <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -83,6 +83,19 @@
         <Setter Property="MinWidth" Value="0" />
         <Setter Property="Padding" Value="8,0" />
         <Setter Property="VerticalAlignment" Value="Stretch" />
+    </Style>
+
+    <!--
+        A button around a card in a grid. It is see-through until the pointer is over it, like an item in a
+        ListView, and its padding is the room that highlight takes around the card.
+    -->
+    <Style x:Key="CardButtonStyle" BasedOn="{StaticResource SubtleButtonStyle}" TargetType="Button">
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Top" />
     </Style>
 
     <!-- A field button that holds only an icon, so it is square. -->
