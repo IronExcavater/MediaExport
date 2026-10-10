@@ -19,11 +19,14 @@ public sealed partial class SearchViewModel : ObservableObject
 {
     private const int Limit = 20;
 
+    private readonly SearchCache _cache;
+
     // Cancels the search in progress when a newer one starts.
     private CancellationTokenSource? _running;
 
-    public SearchViewModel(IEnumerable<IMediaSearchProvider> providers)
+    public SearchViewModel(IEnumerable<IMediaSearchProvider> providers, SearchCache cache)
     {
+        _cache = cache;
         Providers = providers.ToList();
         SelectedProvider = Providers.FirstOrDefault();
     }
@@ -122,6 +125,13 @@ public sealed partial class SearchViewModel : ObservableObject
             return;
         }
 
+        var remembered = _cache.Find(provider.Id, query);
+        if (remembered is not null)
+        {
+            Show(remembered, provider);
+            return;
+        }
+
         // Each search owns its token source and disposes it when the search ends, however it ends.
         using var running = new CancellationTokenSource();
         _running = running;
@@ -133,9 +143,10 @@ public sealed partial class SearchViewModel : ObservableObject
             if (running.IsCancellationRequested)
                 return;
 
-            foreach (var result in found)
-                Results.Add(result);
-            Message = found.Count == 0 ? $"No results found in {provider.DisplayName}" : null;
+            Show(found, provider);
+            // An empty answer may only be a passing fault at the source, so it isn't remembered.
+            if (found.Count > 0)
+                _cache.Store(provider.Id, query, found);
         }
         catch (OperationCanceledException)
         {
@@ -154,5 +165,12 @@ public sealed partial class SearchViewModel : ObservableObject
                 IsSearching = false;
             }
         }
+    }
+
+    private void Show(IReadOnlyList<MediaSearchResult> found, IMediaSearchProvider provider)
+    {
+        foreach (var result in found)
+            Results.Add(result);
+        Message = found.Count == 0 ? $"No results found in {provider.DisplayName}" : null;
     }
 }
