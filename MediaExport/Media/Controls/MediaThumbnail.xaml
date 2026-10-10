@@ -3,6 +3,7 @@
     x:Class="MediaExport.Media.Controls.MediaThumbnail"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="using:MediaExport.Converters"
     xmlns:local="using:MediaExport.Media.Controls">
 
     <!-- The grid's background shows until the picture has loaded. The duration badge is hidden for media with no known duration. -->
@@ -16,7 +17,7 @@
             Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
             CornerRadius="2"
             Opacity="0.9"
-            Visibility="{x:Bind VisibleWith(Media.Duration), Mode=OneWay}">
+            Visibility="{x:Bind converters:VisibleWhen.NotNull(Media.Duration), Mode=OneWay}">
             <TextBlock
                 FontSize="11"
                 Text="{x:Bind DurationText(Media.Duration), Mode=OneWay}"
