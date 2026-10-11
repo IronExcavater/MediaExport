@@ -1,8 +1,8 @@
 // Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
+using MediaExport.Converters;
 using MediaExport.Core.Media.Models;
-using Microsoft.UI.Xaml;
 
 namespace MediaExport.Media.Controls;
 
@@ -22,11 +22,9 @@ public sealed partial class MediaByline : MediaView
         var hasViews = newMedia?.Views is not null;
         var hasAge = newMedia?.Published is not null;
 
-        viewsText.Visibility = ToVisibility(hasViews);
-        viewsSeparator.Visibility = ToVisibility(hasViews && hasCreator);
-        ageText.Visibility = ToVisibility(hasAge);
-        ageSeparator.Visibility = ToVisibility(hasAge && (hasCreator || hasViews));
+        viewsText.Visibility = VisibleWhen.True(hasViews);
+        viewsSeparator.Visibility = VisibleWhen.True(hasViews && hasCreator);
+        ageText.Visibility = VisibleWhen.True(hasAge);
+        ageSeparator.Visibility = VisibleWhen.True(hasAge && (hasCreator || hasViews));
     }
-
-    private static Visibility ToVisibility(bool isVisible) => isVisible ? Visibility.Visible : Visibility.Collapsed;
 }

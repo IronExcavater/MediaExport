@@ -6,9 +6,39 @@
     xmlns:local="using:MediaExport.Media.Controls">
 
     <StackPanel Spacing="8">
+        <!-- With no media the view is a skeleton of itself: bars where the title and byline will be. -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup>
+                <VisualState x:Name="Loaded" />
+                <VisualState x:Name="Skeleton">
+                    <VisualState.Setters>
+                        <Setter Target="words.Visibility" Value="Collapsed" />
+                        <Setter Target="skeleton.Visibility" Value="Visible" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
         <local:MediaThumbnail Media="{x:Bind Media, Mode=OneWay}" />
 
-        <StackPanel Spacing="2">
+        <!-- The bars are as tall, with their margins, as the lines of text they stand in for. -->
+        <StackPanel
+            x:Name="skeleton"
+            Spacing="2"
+            Visibility="Collapsed">
+            <Border
+                Height="14"
+                Margin="0,3,48,3"
+                HorizontalAlignment="Stretch"
+                Style="{StaticResource SkeletonBarStyle}" />
+            <Border
+                Width="140"
+                Height="10"
+                Margin="0,3"
+                Style="{StaticResource SkeletonBarStyle}" />
+        </StackPanel>
+
+        <StackPanel x:Name="words" Spacing="2">
             <TextBlock
                 MaxLines="2"
                 Text="{x:Bind Media.Title, Mode=OneWay}"

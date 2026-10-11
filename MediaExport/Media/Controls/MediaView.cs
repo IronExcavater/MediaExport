@@ -6,6 +6,8 @@ using MediaExport.Core.Media.Providers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Animation;
+using System;
 using System.Linq;
 
 namespace MediaExport.Media.Controls;
@@ -19,6 +21,7 @@ namespace MediaExport.Media.Controls;
 /// <item><see cref="RowMediaView"/>: a row, for lists.</item>
 /// <item><see cref="CardMediaView"/>: a card, for grids.</item>
 /// </list>
+/// A variant given no media shows a skeleton of itself, which is how a result that is still loading looks.
 /// The variants share their words too: the <b>thumbnail</b> is the picture, the <b>title</b> is its name, and
 /// the <b>byline</b> is the line under it saying who made it, its views and its age, after its provider's icon.
 /// </summary>
@@ -29,6 +32,29 @@ public abstract partial class MediaView : UserControl
         typeof(MediaSearchResult),
         typeof(MediaView),
         new PropertyMetadata(null, OnMediaPropertyChanged));
+
+    // Fades a skeleton in and out slowly, the sign that something is loading.
+    private readonly Storyboard _skeletonPulse = new();
+
+    protected MediaView()
+    {
+        var fade = new DoubleAnimation
+        {
+            From = 1,
+            To = 0.45,
+            Duration = TimeSpan.FromSeconds(0.9),
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+        };
+        Storyboard.SetTarget(fade, this);
+        Storyboard.SetTargetProperty(fade, nameof(Opacity));
+        _skeletonPulse.Children.Add(fade);
+
+        // A view that is never given media gets no change to react to, so its first look is set once it loads.
+        Loaded += (_, _) => UpdateSkeleton();
+        Unloaded += (_, _) => _skeletonPulse.Stop();
+    }
 
     /// <summary>The media to show. A variant reads its parts with <c>{x:Bind Media.Title, Mode=OneWay}</c>.</summary>
     public MediaSearchResult? Media
@@ -57,9 +83,23 @@ public abstract partial class MediaView : UserControl
     {
     }
 
+    // A view with no media shows a skeleton of itself, for a result that is still loading. A variant draws its
+    // skeleton in a visual state named Skeleton; one that has no such state, such as the thumbnail, is plain.
+    private void UpdateSkeleton()
+    {
+        var isLoading = Media is null;
+        var state = isLoading ? "Skeleton" : "Loaded";
+        var hasSkeleton = VisualStateManager.GoToState(this, state, useTransitions: false);
+        if (isLoading && hasSkeleton && IsLoaded)
+            _skeletonPulse.Begin();
+        else
+            _skeletonPulse.Stop();
+    }
+
     private static void OnMediaPropertyChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
         var view = (MediaView)sender;
+        view.UpdateSkeleton();
         view.OnMediaChanged((MediaSearchResult?)args.OldValue, (MediaSearchResult?)args.NewValue);
     }
 }
