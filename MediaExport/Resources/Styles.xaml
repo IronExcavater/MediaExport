@@ -99,6 +99,14 @@
         <Setter Property="VerticalContentAlignment" Value="Top" />
     </Style>
 
+    <!-- A square button for stepping through pages, as tall as the text box between a pair of them. -->
+    <Style x:Key="PageButtonStyle" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Width" Value="32" />
+    </Style>
+
     <!-- A field button that holds only an icon, so it is square. -->
     <Style x:Key="FieldIconButtonStyle" BasedOn="{StaticResource FieldButtonStyle}" TargetType="Button">
         <Setter Property="Padding" Value="0" />
