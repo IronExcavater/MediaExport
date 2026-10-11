@@ -6,6 +6,7 @@
     xmlns:controls="using:MediaExport.Controls"
     xmlns:converters="using:MediaExport.Converters"
     xmlns:local="using:MediaExport.Search.Controls"
+    xmlns:search="using:MediaExport.Search"
     xmlns:media="using:MediaExport.Media.Controls"
     xmlns:models="using:MediaExport.Core.Media.Models"
     xmlns:providers="using:MediaExport.Core.Media.Providers"
@@ -179,6 +180,8 @@
             -->
             <Popup
                 x:Name="resultsPopup"
+                Closed="ResultsPopup_OpenChanged"
+                Opened="ResultsPopup_OpenChanged"
                 Grid.ColumnSpan="4"
                 HorizontalOffset="-1">
                 <!--
@@ -202,7 +205,69 @@
                                 <EdgeUIThemeTransition Edge="Top" />
                             </TransitionCollection>
                         </Border.Transitions>
-                        <controls:EdgeFade>
+                        <Grid>
+                        <!--
+                            The searches carried out before, offered while the field is empty. Choosing one
+                            does it again; its button takes it off the list.
+                        -->
+                        <ListView
+                            x:Name="recentsList"
+                            Padding="0,4,8,4"
+                            IsItemClickEnabled="True"
+                            ItemClick="RecentsList_ItemClick"
+                            ItemsSource="{x:Bind ViewModel.RecentSearches, Mode=OneWay}"
+                            LostFocus="QueryBox_FocusChanged"
+                            PreviewKeyDown="ResultsList_PreviewKeyDown"
+                            SelectionMode="None"
+                            Visibility="Collapsed">
+                            <ListView.Header>
+                                <TextBlock
+                                    Margin="16,6,16,4"
+                                    Style="{StaticResource SecondaryTextStyle}"
+                                    Text="Recent searches" />
+                            </ListView.Header>
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="search:RecentSearch">
+                                    <Grid ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <controls:IconView
+                                            Width="16"
+                                            Height="16"
+                                            Icon="{x:Bind ProviderIcon}" />
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            Text="{x:Bind Words}"
+                                            TextTrimming="CharacterEllipsis" />
+                                        <Button
+                                            Grid.Column="2"
+                                            AutomationProperties.Name="Remove from recent searches"
+                                            Click="RemoveRecent_Click"
+                                            Style="{StaticResource FieldIconButtonStyle}"
+                                            Tag="{x:Bind}"
+                                            ToolTipService.ToolTip="Remove from recent searches">
+                                            <FontIcon FontSize="10" Glyph="&#xE711;" />
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+
+                        <!-- Rows with no media, standing in for the results while the first page is searched for. -->
+                        <StackPanel
+                            x:Name="resultsSkeleton"
+                            Padding="16,2"
+                            Visibility="Collapsed">
+                            <media:RowMediaView />
+                            <media:RowMediaView />
+                            <media:RowMediaView />
+                            <media:RowMediaView />
+                        </StackPanel>
+                        <controls:EdgeFade x:Name="resultsFade">
                             <!-- The padding keeps the rows, and their highlight, clear of the scroll bar. -->
                             <ListView
                                 x:Name="resultsList"
@@ -220,6 +285,7 @@
                                 </ListView.ItemTemplate>
                             </ListView>
                         </controls:EdgeFade>
+                        </Grid>
                     </Border>
                 </Grid>
             </Popup>
@@ -247,6 +313,17 @@
                         <MenuFlyoutItem Click="AddTerm_Click" Tag="author" Text="Author">
                             <MenuFlyoutItem.Icon>
                                 <FontIcon Glyph="&#xE77B;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutItem Click="AddTerm_Click" Tag="duration" Text="Duration">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE916;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Click="AddTerm_Click" Tag="published" Text="Published">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE787;" />
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                     </MenuFlyout>
@@ -297,13 +374,22 @@
                 </Button.ContextFlyout>
             </Button>
 
+            <!--
+                Opens the Search page with the results. While some are listed under the field it does the same
+                thing, but that now means going from a few results to all of them, so ResultsPopup_OpenChanged
+                changes its icon and name to say so.
+            -->
             <Button
+                x:Name="searchButton"
                 Grid.Column="3"
                 AutomationProperties.Name="Search"
                 Click="Search_Click"
                 Style="{StaticResource FieldIconButtonStyle}"
                 ToolTipService.ToolTip="Search">
-                <FontIcon Glyph="&#xE721;" Style="{StaticResource FieldIconStyle}" />
+                <FontIcon
+                    x:Name="searchIcon"
+                    Glyph="&#xE721;"
+                    Style="{StaticResource FieldIconStyle}" />
             </Button>
         </Grid>
     </Border>

@@ -14,10 +14,17 @@ using System.Threading.Tasks;
 
 namespace MediaExport.Search;
 
+/// <summary>A search that was carried out earlier, as it is listed for doing again.</summary>
+/// <param name="FullText">The whole search as text, as <see cref="SearchViewModel.FullText"/> writes it.</param>
+/// <param name="Words">The search without its source, which <paramref name="ProviderIcon"/> shows instead.</param>
+/// <param name="ProviderIcon">The resource key of the source's icon, or <c>null</c> if the source is gone.</param>
+public sealed record RecentSearch(string FullText, string Words, string? ProviderIcon);
+
 /// <summary>Coordinates the shared search query, selected source, and current results.</summary>
 public sealed partial class SearchViewModel : ObservableObject
 {
     private const int PageSize = 20;
+    private const int RecentSearchCapacity = 10;
 
     private readonly SearchCache _cache;
 
@@ -53,6 +60,12 @@ public sealed partial class SearchViewModel : ObservableObject
     /// They are written into the search field as text and shown there as buttons.
     /// </summary>
     public ObservableCollection<SearchTerm> Terms { get; } = [];
+
+    /// <summary>
+    /// The searches that were carried out, newest first. Typing searches as it goes, but a search only counts
+    /// as carried out once it is committed to, with <see cref="CommitSearchAsync"/>.
+    /// </summary>
+    public ObservableCollection<RecentSearch> RecentSearches { get; } = [];
 
     /// <summary>The query the results are for. It lags behind <see cref="Query"/> while that is being typed.</summary>
     [ObservableProperty]
@@ -141,15 +154,31 @@ public sealed partial class SearchViewModel : ObservableObject
     {
         SearchQuery.SourceLabel => FindProvider(term.Value) is not null,
         SearchQuery.ExactLabel or SearchQuery.ExcludeLabel or SearchQuery.AuthorLabel => true,
-        _ => false
+        SearchQuery.DurationLabel or SearchQuery.PublishedLabel => SearchQuery.IsValid(term),
+        // One end of a range written by itself is known if the range it makes is.
+        _ => SearchQuery.RangeLabelOf(term.Label) is not null && SearchQuery.IsValid(SearchQuery.WithEnd(null, term))
     };
 
     private void Apply(SearchTerm term)
     {
         if (term.Label == SearchQuery.SourceLabel)
             SelectedProvider = FindProvider(term.Value);
+        else if (SearchQuery.RangeLabelOf(term.Label) is not null)
+            ApplyRangeEnd(term);
         else if (!Terms.Contains(term))
             AddTerm(term);
+    }
+
+    // One end of a range written by itself, such as longer:3m, becomes part of the search's range term.
+    private void ApplyRangeEnd(SearchTerm end)
+    {
+        var rangeLabel = SearchQuery.RangeLabelOf(end.Label);
+        var range = Terms.FirstOrDefault(term => term.Label == rangeLabel);
+        var changed = SearchQuery.WithEnd(range, end);
+        if (range is null)
+            AddTerm(changed);
+        else
+            ReplaceTerm(range, changed);
     }
 
     /// <summary>
@@ -164,6 +193,16 @@ public sealed partial class SearchViewModel : ObservableObject
             Terms.Remove(oldest);
 
         Terms.Add(term);
+    }
+
+    /// <summary>Puts an edited term in the place of the one it was edited from.</summary>
+    public void ReplaceTerm(SearchTerm term, SearchTerm edited)
+    {
+        var index = Terms.IndexOf(term);
+        if (index < 0)
+            return;
+
+        Terms[index] = edited;
     }
 
     private IMediaSearchProvider? FindProvider(string id) =>
@@ -224,6 +263,49 @@ public sealed partial class SearchViewModel : ObservableObject
         return SearchAsync();
     }
 
+    /// <summary>Fills <see cref="RecentSearches"/> with searches written as text, such as ones saved earlier.</summary>
+    public void LoadRecentSearches(IEnumerable<string> searches)
+    {
+        RecentSearches.Clear();
+        foreach (var text in searches)
+            RecentSearches.Add(ToRecentSearch(text));
+    }
+
+    /// <summary>
+    /// Searches, and remembers the search as one that was carried out. This is for a search the user has
+    /// asked for outright, with Enter or the Search button, not one made while they are still typing.
+    /// </summary>
+    [RelayCommand]
+    public Task CommitSearchAsync()
+    {
+        var hasSearch = Query.Trim().Length > 0 || Terms.Count > 0;
+        if (hasSearch)
+            Remember(FullText);
+
+        return SearchAsync();
+    }
+
+    // A search done again moves to the front instead of being listed twice.
+    private void Remember(string fullText)
+    {
+        var earlier = RecentSearches.FirstOrDefault(recent => string.Equals(recent.FullText, fullText, StringComparison.OrdinalIgnoreCase));
+        if (earlier is not null)
+            RecentSearches.Remove(earlier);
+
+        RecentSearches.Insert(0, ToRecentSearch(fullText));
+        while (RecentSearches.Count > RecentSearchCapacity)
+            RecentSearches.RemoveAt(RecentSearches.Count - 1);
+    }
+
+    private RecentSearch ToRecentSearch(string fullText)
+    {
+        // Only the source is taken out, so the other terms stay in the words as they were written.
+        var search = SearchQuery.Parse(fullText, term => term.Label == SearchQuery.SourceLabel);
+        var source = search.Terms.LastOrDefault();
+        var provider = source is null ? null : FindProvider(source.Value);
+        return new RecentSearch(fullText, search.Text, provider?.Icon);
+    }
+
     /// <summary>Searches the selected provider and replaces <see cref="Results"/> with the newest response.</summary>
     [RelayCommand]
     public async Task SearchAsync()
@@ -232,8 +314,11 @@ public sealed partial class SearchViewModel : ObservableObject
         _running = null;
         IsSearching = false;
 
-        // The terms are part of what is searched for, so they are part of what a search is remembered by.
-        var query = new SearchQuery(Query.Trim(), Terms.ToList()).ToSearchText();
+        // The terms a provider applies are part of what is searched for, so they are part of what a search is
+        // remembered by. Ranges of duration and date are applied here, to what the provider found, so
+        // changing one shows the remembered results again through the new range.
+        var search = new SearchQuery(Query.Trim(), Terms.ToList());
+        var query = search.ToSearchText();
         var page = Page;
         Results.Clear();
         if (page == 1)
@@ -255,7 +340,7 @@ public sealed partial class SearchViewModel : ObservableObject
         var remembered = _cache.Find(provider.Id, query, page);
         if (remembered is not null)
         {
-            Show(remembered, provider, page);
+            Show(remembered, search, provider, page);
             return;
         }
 
@@ -279,7 +364,7 @@ public sealed partial class SearchViewModel : ObservableObject
             if (isPastTheEnd)
                 _lastPage = page - 1;
             else
-                Show(found, provider, page);
+                Show(found, search, provider, page);
 
             // An empty answer may only be a passing fault at the source, so it isn't remembered.
             if (found.Count > 0)
@@ -307,15 +392,24 @@ public sealed partial class SearchViewModel : ObservableObject
             await ShowPageAsync(page - 1);
     }
 
-    private void Show(IReadOnlyList<MediaSearchResult> found, IMediaSearchProvider provider, int page)
+    private void Show(IReadOnlyList<MediaSearchResult> found, SearchQuery search, IMediaSearchProvider provider, int page)
     {
-        foreach (var result in found)
+        var withinRanges = found.Where(search.Matches).ToList();
+        foreach (var result in withinRanges)
         {
             Results.Add(result);
             if (page == 1)
                 FirstPageResults.Add(result);
         }
-        Message = found.Count == 0 ? $"No results found in {provider.DisplayName}" : null;
+
+        if (found.Count == 0)
+            Message = $"No results found in {provider.DisplayName}";
+        else if (withinRanges.Count == 0)
+            Message = "Nothing on this page is within the search's ranges";
+        else
+            Message = null;
+
+        // Whether there is another page depends on what the provider found, not on how much of it is shown.
         var isLastPage = page == _lastPage;
         HasNextPage = found.Count == PageSize && !isLastPage;
         OnPropertyChanged(nameof(Summary));

@@ -5,12 +5,12 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Margin="0,2">
 
-    <!--
-        Widens the term from nothing when it is added and narrows it to nothing before it is removed, so it
-        slides in and out and what comes after it in the field moves along. The widths are set in code,
-        because they depend on how wide the term's value is.
-    -->
     <UserControl.Resources>
+        <!--
+            Widens the term from nothing when it is added and narrows it to nothing before it is removed, so
+            it slides in and out and what comes after it in the field moves along. The widths are set in
+            code, because they depend on how wide the term's value is.
+        -->
         <Storyboard x:Name="slide" Completed="Slide_Completed">
             <DoubleAnimation
                 x:Name="slideWidth"
@@ -22,13 +22,19 @@
                 </DoubleAnimation.EasingFunction>
             </DoubleAnimation>
         </Storyboard>
+
+        <!-- A ready-made range in a range's flyout. Its Tag says which range. -->
+        <Style x:Key="PresetButtonStyle" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
+            <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+            <Setter Property="Padding" Value="10,4" />
+        </Style>
     </UserControl.Resources>
 
     <Grid x:Name="content">
         <!--
-            While its value is being edited, the whole term looks like a focused text box, as the search field
-            does, and its remove button slides out from the end. The button's slot is widened and narrowed
-            rather than the button shown and hidden, so the terms after it move along with it.
+            While a term of words is being edited, the whole term looks like a focused text box, as the search
+            field does, and its remove button slides out from the end. The button's slot is widened and
+            narrowed rather than the button shown and hidden, so the terms after it move along with it.
         -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup>
@@ -49,7 +55,8 @@
                 <VisualState x:Name="Editing">
                     <VisualState.Setters>
                         <Setter Target="editingBorder.Visibility" Value="Visible" />
-                        <Setter Target="valueBox.IsHitTestVisible" Value="True" />
+                        <Setter Target="valueText.Visibility" Value="Collapsed" />
+                        <Setter Target="valueBox.Visibility" Value="Visible" />
                     </VisualState.Setters>
                     <Storyboard>
                         <DoubleAnimation
@@ -69,17 +76,115 @@
 
         <!--
             At rest the term is a button like the provider's. This button is that look, and the icon and
-            value lie over it without taking presses, so a press anywhere on the term reaches the button
-            and starts editing with the whole value selected, ready to type over. Once it is being edited,
-            the value takes presses itself, to place the cursor.
+            value lie over it without taking presses, so a press anywhere on the term reaches it. Pressing
+            it starts editing: a term of words turns into a text box where it stands, and a range opens the
+            flyout below.
         -->
         <Button
             x:Name="restingButton"
             Margin="0"
             HorizontalAlignment="Stretch"
             Click="RestingButton_Click"
-            IsTabStop="False"
-            Style="{StaticResource FieldButtonStyle}" />
+            Style="{StaticResource FieldButtonStyle}">
+            <FlyoutBase.AttachedFlyout>
+                <!--
+                    Where a range is edited. A range has two ends and its values have a format, which is more
+                    than fits in the field, so it gets room here: a named box or date picker for each end,
+                    and ready-made ranges to pick with one press. Closing the flyout keeps what was set.
+                -->
+                <Flyout
+                    x:Name="rangeFlyout"
+                    Closed="RangeFlyout_Closed"
+                    Placement="BottomEdgeAlignedLeft">
+                    <StackPanel PreviewKeyDown="RangeEditor_PreviewKeyDown" Spacing="12">
+                        <!-- A duration is typed, as 90s, 3m or 1h30m. Either end may be left empty. -->
+                        <StackPanel
+                            x:Name="durationEditor"
+                            Spacing="12"
+                            Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBox
+                                    x:Name="longerBox"
+                                    Width="120"
+                                    Header="Longer than"
+                                    PlaceholderText="3m" />
+                                <TextBox
+                                    x:Name="shorterBox"
+                                    Width="120"
+                                    Header="Shorter than"
+                                    PlaceholderText="10m" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button
+                                    Click="DurationPreset_Click"
+                                    Content="Under 4 min"
+                                    Style="{StaticResource PresetButtonStyle}"
+                                    Tag="..4m" />
+                                <Button
+                                    Click="DurationPreset_Click"
+                                    Content="4 to 20 min"
+                                    Style="{StaticResource PresetButtonStyle}"
+                                    Tag="4m..20m" />
+                                <Button
+                                    Click="DurationPreset_Click"
+                                    Content="Over 20 min"
+                                    Style="{StaticResource PresetButtonStyle}"
+                                    Tag="20m.." />
+                                <Button
+                                    Click="DurationPreset_Click"
+                                    Content="Over an hour"
+                                    Style="{StaticResource PresetButtonStyle}"
+                                    Tag="1h.." />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- A date is picked. Each picker only offers days that leave the other end possible. -->
+                        <StackPanel
+                            x:Name="publishedEditor"
+                            Spacing="12"
+                            Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <CalendarDatePicker
+                                    x:Name="afterPicker"
+                                    Width="150"
+                                    DateChanged="PublishedPicker_DateChanged"
+                                    Header="On or after"
+                                    PlaceholderText="Any time" />
+                                <CalendarDatePicker
+                                    x:Name="beforePicker"
+                                    Width="150"
+                                    DateChanged="PublishedPicker_DateChanged"
+                                    Header="Before"
+                                    PlaceholderText="Any time" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button
+                                    Click="PublishedPreset_Click"
+                                    Content="Past week"
+                                    Style="{StaticResource PresetButtonStyle}"
+                                    Tag="7" />
+                                <Button
+                                    Click="PublishedPreset_Click"
+                                    Content="Past month"
+                                    Style="{StaticResource PresetButtonStyle}"
+                                    Tag="30" />
+                                <Button
+                                    Click="PublishedPreset_Click"
+                                    Content="Past year"
+                                    Style="{StaticResource PresetButtonStyle}"
+                                    Tag="365" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Button
+                            HorizontalAlignment="Right"
+                            Click="RemoveButton_Click"
+                            Content="Remove"
+                            Style="{StaticResource PresetButtonStyle}" />
+                    </StackPanel>
+                </Flyout>
+            </FlyoutBase.AttachedFlyout>
+        </Button>
 
         <Border
             x:Name="editingBorder"
@@ -95,14 +200,23 @@
             <FontIcon
                 x:Name="labelIcon"
                 Margin="0,0,5,0"
+                VerticalAlignment="Center"
                 FontSize="12"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 IsHitTestVisible="False" />
 
+            <!-- The value at rest, as text. A range reads as one piece: 3m – 10m, or > 3m with only one end. -->
+            <TextBlock
+                x:Name="valueText"
+                Margin="0,0,6,0"
+                VerticalAlignment="Center"
+                IsHitTestVisible="False" />
+
             <!--
-                AcceptsReturn is on only because such a TextBox has no delete button of its own; the term's
-                remove button stands in its place. Enter is taken by ValueBox_PreviewKeyDown before it can
-                add a line.
+                The value of a term of words while it is being edited. The term draws the text box look, so
+                this box draws nothing of its own. AcceptsReturn is on only because such a TextBox has no
+                delete button of its own; the term's remove button stands in its place. Enter is taken by
+                ValueBox_PreviewKeyDown before it can add a line.
             -->
             <TextBox
                 x:Name="valueBox"
@@ -113,12 +227,10 @@
                 Padding="0"
                 VerticalAlignment="Center"
                 AcceptsReturn="True"
-                GotFocus="ValueBox_GotFocus"
-                IsHitTestVisible="False"
                 LostFocus="ValueBox_LostFocus"
                 PreviewKeyDown="ValueBox_PreviewKeyDown"
-                Style="{StaticResource SearchTextBoxStyle}">
-                <!-- The term draws the text box look, so the box inside it draws nothing of its own. -->
+                Style="{StaticResource SearchTextBoxStyle}"
+                Visibility="Collapsed">
                 <TextBox.Resources>
                     <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
                     <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
@@ -129,9 +241,9 @@
             </TextBox>
 
             <!--
-                Removes the term. The slot is only as wide as the button while the term is being edited; at
-                rest it has no width and the button is cut off. The button doesn't take focus when pressed,
-                because that would end the editing and close the slot before the press had finished.
+                Removes a term of words. The slot is only as wide as the button while the term is being
+                edited; at rest it has no width and the button is cut off. The button doesn't take focus when
+                pressed, because that would end the editing and close the slot before the press had finished.
             -->
             <Grid x:Name="removeSlot" Width="0">
                 <Button
