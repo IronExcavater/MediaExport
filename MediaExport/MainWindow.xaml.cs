@@ -174,6 +174,9 @@ public sealed partial class MainWindow : Window
         else if (args.SelectedItemContainer?.Tag is string tag)
             pageType = Pages.GetValueOrDefault(tag);
 
+        // The Search page shows the results itself, so the field's own list of them stays shut there.
+        searchInput.IsResultsListEnabled = pageType != typeof(SearchPage);
+
         var isAlreadyShown = navFrame.CurrentSourcePageType == pageType;
         if (pageType is not null && !isAlreadyShown)
             navFrame.Navigate(pageType);

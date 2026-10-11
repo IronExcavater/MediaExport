@@ -7,12 +7,16 @@ using MediaExport.Core.Media.Providers;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using VirtualKey = Windows.System.VirtualKey;
@@ -78,6 +82,17 @@ public sealed partial class SearchInput : UserControl
 
     public void FocusQueryBox() => queryBox.Focus(FocusState.Keyboard);
 
+    /// <summary>Whether the results may be listed under the field. A page that shows them itself turns this off.</summary>
+    public bool IsResultsListEnabled
+    {
+        get;
+        set
+        {
+            field = value;
+            UpdateResultsPopup();
+        }
+    } = true;
+
     // TitleBar stops stretching its content once the content's desired width reaches the space available.
     // Asking only for MinWidth keeps the field stretched across the title bar.
     protected override Size MeasureOverride(Size availableSize)
@@ -115,9 +130,15 @@ public sealed partial class SearchInput : UserControl
     {
         var input = (SearchInput)sender;
         if (args.OldValue is SearchViewModel oldViewModel)
+        {
             oldViewModel.FirstPageResults.CollectionChanged -= input.Results_CollectionChanged;
+            oldViewModel.Terms.CollectionChanged -= input.Terms_CollectionChanged;
+        }
         if (args.NewValue is SearchViewModel newViewModel)
+        {
             newViewModel.FirstPageResults.CollectionChanged += input.Results_CollectionChanged;
+            newViewModel.Terms.CollectionChanged += input.Terms_CollectionChanged;
+        }
     }
 
     private void Results_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
@@ -130,7 +151,7 @@ public sealed partial class SearchInput : UserControl
         UpdateResultsPopup();
     }
 
-    // The results are open while there are some and focus is in the query box or the results.
+    // The results are open while they are allowed here, there are some, and focus is in the query box or the results.
     private void UpdateResultsPopup()
     {
         var hasResults = ViewModel?.FirstPageResults.Count > 0;
@@ -138,7 +159,7 @@ public sealed partial class SearchInput : UserControl
 
         resultsPanel.Width = ActualWidth;
         resultsPopup.VerticalOffset = ActualHeight + ResultsGap;
-        resultsPopup.IsOpen = hasResults && hasFocus;
+        resultsPopup.IsOpen = IsResultsListEnabled && hasResults && hasFocus;
     }
 
     private bool IsFocusWithin(DependencyObject ancestor)
@@ -182,16 +203,155 @@ public sealed partial class SearchInput : UserControl
 
     private void QueryBox_TextChanged(object sender, TextChangedEventArgs args)
     {
+        var text = queryBox.Text;
         if (_isPasting)
         {
             _isPasting = false;
-            ViewModel?.Replace(queryBox.Text);
+            ViewModel?.Replace(text);
             queryBox.SelectionStart = queryBox.Text.Length;
         }
+        else if (text.EndsWith(' '))
+        {
+            // A space ends a word, which is when a term typed as label:value is complete.
+            var hadTerms = ViewModel?.ResolveTerms(text) == true;
+            if (hadTerms)
+                queryBox.SelectionStart = queryBox.Text.Length;
+        }
 
-        // Restarting the timer is what debounces the search.
+        RestartDebounce();
+    }
+
+    // Restarting the timer is what debounces the search.
+    private void RestartDebounce()
+    {
         _debounceTimer.Stop();
         _debounceTimer.Start();
+    }
+
+    // The terms that have been added but whose boxes the repeater hasn't made yet. They slide in when it does.
+    private readonly HashSet<SearchTerm> _termsToSlideIn = [];
+
+    private void Terms_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    {
+        // An edited term is replaced, not added, so it stays where it is without sliding.
+        if (args.Action == NotifyCollectionChangedAction.Add)
+        {
+            foreach (SearchTerm added in args.NewItems!)
+                _termsToSlideIn.Add(added);
+        }
+
+        RestartDebounce();
+        UpdateClipboardButton();
+    }
+
+    // The term that was just added from the menu, whose value is to be typed next.
+    private SearchTerm? _termToEdit;
+
+    private void AddTerm_Click(object sender, RoutedEventArgs args)
+    {
+        var viewModel = ViewModel;
+        if (viewModel is null)
+            return;
+
+        var item = (MenuFlyoutItem)sender;
+        var label = (string)item.Tag;
+
+        // A kind of term that a search has only one of is edited where it is, instead of being replaced.
+        var existing = viewModel.Terms.FirstOrDefault(term => term.Label == label);
+        var isOnlyOne = SearchQuery.MaxCount(label) == 1;
+        if (existing is not null && isOnlyOne)
+        {
+            FindTermBox(existing)?.StartEditing();
+            return;
+        }
+
+        _termToEdit = new SearchTerm(label, string.Empty);
+        viewModel.AddTerm(_termToEdit);
+    }
+
+    // A term's box doesn't exist until the repeater has made it, which is when a new term can take focus.
+    private void TermsRepeater_ElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
+    {
+        var term = ViewModel?.Terms[args.Index];
+        var termBox = (SearchTermBox)args.Element;
+        if (term is null)
+            return;
+
+        var isNew = _termsToSlideIn.Remove(term);
+        if (isNew)
+            termBox.SlideIn();
+
+        if (term == _termToEdit)
+        {
+            _termToEdit = null;
+            DispatcherQueue.TryEnqueue(termBox.StartEditing);
+        }
+    }
+
+    private void TermBox_Edited(object? sender, SearchTerm edited)
+    {
+        var terms = ViewModel?.Terms;
+        var index = IndexOfTerm(sender);
+        if (terms is not null && index >= 0)
+            terms[index] = edited;
+    }
+
+    private async void TermBox_Removed(object? sender, EventArgs args)
+    {
+        var term = ((SearchTermBox)sender!).Term;
+        if (term is null)
+            return;
+
+        FocusQueryBox();
+        await RemoveTermAsync(term);
+    }
+
+    // The term slides out of view before it is taken off the search, which is what removes its box.
+    private async Task RemoveTermAsync(SearchTerm term)
+    {
+        var termBox = FindTermBox(term);
+        if (termBox is not null)
+            await termBox.SlideOutAsync();
+
+        ViewModel?.Terms.Remove(term);
+    }
+
+    private void TermBox_EditingEnded(object? sender, EventArgs args) => FocusQueryBox();
+
+    // Where a term's box's term is in the search, or -1 once it has gone from it.
+    private int IndexOfTerm(object? termBox)
+    {
+        var term = ((SearchTermBox)termBox!).Term;
+        var terms = ViewModel?.Terms;
+        return term is null || terms is null ? -1 : terms.IndexOf(term);
+    }
+
+    private SearchTermBox? FindTermBox(SearchTerm term)
+    {
+        var index = ViewModel?.Terms.IndexOf(term) ?? -1;
+        return index < 0 ? null : termsRepeater.TryGetElement(index) as SearchTermBox;
+    }
+
+    // At the start of the query box, Backspace removes the term before it and Left moves into that term to
+    // edit it. This is a preview handler because TextBox handles both keys itself.
+    private async void QueryBox_PreviewKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        var terms = ViewModel?.Terms;
+        var isAtStart = queryBox.SelectionStart == 0 && queryBox.SelectionLength == 0;
+        if (!isAtStart || terms is null || terms.Count == 0)
+            return;
+
+        var lastTerm = terms[^1];
+        if (args.Key == VirtualKey.Back)
+        {
+            args.Handled = true;
+            await RemoveTermAsync(lastTerm);
+        }
+        else if (args.Key == VirtualKey.Left)
+        {
+            FindTermBox(lastTerm)?.StartEditingAtEnd();
+            args.Handled = true;
+        }
     }
 
     // TextChanging is raised before the new text is drawn, so the clipboard button appears in the same frame
@@ -202,8 +362,9 @@ public sealed partial class SearchInput : UserControl
     {
         switch (args.Key)
         {
-            // Enter searches without waiting for the debounce.
+            // Enter searches without waiting for the debounce, and completes a term still being typed.
             case VirtualKey.Enter:
+                ViewModel?.ResolveTerms(queryBox.Text);
                 _debounceTimer.Stop();
                 ViewModel?.SearchCommand.Execute(null);
                 args.Handled = true;
@@ -241,8 +402,12 @@ public sealed partial class SearchInput : UserControl
     // The clipboard button is hidden when there is neither a query to copy nor text to paste.
     private void UpdateClipboardButton()
     {
-        var canCopy = Is.NotBlank(queryBox.Text);
+        var canCopy = HasSearch;
         var isUseful = canCopy || HasClipboardText();
+
+        var action = canCopy ? "Copy to clipboard" : "Paste from clipboard";
+        AutomationProperties.SetName(clipboardButton, action);
+        ToolTipService.SetToolTip(clipboardButton, action);
 
         // The two icons cross-fade when the action changes while the button is showing. A button that is
         // only now appearing shows the right icon from the start.
@@ -276,12 +441,12 @@ public sealed partial class SearchInput : UserControl
         }
     }
 
-    // The clipboard button copies when there is a query and pastes when there is none.
-    private string ClipboardActionName(string? query) => Is.NotBlank(query) ? "Copy to clipboard" : "Paste from clipboard";
+    // Whether there is anything to copy. The clipboard button copies when there is, and pastes when there isn't.
+    private bool HasSearch => Is.NotBlank(queryBox.Text) || ViewModel?.Terms.Count > 0;
 
     private void ClipboardButton_Click(object sender, RoutedEventArgs args)
     {
-        if (Is.NotBlank(queryBox.Text))
+        if (HasSearch)
             CopyQuery_Click(sender, args);
         else
             PasteQuery_Click(sender, args);
@@ -289,7 +454,7 @@ public sealed partial class SearchInput : UserControl
 
     private void ClipboardMenu_Opening(object? sender, object args)
     {
-        copyQueryItem.IsEnabled = Is.NotBlank(queryBox.Text);
+        copyQueryItem.IsEnabled = HasSearch;
         pasteQueryItem.IsEnabled = HasClipboardText();
     }
 
