@@ -11,21 +11,22 @@
     NavigationCacheMode="Required">
 
     <!--
-        The cards' highlight reaches 8 pixels beyond each card, so the page's side padding is 8 less than
-        usual and the heading is set in by 8 to line up with the pictures. There is no padding
+        The cards' highlight reaches 8 pixels beyond each card, and their keyboard focus ring 4 beyond that,
+        so the page's side padding is 12 less than usual and the heading is set in by 12 to line up with
+        the pictures. There is no padding
         on the right: the results scroll right up to the page's edge, and their own right margin keeps
         the cards clear of the scroll bar there.
     -->
     <Grid
         MaxWidth="{StaticResource PageMaxWidth}"
-        Padding="16,12,0,0">
+        Padding="12,12,0,0">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <!-- The heading says which results are showing, or how the search went. The page buttons are level with it. -->
-        <Grid Margin="8,0,16,8" ColumnSpacing="16">
+        <Grid Margin="12,0,16,4" ColumnSpacing="16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -50,39 +51,19 @@
                     <FontIcon Glyph="&#xE76B;" Style="{StaticResource FieldIconStyle}" />
                 </Button>
 
-                <!--
-                    The page that is showing, and a box for typing another one. It looks like an accent
-                    button until it has focus, when it is an ordinary text box: only the colours a
-                    TextBox uses at rest and under the pointer are replaced. It is as wide as the buttons
-                    beside it, which fits three digits. TextWrapping is Wrap only because a wrapping
-                    TextBox has no delete button, which would cover a box this narrow.
-                -->
-                <TextBox
-                    x:Name="pageBox"
+                <!-- The page that is showing, in the accent colour and the size of the buttons beside it. -->
+                <Border
                     Width="32"
-                    MinWidth="0"
-                    Padding="0,5,0,6"
-                    AutomationProperties.Name="Page"
-                    GotFocus="PageBox_GotFocus"
-                    InputScope="Number"
-                    KeyDown="PageBox_KeyDown"
-                    LostFocus="PageBox_LostFocus"
-                    MaxLength="3"
-                    Text="{x:Bind PageText(ViewModel.Page), Mode=OneWay}"
-                    TextAlignment="Center"
-                    TextWrapping="Wrap"
-                    ToolTipService.ToolTip="Go to a page">
-                    <TextBox.Resources>
-                        <!-- Parts of TextBox's template are held to this width as well as the box itself. -->
-                        <x:Double x:Key="TextControlThemeMinWidth">0</x:Double>
-                        <StaticResource x:Key="TextControlBackground" ResourceKey="AccentFillColorDefaultBrush" />
-                        <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="AccentFillColorSecondaryBrush" />
-                        <StaticResource x:Key="TextControlForeground" ResourceKey="TextOnAccentFillColorPrimaryBrush" />
-                        <StaticResource x:Key="TextControlForegroundPointerOver" ResourceKey="TextOnAccentFillColorPrimaryBrush" />
-                        <StaticResource x:Key="TextControlBorderBrush" ResourceKey="AccentControlElevationBorderBrush" />
-                        <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="AccentControlElevationBorderBrush" />
-                    </TextBox.Resources>
-                </TextBox>
+                    Height="32"
+                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                    CornerRadius="{StaticResource ControlCornerRadius}">
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="Page"
+                        Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                        Text="{x:Bind ViewModel.Page, Mode=OneWay}" />
+                </Border>
 
                 <Button
                     AutomationProperties.Name="Next page"
@@ -100,7 +81,7 @@
                 results, leaving the page part-way down.
             -->
             <ScrollViewer x:Name="resultsScroll" VerticalAnchorRatio="NaN">
-                <ItemsRepeater Margin="0,0,16,0" ItemsSource="{x:Bind ViewModel.Results}">
+                <ItemsRepeater Margin="4,4,16,4" ItemsSource="{x:Bind ViewModel.Results}">
                     <!--
                         Fits as many columns as there is room for, and makes the cards in a row the same
                         height. The spacing is small because each card's button has padding of its own.
