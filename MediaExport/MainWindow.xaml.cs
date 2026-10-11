@@ -16,6 +16,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Windows.Graphics;
 
 namespace MediaExport;
@@ -55,7 +56,12 @@ public sealed partial class MainWindow : Window
         AppWindow.SetIcon("Assets/App/Square44x44Logo.ico");
 
         RestoreWindowSize();
-        Closed += (_, _) => SaveWindowSize();
+        RestoreSearch();
+        Closed += (_, _) =>
+        {
+            _settings.Current.LastSearch = Search.FullText;
+            SaveWindowSize();
+        };
 
         _resizeDebounceTimer = DispatcherQueue.CreateTimer();
         _resizeDebounceTimer.Interval = ResizeDebounce;
@@ -86,6 +92,24 @@ public sealed partial class MainWindow : Window
         double reservedWidth = AppWindow.TitleBar.RightInset;
         var neededWidth = reservedWidth / scale;
         titleBar.Margin = new Thickness(0, 0, neededWidth - reservedWidth, 0);
+    }
+
+    // The app opens on the search it was closed with. Its results are usually remembered too, so they show at once.
+    private void RestoreSearch()
+    {
+        Search.LoadRecentSearches(_settings.Current.RecentSearches);
+        Search.RecentSearches.CollectionChanged += (_, _) =>
+        {
+            _settings.Current.RecentSearches = Search.RecentSearches.Select(recent => recent.FullText).ToList();
+            _settings.Save();
+        };
+
+        var lastSearch = _settings.Current.LastSearch;
+        if (string.IsNullOrWhiteSpace(lastSearch))
+            return;
+
+        Search.Replace(lastSearch);
+        Search.SearchCommand.Execute(null);
     }
 
     // Windows doesn't remember the size of a WinUI window between runs, so the app does.
@@ -129,7 +153,7 @@ public sealed partial class MainWindow : Window
     private void SearchInput_Submitted(object? sender, EventArgs args)
     {
         GoTo("Search");
-        Search.SearchCommand.Execute(null);
+        Search.CommitSearchCommand.Execute(null);
     }
 
     private void FocusSearch_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
