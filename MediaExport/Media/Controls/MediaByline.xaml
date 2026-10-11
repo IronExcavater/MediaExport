@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<local:MediaView
+    x:Class="MediaExport.Media.Controls.MediaByline"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:MediaExport.Controls"
+    xmlns:converters="using:MediaExport.Converters"
+    xmlns:local="using:MediaExport.Media.Controls">
+
+    <UserControl.Resources>
+        <Style x:Key="BylineTextStyle" BasedOn="{StaticResource SecondaryTextStyle}" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="NoWrap" />
+        </Style>
+    </UserControl.Resources>
+
+    <!--
+        The creator's name is the part that is cut short when the line doesn't fit; the views and age after it
+        always show in full. The grid is aligned left so that it is only as wide as its content: the name's
+        star column is then no wider than the name, and shrinks first when there isn't room.
+    -->
+    <Grid HorizontalAlignment="Left" ColumnSpacing="6">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <controls:IconView
+            Width="14"
+            Height="14"
+            Icon="{x:Bind ProviderIcon(Media.ProviderId), Mode=OneWay}" />
+
+        <TextBlock
+            Grid.Column="1"
+            Style="{StaticResource BylineTextStyle}"
+            Text="{x:Bind Media.Creator, Mode=OneWay}"
+            TextTrimming="CharacterEllipsis" />
+
+        <!--
+            Each value has its own text, and a dot before it that OnMediaChanged shows only when there is
+            something on both sides of it. A value that isn't known is empty text: FallbackValue is what a
+            binding gives when the value is null, since a function isn't called for null.
+        -->
+        <StackPanel
+            Grid.Column="2"
+            Orientation="Horizontal"
+            Spacing="6">
+            <TextBlock
+                x:Name="viewsSeparator"
+                Style="{StaticResource BylineTextStyle}"
+                Text="·" />
+            <TextBlock
+                x:Name="viewsText"
+                Style="{StaticResource BylineTextStyle}"
+                Text="{x:Bind converters:Format.Views(Media.Views), Mode=OneWay, FallbackValue=''}" />
+            <TextBlock
+                x:Name="ageSeparator"
+                Style="{StaticResource BylineTextStyle}"
+                Text="·" />
+            <TextBlock
+                x:Name="ageText"
+                Style="{StaticResource BylineTextStyle}"
+                Text="{x:Bind converters:Format.Age(Media.Published), Mode=OneWay, FallbackValue=''}" />
+        </StackPanel>
+    </Grid>
+</local:MediaView>

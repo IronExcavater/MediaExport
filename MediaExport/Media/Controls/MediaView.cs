@@ -15,6 +15,7 @@ namespace MediaExport.Media.Controls;
 /// and which arranges the same parts in its own way:
 /// <list type="bullet">
 /// <item><see cref="MediaThumbnail"/>: the picture, with the duration over it.</item>
+/// <item><see cref="MediaByline"/>: the line saying where it is from, who made it, its views and its age.</item>
 /// <item><see cref="RowMediaView"/>: a row, for lists.</item>
 /// <item><see cref="CardMediaView"/>: a card, for grids.</item>
 /// </list>
