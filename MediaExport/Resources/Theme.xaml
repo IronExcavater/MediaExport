@@ -6,11 +6,11 @@
         because a grey or pale system accent makes selected controls hard to read.
         WinUI uses the Light2 shade on the dark theme and Dark1 on the light theme.
     -->
-    <SolidColorBrush x:Key="SystemAccentColor" Color="#14A596" />
-    <SolidColorBrush x:Key="SystemAccentColorLight1" Color="#37C2B3" />
-    <SolidColorBrush x:Key="SystemAccentColorLight2" Color="#5FD6C8" />
-    <SolidColorBrush x:Key="SystemAccentColorLight3" Color="#9BE9DF" />
-    <SolidColorBrush x:Key="SystemAccentColorDark1" Color="#0E8579" />
-    <SolidColorBrush x:Key="SystemAccentColorDark2" Color="#09675E" />
-    <SolidColorBrush x:Key="SystemAccentColorDark3" Color="#054A44" />
+    <Color x:Key="SystemAccentColor">#14A596</Color>
+    <Color x:Key="SystemAccentColorLight1">#37C2B3</Color>
+    <Color x:Key="SystemAccentColorLight2">#5FD6C8</Color>
+    <Color x:Key="SystemAccentColorLight3">#9BE9DF</Color>
+    <Color x:Key="SystemAccentColorDark1">#0E8579</Color>
+    <Color x:Key="SystemAccentColorDark2">#09675E</Color>
+    <Color x:Key="SystemAccentColorDark3">#054A44</Color>
 </ResourceDictionary>
