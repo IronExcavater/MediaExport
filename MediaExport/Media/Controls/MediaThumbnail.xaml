@@ -6,7 +6,7 @@
     xmlns:converters="using:MediaExport.Converters"
     xmlns:local="using:MediaExport.Media.Controls">
 
-    <!-- The grid's background shows until the picture has loaded. The duration badge is hidden for media with no known duration. -->
+    <!-- The grid's background shows until the picture has loaded. The duration badge is hidden for media with no known duration, such as a live stream. -->
     <Grid Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="4">
         <Image x:Name="image" Stretch="UniformToFill" />
         <Border
@@ -17,7 +17,7 @@
             Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
             CornerRadius="2"
             Opacity="0.9"
-            Visibility="{x:Bind converters:VisibleWhen.NotNull(Media.Duration), Mode=OneWay}">
+            Visibility="{x:Bind converters:VisibleWhen.NotNull(Media.Duration), Mode=OneWay, FallbackValue=Collapsed}">
             <TextBlock
                 FontSize="11"
                 Text="{x:Bind DurationText(Media.Duration), Mode=OneWay}"

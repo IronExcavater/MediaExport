@@ -45,20 +45,16 @@ public static class Format
         return whole == 1 ? $"1 {unit} ago" : $"{whole} {unit}s ago";
     }
 
-    /// <summary>
-    /// Who made something, how often it was viewed and how old it is, on one line:
-    /// <c>Creator  ·  1.9M views  ·  2 years ago</c>. Whatever isn't known is left out.
-    /// </summary>
-    public static string Byline(string? creator, long? views, DateTimeOffset? published)
-    {
-        var parts = new List<string>();
-        if (!string.IsNullOrEmpty(creator))
-            parts.Add(creator);
-        if (views is not null)
-            parts.Add($"{Count(views.Value)} {(views == 1 ? "view" : "views")}");
-        if (published is not null)
-            parts.Add(Age(published.Value, DateTimeOffset.Now));
+    /// <summary><see cref="Age(DateTimeOffset, DateTimeOffset)"/> as of now; empty when the date isn't known.</summary>
+    public static string Age(DateTimeOffset? then) => then is null ? string.Empty : Age(then.Value, DateTimeOffset.Now);
 
-        return string.Join("  ·  ", parts);
+    /// <summary>How often something was viewed: <c>1 view</c>, <c>1.9M views</c>; empty when it isn't known.</summary>
+    public static string Views(long? views)
+    {
+        if (views is null)
+            return string.Empty;
+
+        var unit = views == 1 ? "view" : "views";
+        return $"{Count(views.Value)} {unit}";
     }
 }
