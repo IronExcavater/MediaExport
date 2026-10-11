@@ -18,6 +18,7 @@ public interface IMediaSearchProvider
     string Icon { get; }
 
     /// <summary>Searches the source. A failure is thrown, not returned as an empty list.</summary>
+    /// <param name="skip">How many results to pass over first. Page 3 of 20 a page skips 40.</param>
     /// <param name="limit">The most results wanted. The source may have fewer.</param>
-    Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, int limit = 10, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, int skip = 0, int limit = 10, CancellationToken cancellationToken = default);
 }

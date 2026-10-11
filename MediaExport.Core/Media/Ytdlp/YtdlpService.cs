@@ -18,14 +18,15 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
 
     /// <summary>Reads a search without downloading anything.</summary>
     /// <param name="target">What yt-dlp should read: a search such as <c>ytsearch10:cats</c>, or a page's URL.</param>
-    /// <param name="limit">Where yt-dlp stops reading entries, so a long search page isn't read to its end.</param>
+    /// <param name="skip">How many entries to pass over before the first one that is read.</param>
+    /// <param name="limit">How many entries to read, so a long search page isn't read to its end.</param>
     /// <exception cref="InvalidOperationException">yt-dlp isn't installed, or reported an error.</exception>
-    public async Task<IReadOnlyList<YtdlpSearchResult>> SearchAsync(string target, int limit, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<YtdlpSearchResult>> SearchAsync(string target, int skip, int limit, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(target))
             return [];
 
-        var json = await RunAsync(GetSearchArguments(target, limit), cancellationToken);
+        var json = await RunAsync(GetSearchArguments(target, skip, limit), cancellationToken);
         return ReadSearchResults(json);
     }
 
@@ -38,11 +39,13 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
         throw new NotImplementedException();
     }
 
-    internal static IReadOnlyList<string> GetSearchArguments(string target, int limit) =>
+    internal static IReadOnlyList<string> GetSearchArguments(string target, int skip, int limit) =>
     [
         // One JSON document listing the entries, without opening each entry's own page.
         "--dump-single-json", "--flat-playlist",
-        "--playlist-end", limit.ToString(CultureInfo.InvariantCulture),
+        // yt-dlp counts entries from 1.
+        "--playlist-start", (skip + 1).ToString(CultureInfo.InvariantCulture),
+        "--playlist-end", (skip + limit).ToString(CultureInfo.InvariantCulture),
         "--quiet", "--no-warnings", "--encoding", "utf-8",
         // YouTube's results only say roughly how old a video is ("3 years ago"); this turns that into a date.
         "--extractor-args", "youtubetab:approximate_date",

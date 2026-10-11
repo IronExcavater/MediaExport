@@ -20,18 +20,19 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
     protected virtual MediaKind Kind => MediaKind.Video;
 
     /// <summary>What yt-dlp is asked to read for a query: a search such as <c>ytsearch10:cats</c>, or a search page's URL.</summary>
-    protected abstract string GetSearchTarget(string query, int limit);
+    /// <param name="count">How many results the search must reach, counting the ones that are skipped.</param>
+    protected abstract string GetSearchTarget(string query, int count);
 
     /// <summary>The page of a result. Override it for a provider whose results don't carry their own URL.</summary>
     protected virtual string? GetSourceUrl(YtdlpSearchResult result) => result.SourceUrl;
 
-    public async Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, int limit = 10, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, int skip = 0, int limit = 10, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(query))
             return [];
 
-        var target = GetSearchTarget(query.Trim(), limit);
-        var found = await ytdlp.SearchAsync(target, limit, cancellationToken);
+        var target = GetSearchTarget(query.Trim(), skip + limit);
+        var found = await ytdlp.SearchAsync(target, skip, limit, cancellationToken);
 
         var results = new List<MediaSearchResult>();
         foreach (var result in found)
