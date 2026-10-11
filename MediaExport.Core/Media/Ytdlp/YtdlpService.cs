@@ -72,7 +72,9 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
 
             var duration = GetNumber(entry, "duration");
             var views = GetNumber(entry, "view_count");
-            var timestamp = GetNumber(entry, "timestamp");
+            // A result with no upload time may still say when it was released. A live stream has neither, nor
+            // a duration or a view count.
+            var timestamp = GetNumber(entry, "timestamp") ?? GetNumber(entry, "release_timestamp");
             results.Add(new YtdlpSearchResult(
                 identity,
                 GetString(entry, "webpage_url") ?? GetString(entry, "url"),
