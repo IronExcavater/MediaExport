@@ -30,7 +30,5 @@ public static class VisibleWhen
 
     public static Visibility NotBlank(string? text) => True(Is.NotBlank(text));
 
-    public static Visibility False(bool value) => True(!value);
-
     public static Visibility True(bool value) => value ? Visibility.Visible : Visibility.Collapsed;
 }

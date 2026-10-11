@@ -99,6 +99,13 @@
         <Setter Property="VerticalContentAlignment" Value="Top" />
     </Style>
 
+    <!-- A grey bar standing in for a line of text that hasn't loaded yet, in a skeleton of a view. -->
+    <Style x:Key="SkeletonBarStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+
     <!-- A square button for stepping through pages, as tall as the text box between a pair of them. -->
     <Style x:Key="PageButtonStyle" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
         <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
