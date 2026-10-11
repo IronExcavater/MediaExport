@@ -3,6 +3,7 @@
 
 using MediaExport.Controls;
 using MediaExport.Converters;
+using MediaExport.Core.Media.Models;
 using MediaExport.Core.Media.Providers;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Text;
@@ -14,6 +15,7 @@ using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -36,6 +38,10 @@ public sealed partial class SearchInput : UserControl
     private static readonly TimeSpan SearchDebounce = TimeSpan.FromMilliseconds(400);
 
     private const double ResultsGap = 2;
+
+    // The Search button's two icons, in the Segoe Fluent Icons font.
+    private const string SearchGlyph = "";
+    private const string OpenInPageGlyph = "";
 
     private readonly ScalarTransition _fade = new() { Duration = VisibilityTransition.Duration };
     private readonly DispatcherQueueTimer _debounceTimer;
@@ -133,33 +139,66 @@ public sealed partial class SearchInput : UserControl
         {
             oldViewModel.FirstPageResults.CollectionChanged -= input.Results_CollectionChanged;
             oldViewModel.Terms.CollectionChanged -= input.Terms_CollectionChanged;
+            oldViewModel.PropertyChanged -= input.ViewModel_PropertyChanged;
+            oldViewModel.RecentSearches.CollectionChanged -= input.Results_CollectionChanged;
         }
         if (args.NewValue is SearchViewModel newViewModel)
         {
             newViewModel.FirstPageResults.CollectionChanged += input.Results_CollectionChanged;
             newViewModel.Terms.CollectionChanged += input.Terms_CollectionChanged;
+            newViewModel.PropertyChanged += input.ViewModel_PropertyChanged;
+            newViewModel.RecentSearches.CollectionChanged += input.Results_CollectionChanged;
         }
+    }
+
+    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(SearchViewModel.IsSearching))
+            UpdateResultsPopup();
     }
 
     private void Results_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
         // The first result of a new search arriving puts the list back at its top.
-        var isFirstResult = args.Action == NotifyCollectionChangedAction.Add && args.NewStartingIndex == 0;
+        var isResult = args.NewItems?[0] is MediaSearchResult;
+        var isFirstResult = isResult && args.Action == NotifyCollectionChangedAction.Add && args.NewStartingIndex == 0;
         if (isFirstResult)
             resultsList.ScrollIntoView(args.NewItems![0]);
 
         UpdateResultsPopup();
     }
 
-    // The results are open while they are allowed here, there are some, and focus is in the query box or the results.
+    // Whether the popup under the field is listing results, as opposed to recent searches.
+    private bool _isListingResults;
+
+    // The popup under the field lists one of two things while the keyboard is in the field or the popup. With
+    // nothing in the field it lists the recent searches. Otherwise it lists the results, or their skeleton
+    // while they are on the way, unless the page showing lists them itself.
     private void UpdateResultsPopup()
     {
-        var hasResults = ViewModel?.FirstPageResults.Count > 0;
-        var hasFocus = IsFocusWithin(queryBox) || IsFocusWithin(resultsList);
+        var viewModel = ViewModel;
+        var hasResults = viewModel?.FirstPageResults.Count > 0;
+        var isLoading = viewModel?.IsSearching == true && !hasResults;
+        var hasRecents = viewModel?.RecentSearches.Count > 0;
+
+        // The app puts the keyboard in the field as it opens. Recent searches are for someone who went to
+        // the field themselves, so that first focus doesn't open them.
+        var isFieldChosen = queryBox.FocusState is FocusState.Pointer or FocusState.Keyboard;
+        var isInPopup = IsFocusWithin(resultsList) || IsFocusWithin(recentsList);
+        var hasFocus = IsFocusWithin(queryBox) || isInPopup;
+
+        var listsRecents = !HasSearch && hasRecents && (isFieldChosen || isInPopup);
+        var listsResults = HasSearch && IsResultsListEnabled && (hasResults || isLoading) && hasFocus;
+        _isListingResults = listsResults;
+
+        recentsList.Visibility = listsRecents ? Visibility.Visible : Visibility.Collapsed;
+        resultsFade.Visibility = listsResults ? Visibility.Visible : Visibility.Collapsed;
+        resultsSkeleton.Visibility = listsResults && isLoading ? Visibility.Visible : Visibility.Collapsed;
 
         resultsPanel.Width = ActualWidth;
         resultsPopup.VerticalOffset = ActualHeight + ResultsGap;
-        resultsPopup.IsOpen = IsResultsListEnabled && hasResults && hasFocus;
+        resultsPopup.IsOpen = listsRecents || listsResults;
+        UpdateSearchButton();
     }
 
     private bool IsFocusWithin(DependencyObject ancestor)
@@ -288,12 +327,26 @@ public sealed partial class SearchInput : UserControl
         }
     }
 
-    private void TermBox_Edited(object? sender, SearchTerm edited)
+    private async void TermBox_Edited(object? sender, SearchTerm edited)
     {
-        var terms = ViewModel?.Terms;
-        var index = IndexOfTerm(sender);
-        if (terms is not null && index >= 0)
-            terms[index] = edited;
+        var termBox = (SearchTermBox)sender!;
+        var term = termBox.Term;
+        if (term is null)
+            return;
+
+        if (SearchQuery.IsValid(edited))
+        {
+            ViewModel?.ReplaceTerm(term, edited);
+            return;
+        }
+
+        // A value that can't be read, such as a length that isn't one, is given up. The term goes back to the
+        // value it had, or goes altogether if it was new and never had one.
+        var isNew = term.Value.Length == 0;
+        if (isNew)
+            await RemoveTermAsync(term);
+        else
+            termBox.Term = term;
     }
 
     private async void TermBox_Removed(object? sender, EventArgs args)
@@ -366,13 +419,15 @@ public sealed partial class SearchInput : UserControl
             case VirtualKey.Enter:
                 ViewModel?.ResolveTerms(queryBox.Text);
                 _debounceTimer.Stop();
-                ViewModel?.SearchCommand.Execute(null);
+                ViewModel?.CommitSearchCommand.Execute(null);
                 args.Handled = true;
                 break;
 
+            // Down moves into whichever list the popup is showing.
             case VirtualKey.Down when resultsPopup.IsOpen:
-                var firstResult = resultsList.ContainerFromIndex(0) as Control;
-                firstResult?.Focus(FocusState.Keyboard);
+                var list = _isListingResults ? resultsList : recentsList;
+                var firstItem = list.ContainerFromIndex(0) as Control;
+                firstItem?.Focus(FocusState.Keyboard);
                 args.Handled = true;
                 break;
 
@@ -395,7 +450,34 @@ public sealed partial class SearchInput : UserControl
     }
 
     // Opening the chosen result belongs here once there is somewhere to open it.
-    private void ResultsList_ItemClick(object sender, ItemClickEventArgs args) => resultsPopup.IsOpen = false;
+    private void ResultsList_ItemClick(object sender, ItemClickEventArgs args)
+    {
+        // Choosing a result is acting on the search, which makes it one that was carried out.
+        ViewModel?.CommitSearchCommand.Execute(null);
+        resultsPopup.IsOpen = false;
+    }
+
+    private void RecentsList_ItemClick(object sender, ItemClickEventArgs args)
+    {
+        var viewModel = ViewModel;
+        if (viewModel is null)
+            return;
+
+        var recent = (RecentSearch)args.ClickedItem;
+        viewModel.Replace(recent.FullText);
+        _debounceTimer.Stop();
+        viewModel.CommitSearchCommand.Execute(null);
+
+        FocusQueryBox();
+        queryBox.SelectionStart = queryBox.Text.Length;
+    }
+
+    private void RemoveRecent_Click(object sender, RoutedEventArgs args)
+    {
+        var button = (Button)sender;
+        var recent = (RecentSearch)button.Tag;
+        ViewModel?.RecentSearches.Remove(recent);
+    }
 
     private void Clipboard_ContentChanged(object? sender, object args) => DispatcherQueue.TryEnqueue(UpdateClipboardButton);
 
@@ -493,4 +575,17 @@ public sealed partial class SearchInput : UserControl
         exception is COMException or UnauthorizedAccessException;
 
     private void Search_Click(object sender, RoutedEventArgs args) => Submitted?.Invoke(this, EventArgs.Empty);
+
+    private void ResultsPopup_OpenChanged(object? sender, object args) => UpdateSearchButton();
+
+    // The Search button always opens the Search page. While a few results are listed under the field, that is
+    // the way to the rest of them, so the button shows an open-in-a-page icon and is named for it.
+    private void UpdateSearchButton()
+    {
+        var isListed = resultsPopup.IsOpen && _isListingResults;
+        var action = isListed ? "See all results" : "Search";
+        searchIcon.Glyph = isListed ? OpenInPageGlyph : SearchGlyph;
+        AutomationProperties.SetName(searchButton, action);
+        ToolTipService.SetToolTip(searchButton, action);
+    }
 }
