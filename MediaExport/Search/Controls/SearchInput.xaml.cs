@@ -115,17 +115,25 @@ public sealed partial class SearchInput : UserControl
     {
         var input = (SearchInput)sender;
         if (args.OldValue is SearchViewModel oldViewModel)
-            oldViewModel.Results.CollectionChanged -= input.Results_CollectionChanged;
+            oldViewModel.FirstPageResults.CollectionChanged -= input.Results_CollectionChanged;
         if (args.NewValue is SearchViewModel newViewModel)
-            newViewModel.Results.CollectionChanged += input.Results_CollectionChanged;
+            newViewModel.FirstPageResults.CollectionChanged += input.Results_CollectionChanged;
     }
 
-    private void Results_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args) => UpdateResultsPopup();
+    private void Results_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    {
+        // The first result of a new search arriving puts the list back at its top.
+        var isFirstResult = args.Action == NotifyCollectionChangedAction.Add && args.NewStartingIndex == 0;
+        if (isFirstResult)
+            resultsList.ScrollIntoView(args.NewItems![0]);
+
+        UpdateResultsPopup();
+    }
 
     // The results are open while there are some and focus is in the query box or the results.
     private void UpdateResultsPopup()
     {
-        var hasResults = ViewModel?.Results.Count > 0;
+        var hasResults = ViewModel?.FirstPageResults.Count > 0;
         var hasFocus = IsFocusWithin(queryBox) || IsFocusWithin(resultsList);
 
         resultsPanel.Width = ActualWidth;
