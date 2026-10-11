@@ -205,4 +205,6 @@ public sealed partial class MainWindow : Window
         if (pageType is not null && !isAlreadyShown)
             navFrame.Navigate(pageType);
     }
+
+    public void ApplyTheme(ElementTheme theme) => root.RequestedTheme = theme;
 }

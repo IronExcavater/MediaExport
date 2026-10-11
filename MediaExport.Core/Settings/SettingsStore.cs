@@ -26,6 +26,11 @@ public sealed class AppSettings
 
     /// <summary>The searches that were carried out, newest first, each written as text like <see cref="LastSearch"/>.</summary>
     public List<string> RecentSearches { get; set; } = [];
+
+    /// <summary>
+    /// This defaults to the system theme 0.
+    /// </summary>
+    public int ThemeIndex { get; set; } = 0; // 0 = System, 1 = Dark, 2 = Light
 }
 
 /// <summary>Loads and saves <see cref="AppSettings"/> as JSON.</summary>
@@ -35,6 +40,7 @@ public sealed class SettingsStore(string? path)
     public AppSettings Current { get; } = JsonFile.Load(path, SettingsJson.Default.AppSettings) ?? new AppSettings();
 
     public void Save() => JsonFile.Save(path, Current, SettingsJson.Default.AppSettings);
+
 }
 
 [JsonSourceGenerationOptions(WriteIndented = true)]
