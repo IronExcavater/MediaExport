@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="MediaExport.Search.Controls.SearchTermBox"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Margin="0,2">
+
+    <!--
+        Widens the term from nothing when it is added and narrows it to nothing before it is removed, so it
+        slides in and out and what comes after it in the field moves along. The widths are set in code,
+        because they depend on how wide the term's value is.
+    -->
+    <UserControl.Resources>
+        <Storyboard x:Name="slide" Completed="Slide_Completed">
+            <DoubleAnimation
+                x:Name="slideWidth"
+                EnableDependentAnimation="True"
+                Storyboard.TargetProperty="MaxWidth"
+                Duration="0:0:0.2">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+    </UserControl.Resources>
+
+    <Grid x:Name="content">
+        <!--
+            While its value is being edited, the whole term looks like a focused text box, as the search field
+            does, and its remove button slides out from the end. The button's slot is widened and narrowed
+            rather than the button shown and hidden, so the terms after it move along with it.
+        -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup>
+                <VisualState x:Name="Resting">
+                    <Storyboard>
+                        <DoubleAnimation
+                            EnableDependentAnimation="True"
+                            Storyboard.TargetName="removeSlot"
+                            Storyboard.TargetProperty="Width"
+                            To="0"
+                            Duration="0:0:0.2">
+                            <DoubleAnimation.EasingFunction>
+                                <CubicEase EasingMode="EaseOut" />
+                            </DoubleAnimation.EasingFunction>
+                        </DoubleAnimation>
+                    </Storyboard>
+                </VisualState>
+                <VisualState x:Name="Editing">
+                    <VisualState.Setters>
+                        <Setter Target="editingBorder.Visibility" Value="Visible" />
+                        <Setter Target="valueBox.IsHitTestVisible" Value="True" />
+                    </VisualState.Setters>
+                    <Storyboard>
+                        <DoubleAnimation
+                            EnableDependentAnimation="True"
+                            Storyboard.TargetName="removeSlot"
+                            Storyboard.TargetProperty="Width"
+                            To="22"
+                            Duration="0:0:0.2">
+                            <DoubleAnimation.EasingFunction>
+                                <CubicEase EasingMode="EaseOut" />
+                            </DoubleAnimation.EasingFunction>
+                        </DoubleAnimation>
+                    </Storyboard>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <!--
+            At rest the term is a button like the provider's. This button is that look, and the icon and
+            value lie over it without taking presses, so a press anywhere on the term reaches the button
+            and starts editing with the whole value selected, ready to type over. Once it is being edited,
+            the value takes presses itself, to place the cursor.
+        -->
+        <Button
+            x:Name="restingButton"
+            Margin="0"
+            HorizontalAlignment="Stretch"
+            Click="RestingButton_Click"
+            IsTabStop="False"
+            Style="{StaticResource FieldButtonStyle}" />
+
+        <Border
+            x:Name="editingBorder"
+            Background="{ThemeResource TextControlBackgroundFocused}"
+            BorderBrush="{ThemeResource TextControlBorderBrushFocused}"
+            BorderThickness="{ThemeResource TextControlBorderThemeThicknessFocused}"
+            CornerRadius="6"
+            IsHitTestVisible="False"
+            Visibility="Collapsed" />
+
+        <StackPanel Margin="6,0,0,0" Orientation="Horizontal">
+            <!-- The kind of term, as an icon. Presses on it go through to the button under it. -->
+            <FontIcon
+                x:Name="labelIcon"
+                Margin="0,0,5,0"
+                FontSize="12"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                IsHitTestVisible="False" />
+
+            <!--
+                AcceptsReturn is on only because such a TextBox has no delete button of its own; the term's
+                remove button stands in its place. Enter is taken by ValueBox_PreviewKeyDown before it can
+                add a line.
+            -->
+            <TextBox
+                x:Name="valueBox"
+                MinWidth="12"
+                MinHeight="0"
+                MaxWidth="160"
+                Margin="0,0,6,0"
+                Padding="0"
+                VerticalAlignment="Center"
+                AcceptsReturn="True"
+                GotFocus="ValueBox_GotFocus"
+                IsHitTestVisible="False"
+                LostFocus="ValueBox_LostFocus"
+                PreviewKeyDown="ValueBox_PreviewKeyDown"
+                Style="{StaticResource SearchTextBoxStyle}">
+                <!-- The term draws the text box look, so the box inside it draws nothing of its own. -->
+                <TextBox.Resources>
+                    <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                    <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+                    <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+                    <x:Double x:Key="TextControlThemeMinWidth">0</x:Double>
+                </TextBox.Resources>
+            </TextBox>
+
+            <!--
+                Removes the term. The slot is only as wide as the button while the term is being edited; at
+                rest it has no width and the button is cut off. The button doesn't take focus when pressed,
+                because that would end the editing and close the slot before the press had finished.
+            -->
+            <Grid x:Name="removeSlot" Width="0">
+                <Button
+                    Width="20"
+                    Margin="0,3,2,3"
+                    HorizontalAlignment="Left"
+                    AllowFocusOnInteraction="False"
+                    AutomationProperties.Name="Remove"
+                    Click="RemoveButton_Click"
+                    IsTabStop="False"
+                    Style="{StaticResource FieldIconButtonStyle}"
+                    ToolTipService.ToolTip="Remove">
+                    <FontIcon FontSize="10" Glyph="&#xE711;" />
+                </Button>
+            </Grid>
+        </StackPanel>
+    </Grid>
+</UserControl>
