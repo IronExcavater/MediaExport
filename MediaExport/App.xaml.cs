@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 using MediaExport.Services;
+using MediaExport.Core.Settings;
+using MediaExport.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using System;
@@ -27,6 +29,12 @@ public partial class App : Application
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         MainWindow = new MainWindow();
+
+        // Apply the theme from settings on launch
+        var settings = Services.GetRequiredService<SettingsStore>();
+        var themeService = Services.GetRequiredService<IThemeService>();
+        themeService.Apply(settings.Current.Theme);
+
         MainWindow.Activate();
     }
 
