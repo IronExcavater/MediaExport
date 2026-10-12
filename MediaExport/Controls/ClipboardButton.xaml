@@ -25,7 +25,7 @@
                 <MenuFlyoutItem
                     x:Name="copyItem"
                     Click="Copy_Click"
-                    Text="Copy to clipboard">
+                    Text="Copy">
                     <MenuFlyoutItem.Icon>
                         <FontIcon Glyph="&#xE8C8;" />
                     </MenuFlyoutItem.Icon>
@@ -33,7 +33,7 @@
                 <MenuFlyoutItem
                     x:Name="pasteItem"
                     Click="Paste_Click"
-                    Text="Paste from clipboard">
+                    Text="Paste">
                     <MenuFlyoutItem.Icon>
                         <FontIcon Glyph="&#xE77F;" />
                     </MenuFlyoutItem.Icon>

@@ -47,7 +47,11 @@ public sealed partial class MediaThumbnail : MediaView
         // Fetched only when the picture differs, and cleared so a reused row doesn't show the previous media's picture.
         var thumbnailUri = newMedia?.ThumbnailUri;
         if (oldMedia?.ThumbnailUri != thumbnailUri)
-            image.Source = thumbnailUri is null ? null : new BitmapImage(thumbnailUri) { DecodePixelWidth = DecodeWidth };
+        {
+            var picture = thumbnailUri is null ? null : new BitmapImage(thumbnailUri);
+            picture?.DecodePixelWidth = DecodeWidth;
+            image.Source = picture;
+        }
     }
 
     protected override Size MeasureOverride(Size availableSize)
