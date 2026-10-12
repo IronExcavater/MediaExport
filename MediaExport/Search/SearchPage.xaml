@@ -93,8 +93,11 @@
                         </ItemsRepeater.Layout>
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="models:MediaSearchResult">
-                                <!-- Opening the result belongs in this button's Click. -->
-                                <Button AutomationProperties.Name="{x:Bind Title}" Style="{StaticResource CardButtonStyle}">
+                                <Button
+                                    AutomationProperties.Name="{x:Bind Title}"
+                                    Click="Result_Click"
+                                    Style="{StaticResource CardButtonStyle}"
+                                    Tag="{x:Bind}">
                                     <media:CardMediaView Media="{x:Bind}" />
                                 </Button>
                             </DataTemplate>

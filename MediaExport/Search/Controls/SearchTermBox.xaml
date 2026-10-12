@@ -21,7 +21,8 @@
         <!-- A value box draws nothing of its own. AcceptsReturn is on only to remove TextBox's own delete button. -->
         <Style x:Key="TermValueBoxStyle" BasedOn="{StaticResource SearchTextBoxStyle}" TargetType="TextBox">
             <Setter Property="AcceptsReturn" Value="True" />
-            <Setter Property="Margin" Value="0,4,0,0" />
+            <!-- A TextBox draws its text a pixel higher than a TextBlock, so the margin lowers it onto the same line. -->
+            <Setter Property="Margin" Value="0,2,0,0" />
             <Setter Property="MaxWidth" Value="160" />
             <Setter Property="MinHeight" Value="0" />
             <Setter Property="MinWidth" Value="12" />

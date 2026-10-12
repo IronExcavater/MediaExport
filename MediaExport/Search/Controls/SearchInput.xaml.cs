@@ -6,6 +6,7 @@ using MediaExport.Converters;
 using MediaExport.Core.Media.Models;
 using MediaExport.Core.Media.Providers;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Input;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -18,7 +19,9 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
+using Windows.UI.Core;
 using VirtualKey = Windows.System.VirtualKey;
 
 namespace MediaExport.Search.Controls;
@@ -38,7 +41,6 @@ public sealed partial class SearchInput : UserControl
     private const double ResultsGap = 2;
 
     private readonly DispatcherQueueTimer _debounceTimer;
-    private bool _isPasting;
     private readonly PointerEventHandler _windowPressed;
 
     public SearchInput()
@@ -80,6 +82,12 @@ public sealed partial class SearchInput : UserControl
     /// <summary>Raised when the Search button is pressed, to show the results as a page.</summary>
     public event EventHandler? Submitted;
 
+    /// <summary>Raised when a result listed under the field is chosen, to open it.</summary>
+    public event EventHandler<MediaSearchResult>? ResultChosen;
+
+    /// <summary>Raised when a link is pasted or entered in place of a search, to open what it is to.</summary>
+    public event EventHandler<Uri>? LinkSubmitted;
+
     public void FocusQueryBox() => queryBox.Focus(FocusState.Keyboard);
 
     /// <summary>Whether the results may be listed under the field. A page that shows them itself turns this off.</summary>
@@ -103,81 +111,95 @@ public sealed partial class SearchInput : UserControl
     // A horizontal ScrollViewer gives content only the width it asks for, so fieldContent is kept as wide as the field.
     private void FieldScroll_SizeChanged(object sender, SizeChangedEventArgs args) => fieldContent.MinWidth = args.NewSize.Width;
 
-    private void ProviderFlyout_Opening(object? sender, object args) => ShowChosenProviders();
+    private void ProviderFlyout_Opening(object? sender, object args)
+    {
+        severalButton.IsChecked = ViewModel?.SelectedProviders.Count > 1;
+        ShowChosenProviders();
+    }
 
-    // A row that is made after the flyout opens is ticked as it loads.
-    private void ProviderBox_Loaded(object sender, RoutedEventArgs args) => ShowChosenProviders();
+    // Set while the list's selection and the chosen providers are being made the same, in either direction.
+    private bool _isMatchingProviders;
 
-    // Ticks the rows of the chosen providers, and the header's box while that is all of them.
+    // Selects the chosen providers' rows, in the mode the toggle asks for.
     private void ShowChosenProviders()
+    {
+        var viewModel = ViewModel;
+        if (viewModel is null || _isMatchingProviders)
+            return;
+
+        _isMatchingProviders = true;
+
+        // With the toggle on a plain press adds or removes a row. With it off that takes Ctrl, and a plain press
+        // chooses one row alone. Changing the mode clears the selection, so it is only set when it differs.
+        var isChoosingSeveral = severalButton.IsChecked == true;
+        var mode = isChoosingSeveral ? ListViewSelectionMode.Multiple : ListViewSelectionMode.Extended;
+        if (providerList.SelectionMode != mode)
+            providerList.SelectionMode = mode;
+
+        var chosen = viewModel.SelectedProviders.ToList();
+        var selected = providerList.SelectedItems.Cast<IMediaSearchProvider>().ToList();
+        var isShown = chosen.Count == selected.Count && chosen.All(selected.Contains);
+        if (!isShown)
+        {
+            providerList.SelectedItems.Clear();
+            foreach (var provider in chosen)
+                providerList.SelectedItems.Add(provider);
+        }
+
+        _isMatchingProviders = false;
+
+        var isAll = chosen.Count == viewModel.Providers.Count;
+        allProvidersButton.Content = isAll ? "Deselect all" : "Select all";
+    }
+
+    private void ProviderList_SelectionChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (_isMatchingProviders)
+            return;
+
+        _isMatchingProviders = true;
+        var selected = providerList.SelectedItems.Cast<IMediaSearchProvider>().ToList();
+        ViewModel?.SelectProviders(selected);
+        _isMatchingProviders = false;
+
+        // Several chosen with Ctrl turn the toggle on, so the list carries on the same way without the key.
+        if (selected.Count > 1)
+            severalButton.IsChecked = true;
+
+        // A search needs a provider, so deselecting the last one is ignored and its row is selected again.
+        ShowChosenProviders();
+    }
+
+    // A plain press has chosen one provider, which closes the flyout as a menu would.
+    private void ProviderList_ItemClick(object sender, ItemClickEventArgs args)
+    {
+        var ctrl = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
+        var isChoosingSeveral = severalButton.IsChecked == true || ctrl.HasFlag(CoreVirtualKeyStates.Down);
+        if (!isChoosingSeveral)
+            providerFlyout.Hide();
+    }
+
+    // Turned off, the first of the chosen providers is kept.
+    private void SeveralButton_Click(object sender, RoutedEventArgs args)
+    {
+        var viewModel = ViewModel;
+        if (viewModel is not null && severalButton.IsChecked != true)
+            viewModel.SelectProviders(viewModel.SelectedProviders.Take(1).ToList());
+
+        ShowChosenProviders();
+    }
+
+    // Deselecting leaves the first provider, since a search needs one.
+    private void AllProvidersButton_Click(object sender, RoutedEventArgs args)
     {
         var viewModel = ViewModel;
         if (viewModel is null)
             return;
 
-        var chosen = viewModel.SelectedProviders;
-        allProvidersBox.IsChecked = chosen.Count == viewModel.Providers.Count;
-        foreach (var provider in viewModel.Providers)
-        {
-            var row = providerList.ContainerFromItem(provider);
-            var box = row is null ? null : VisualTree.FindDescendant<CheckBox>(row);
-            box?.IsChecked = chosen.Contains(provider);
-        }
-    }
-
-    private void ChooseProviders(IEnumerable<IMediaSearchProvider> providers)
-    {
-        ViewModel?.SelectProviders(providers);
-
-        // A search needs a provider, so choosing none is ignored and the ticks go back to what is chosen.
+        var isAll = viewModel.SelectedProviders.Count == viewModel.Providers.Count;
+        severalButton.IsChecked = !isAll;
+        viewModel.SelectProviders(isAll ? viewModel.Providers.Take(1) : viewModel.Providers);
         ShowChosenProviders();
-    }
-
-    private void ToggleProvider(IMediaSearchProvider provider)
-    {
-        var chosen = ViewModel?.SelectedProviders.ToList() ?? [];
-        var wasChosen = chosen.Remove(provider);
-        if (!wasChosen)
-            chosen.Add(provider);
-
-        ChooseProviders(chosen);
-    }
-
-    // Choosing one provider alone is done with the flyout, as with a menu. Ticking leaves it open for more.
-    private void ProviderList_ItemClick(object sender, ItemClickEventArgs args)
-    {
-        ChooseProviders([(IMediaSearchProvider)args.ClickedItem]);
-        providerFlyout.Hide();
-    }
-
-    // Also raised when ShowChosenProviders sets a tick, which changes nothing because the tick then matches.
-    private void ProviderBox_Toggled(object sender, RoutedEventArgs args)
-    {
-        var box = (CheckBox)sender;
-        var isTicked = box.IsChecked == true;
-        if (box.Tag is IMediaSearchProvider provider && isTicked != ViewModel?.SelectedProviders.Contains(provider))
-            ToggleProvider(provider);
-    }
-
-    // Space ticks the focused row, as a press on its box does. Enter chooses the row alone.
-    private void ProviderList_PreviewKeyDown(object sender, KeyRoutedEventArgs args)
-    {
-        var focused = FocusManager.GetFocusedElement(providerList.XamlRoot);
-        if (args.Key != VirtualKey.Space || focused is not ListViewItem { Content: IMediaSearchProvider provider })
-            return;
-
-        ToggleProvider(provider);
-        args.Handled = true;
-    }
-
-    // Unticked, the first provider is left, since a search needs one.
-    private void AllProvidersBox_Toggled(object sender, RoutedEventArgs args)
-    {
-        var viewModel = ViewModel;
-        var isAll = allProvidersBox.IsChecked == true;
-        var wasAll = viewModel?.SelectedProviders.Count == viewModel?.Providers.Count;
-        if (viewModel is not null && isAll != wasAll)
-            ChooseProviders(isAll ? viewModel.Providers : viewModel.Providers.Take(1));
     }
 
     // The ways of ranking, listed as the menu opens with the one in use in bold.
@@ -205,15 +227,8 @@ public sealed partial class SearchInput : UserControl
     private void ShowProviderIcons()
     {
         var providers = ViewModel?.SelectedProviders.ToList() ?? [];
+        providerIcons.Icons = providers.Select(provider => provider.Icon);
         ToolTipService.SetToolTip(providerButton, string.Join(", ", providers.Select(provider => provider.DisplayName)));
-
-        // Each icon lies over the one before it, and its shadow shows where its edge is.
-        providerIcons.Children.Clear();
-        foreach (var provider in providers)
-        {
-            var isOverAnother = providerIcons.Children.Count > 0;
-            providerIcons.Children.Add(new IconView { Width = 17, Height = 17, Icon = provider.Icon, HasShadow = isOverAnother });
-        }
     }
 
     private void SelectedProviders_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
@@ -312,6 +327,11 @@ public sealed partial class SearchInput : UserControl
     {
         var isQueryBoxFocused = queryBox.FocusState != FocusState.Unfocused;
         VisualStateManager.GoToState(this, isQueryBoxFocused ? "Focused" : "Unfocused", useTransitions: false);
+
+        // A term typed last has no space after it to complete it, so leaving the box does.
+        if (!isQueryBoxFocused)
+            ViewModel?.ResolveTerms(queryBox.Text);
+
         UpdateResultsPopup();
         UpdateFieldButtons();
     }
@@ -324,34 +344,57 @@ public sealed partial class SearchInput : UserControl
             resultsPopup.IsOpen = false;
     }
 
-    // Pasted text may be a whole search, so the box takes the paste and QueryBox_TextChanged resolves its terms.
-    private void QueryBox_Paste(object sender, TextControlPasteEventArgs args) => _isPasting = true;
+    // Pasted text may be a whole search with terms. The box would show them as text for a moment before they
+    // resolved, so the paste is done here and the box only ever gets the words that are left.
+    private async void QueryBox_Paste(object sender, TextControlPasteEventArgs args)
+    {
+        args.Handled = true;
+        var selectionStart = queryBox.SelectionStart;
+        var selectionLength = queryBox.SelectionLength;
+        var clipboard = Clipboard.GetContent();
+        if (!clipboard.Contains(StandardDataFormats.Text))
+            return;
+
+        var pasted = await clipboard.GetTextAsync();
+        var oneLine = pasted.ReplaceLineEndings(" ");
+        if (TryOpenLink(oneLine))
+            return;
+
+        var text = queryBox.Text.Remove(selectionStart, selectionLength).Insert(selectionStart, oneLine);
+        ViewModel?.Replace(text);
+        queryBox.SelectionStart = queryBox.Text.Length;
+    }
 
     private void QueryBox_TextChanged(object sender, TextChangedEventArgs args)
     {
+        // A space ends a word, which is when a term typed as label:value is complete.
         var text = queryBox.Text;
-        if (_isPasting)
-        {
-            _isPasting = false;
-            ViewModel?.Replace(text);
+        var hadTerms = text.EndsWith(' ') && ViewModel?.ResolveTerms(text) == true;
+        if (hadTerms)
             queryBox.SelectionStart = queryBox.Text.Length;
-        }
-        else if (text.EndsWith(' '))
-        {
-            // A space ends a word, which is when a term typed as label:value is complete.
-            var hadTerms = ViewModel?.ResolveTerms(text) == true;
-            if (hadTerms)
-                queryBox.SelectionStart = queryBox.Text.Length;
-        }
 
         RestartDebounce();
     }
 
-    // Searches now, as one that was asked for, instead of after the pause that follows typing.
+    // Searches now, as one that was asked for, instead of after the pause that follows typing. A term that is
+    // still being typed is completed first.
     private void CommitSearch()
     {
+        ViewModel?.ResolveTerms(queryBox.Text);
         _debounceTimer.Stop();
         ViewModel?.CommitSearchCommand.Execute(null);
+    }
+
+    // A link is opened instead of being searched for. Returns whether the text was one.
+    private bool TryOpenLink(string text)
+    {
+        var link = SearchQuery.ReadLink(text);
+        if (link is null)
+            return false;
+
+        resultsPopup.IsOpen = false;
+        LinkSubmitted?.Invoke(this, link);
+        return true;
     }
 
     // Restarting the timer is what debounces the search.
@@ -542,10 +585,10 @@ public sealed partial class SearchInput : UserControl
     {
         switch (args.Key)
         {
-            // Enter searches without waiting for the debounce, and completes a term still being typed.
             case VirtualKey.Enter:
-                ViewModel?.ResolveTerms(queryBox.Text);
-                CommitSearch();
+                if (!TryOpenLink(queryBox.Text))
+                    CommitSearch();
+
                 args.Handled = true;
                 break;
 
@@ -575,12 +618,12 @@ public sealed partial class SearchInput : UserControl
         args.Handled = true;
     }
 
-    // Opening the chosen result belongs here once there is somewhere to open it.
     private void ResultsList_ItemClick(object sender, ItemClickEventArgs args)
     {
         // Choosing a result is acting on the search, which makes it one that was carried out.
         CommitSearch();
         resultsPopup.IsOpen = false;
+        ResultChosen?.Invoke(this, (MediaSearchResult)args.ClickedItem);
     }
 
     private void RecentsList_ItemClick(object sender, ItemClickEventArgs args)
@@ -629,11 +672,21 @@ public sealed partial class SearchInput : UserControl
 
     private void ClipboardButton_Pasted(object? sender, string text)
     {
+        if (TryOpenLink(text))
+            return;
+
         ViewModel?.Replace(text);
         FocusQueryBox();
     }
 
-    private void Search_Click(object sender, RoutedEventArgs args) => Submitted?.Invoke(this, EventArgs.Empty);
+    private void Search_Click(object sender, RoutedEventArgs args)
+    {
+        if (TryOpenLink(queryBox.Text))
+            return;
+
+        ViewModel?.ResolveTerms(queryBox.Text);
+        Submitted?.Invoke(this, EventArgs.Empty);
+    }
 
     private void ResultsPopup_OpenChanged(object? sender, object args) => UpdateSearchButton();
 
