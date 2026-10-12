@@ -2,15 +2,10 @@
 <UserControl
     x:Class="MediaExport.Search.Controls.SearchTermBox"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Margin="0,2">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <UserControl.Resources>
-        <!--
-            Widens the term from nothing when it is added and narrows it to nothing before it is removed, so
-            it slides in and out and what comes after it in the field moves along. The widths are set in
-            code, because they depend on how wide the term's value is.
-        -->
+        <!-- Slides the term in and out by its width, set in code, so what follows it in the field moves along. -->
         <Storyboard x:Name="slide" Completed="Slide_Completed">
             <DoubleAnimation
                 x:Name="slideWidth"
@@ -23,19 +18,95 @@
             </DoubleAnimation>
         </Storyboard>
 
-        <!-- A ready-made range in a range's flyout. Its Tag says which range. -->
-        <Style x:Key="PresetButtonStyle" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
-            <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
-            <Setter Property="Padding" Value="10,4" />
+        <!-- A value box draws nothing of its own. AcceptsReturn is on only to remove TextBox's own delete button. -->
+        <Style x:Key="TermValueBoxStyle" BasedOn="{StaticResource SearchTextBoxStyle}" TargetType="TextBox">
+            <Setter Property="AcceptsReturn" Value="True" />
+            <Setter Property="Margin" Value="0,4,0,0" />
+            <Setter Property="MaxWidth" Value="160" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="MinWidth" Value="12" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
+
+        <!-- The pickers under a range's box. They don't take the keyboard, so typing carries on with one open. -->
+        <Style x:Key="PickerPresenterStyle" BasedOn="{StaticResource DefaultFlyoutPresenterStyle}" TargetType="FlyoutPresenter">
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Padding" Value="6" />
+        </Style>
+
+        <!-- Steps a duration without taking the keyboard from the box. -->
+        <Style x:Key="StepButtonStyle" BasedOn="{StaticResource DefaultRepeatButtonStyle}" TargetType="RepeatButton">
+            <Setter Property="AllowFocusOnInteraction" Value="False" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Width" Value="26" />
+        </Style>
+
+        <!-- Each button's Tag is the minutes it adds. -->
+        <Flyout
+            x:Name="durationPicker"
+            Closed="Picker_Closed"
+            FlyoutPresenterStyle="{StaticResource PickerPresenterStyle}">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                    <RepeatButton
+                        AutomationProperties.Name="One hour less"
+                        Click="DurationStep_Click"
+                        Style="{StaticResource StepButtonStyle}"
+                        Tag="-60">
+                        <FontIcon FontSize="10" Glyph="&#xE738;" />
+                    </RepeatButton>
+                    <TextBlock
+                        x:Name="hoursText"
+                        MinWidth="30"
+                        VerticalAlignment="Center"
+                        TextAlignment="Center" />
+                    <RepeatButton
+                        AutomationProperties.Name="One hour more"
+                        Click="DurationStep_Click"
+                        Style="{StaticResource StepButtonStyle}"
+                        Tag="60">
+                        <FontIcon FontSize="10" Glyph="&#xE710;" />
+                    </RepeatButton>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                    <RepeatButton
+                        AutomationProperties.Name="Five minutes less"
+                        Click="DurationStep_Click"
+                        Style="{StaticResource StepButtonStyle}"
+                        Tag="-5">
+                        <FontIcon FontSize="10" Glyph="&#xE738;" />
+                    </RepeatButton>
+                    <TextBlock
+                        x:Name="minutesText"
+                        MinWidth="34"
+                        VerticalAlignment="Center"
+                        TextAlignment="Center" />
+                    <RepeatButton
+                        AutomationProperties.Name="Five minutes more"
+                        Click="DurationStep_Click"
+                        Style="{StaticResource StepButtonStyle}"
+                        Tag="5">
+                        <FontIcon FontSize="10" Glyph="&#xE710;" />
+                    </RepeatButton>
+                </StackPanel>
+            </StackPanel>
+        </Flyout>
+
+        <Flyout
+            x:Name="datePicker"
+            Closed="Picker_Closed"
+            FlyoutPresenterStyle="{StaticResource PickerPresenterStyle}">
+            <CalendarView x:Name="calendar" SelectedDatesChanged="Calendar_SelectedDatesChanged" />
+        </Flyout>
     </UserControl.Resources>
 
     <Grid x:Name="content">
-        <!--
-            While a term of words is being edited, the whole term looks like a focused text box, as the search
-            field does, and its remove button slides out from the end. The button's slot is widened and
-            narrowed rather than the button shown and hidden, so the terms after it move along with it.
-        -->
+        <!-- While edited, the term looks like a focused text box and its remove slot widens. -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup>
                 <VisualState x:Name="Resting">
@@ -55,8 +126,6 @@
                 <VisualState x:Name="Editing">
                     <VisualState.Setters>
                         <Setter Target="editingBorder.Visibility" Value="Visible" />
-                        <Setter Target="valueText.Visibility" Value="Collapsed" />
-                        <Setter Target="valueBox.Visibility" Value="Visible" />
                     </VisualState.Setters>
                     <Storyboard>
                         <DoubleAnimation
@@ -74,117 +143,13 @@
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
-        <!--
-            At rest the term is a button like the provider's. This button is that look, and the icon and
-            value lie over it without taking presses, so a press anywhere on the term reaches it. Pressing
-            it starts editing: a term of words turns into a text box where it stands, and a range opens the
-            flyout below.
-        -->
+        <!-- The resting look, and the term when it is selected. A press edits it without the button taking focus. -->
         <Button
             x:Name="restingButton"
-            Margin="0"
             HorizontalAlignment="Stretch"
+            AllowFocusOnInteraction="False"
             Click="RestingButton_Click"
-            Style="{StaticResource FieldButtonStyle}">
-            <FlyoutBase.AttachedFlyout>
-                <!--
-                    Where a range is edited. A range has two ends and its values have a format, which is more
-                    than fits in the field, so it gets room here: a named box or date picker for each end,
-                    and ready-made ranges to pick with one press. Closing the flyout keeps what was set.
-                -->
-                <Flyout
-                    x:Name="rangeFlyout"
-                    Closed="RangeFlyout_Closed"
-                    Placement="BottomEdgeAlignedLeft">
-                    <StackPanel PreviewKeyDown="RangeEditor_PreviewKeyDown" Spacing="12">
-                        <!-- A duration is typed, as 90s, 3m or 1h30m. Either end may be left empty. -->
-                        <StackPanel
-                            x:Name="durationEditor"
-                            Spacing="12"
-                            Visibility="Collapsed">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBox
-                                    x:Name="longerBox"
-                                    Width="120"
-                                    Header="Longer than"
-                                    PlaceholderText="3m" />
-                                <TextBox
-                                    x:Name="shorterBox"
-                                    Width="120"
-                                    Header="Shorter than"
-                                    PlaceholderText="10m" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Button
-                                    Click="DurationPreset_Click"
-                                    Content="Under 4 min"
-                                    Style="{StaticResource PresetButtonStyle}"
-                                    Tag="..4m" />
-                                <Button
-                                    Click="DurationPreset_Click"
-                                    Content="4 to 20 min"
-                                    Style="{StaticResource PresetButtonStyle}"
-                                    Tag="4m..20m" />
-                                <Button
-                                    Click="DurationPreset_Click"
-                                    Content="Over 20 min"
-                                    Style="{StaticResource PresetButtonStyle}"
-                                    Tag="20m.." />
-                                <Button
-                                    Click="DurationPreset_Click"
-                                    Content="Over an hour"
-                                    Style="{StaticResource PresetButtonStyle}"
-                                    Tag="1h.." />
-                            </StackPanel>
-                        </StackPanel>
-
-                        <!-- A date is picked. Each picker only offers days that leave the other end possible. -->
-                        <StackPanel
-                            x:Name="publishedEditor"
-                            Spacing="12"
-                            Visibility="Collapsed">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <CalendarDatePicker
-                                    x:Name="afterPicker"
-                                    Width="150"
-                                    DateChanged="PublishedPicker_DateChanged"
-                                    Header="On or after"
-                                    PlaceholderText="Any time" />
-                                <CalendarDatePicker
-                                    x:Name="beforePicker"
-                                    Width="150"
-                                    DateChanged="PublishedPicker_DateChanged"
-                                    Header="Before"
-                                    PlaceholderText="Any time" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Button
-                                    Click="PublishedPreset_Click"
-                                    Content="Past week"
-                                    Style="{StaticResource PresetButtonStyle}"
-                                    Tag="7" />
-                                <Button
-                                    Click="PublishedPreset_Click"
-                                    Content="Past month"
-                                    Style="{StaticResource PresetButtonStyle}"
-                                    Tag="30" />
-                                <Button
-                                    Click="PublishedPreset_Click"
-                                    Content="Past year"
-                                    Style="{StaticResource PresetButtonStyle}"
-                                    Tag="365" />
-                            </StackPanel>
-                        </StackPanel>
-
-                        <Button
-                            HorizontalAlignment="Right"
-                            Click="RemoveButton_Click"
-                            Content="Remove"
-                            Style="{StaticResource PresetButtonStyle}" />
-                    </StackPanel>
-                </Flyout>
-            </FlyoutBase.AttachedFlyout>
-        </Button>
+            Style="{StaticResource FieldButtonStyle}" />
 
         <Border
             x:Name="editingBorder"
@@ -195,60 +160,68 @@
             IsHitTestVisible="False"
             Visibility="Collapsed" />
 
-        <StackPanel Margin="6,0,0,0" Orientation="Horizontal">
-            <!-- The kind of term, as an icon. Presses on it go through to the button under it. -->
+        <!-- The spacing before the empty remove slot is the term's right padding. -->
+        <StackPanel
+            Margin="6,0,0,0"
+            Orientation="Horizontal"
+            Spacing="6">
+            <StackPanel.Resources>
+                <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+                <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+                <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+                <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+                <x:Double x:Key="TextControlThemeMinWidth">0</x:Double>
+            </StackPanel.Resources>
+
+            <!-- The top margin lowers the icon a pixel, onto the middle of the text beside it. -->
             <FontIcon
                 x:Name="labelIcon"
-                Margin="0,0,5,0"
+                Margin="0,2,0,0"
                 VerticalAlignment="Center"
                 FontSize="12"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 IsHitTestVisible="False" />
 
-            <!-- The value at rest, as text. A range reads as one piece: 3m – 10m, or > 3m with only one end. -->
+            <!-- The value at rest. A range reads as "3m – 10m", or "> 3m" with one end. -->
             <TextBlock
                 x:Name="valueText"
-                Margin="0,0,6,0"
                 VerticalAlignment="Center"
                 IsHitTestVisible="False" />
 
-            <!--
-                The value of a term of words while it is being edited. The term draws the text box look, so
-                this box draws nothing of its own. AcceptsReturn is on only because such a TextBox has no
-                delete button of its own; the term's remove button stands in its place. Enter is taken by
-                ValueBox_PreviewKeyDown before it can add a line.
-            -->
+            <!-- A word term's value while edited, or a range's first end. -->
             <TextBox
                 x:Name="valueBox"
-                MinWidth="12"
-                MinHeight="0"
-                MaxWidth="160"
-                Margin="0,0,6,0"
-                Padding="0"
-                VerticalAlignment="Center"
-                AcceptsReturn="True"
+                GotFocus="ValueBox_GotFocus"
                 LostFocus="ValueBox_LostFocus"
+                Tapped="ValueBox_Tapped"
+                TextChanged="ValueBox_TextChanged"
                 PreviewKeyDown="ValueBox_PreviewKeyDown"
-                Style="{StaticResource SearchTextBoxStyle}"
-                Visibility="Collapsed">
-                <TextBox.Resources>
-                    <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
-                    <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
-                    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
-                    <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
-                    <x:Double x:Key="TextControlThemeMinWidth">0</x:Double>
-                </TextBox.Resources>
-            </TextBox>
+                Style="{StaticResource TermValueBoxStyle}"
+                Visibility="Collapsed" />
 
-            <!--
-                Removes a term of words. The slot is only as wide as the button while the term is being
-                edited; at rest it has no width and the button is cut off. The button doesn't take focus when
-                pressed, because that would end the editing and close the slot before the press had finished.
-            -->
+            <TextBlock
+                x:Name="rangeDash"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="&#x2013;"
+                Visibility="Collapsed" />
+
+            <!-- A range's second end while edited. -->
+            <TextBox
+                x:Name="upperBox"
+                GotFocus="ValueBox_GotFocus"
+                LostFocus="ValueBox_LostFocus"
+                Tapped="ValueBox_Tapped"
+                TextChanged="ValueBox_TextChanged"
+                PreviewKeyDown="ValueBox_PreviewKeyDown"
+                Style="{StaticResource TermValueBoxStyle}"
+                Visibility="Collapsed" />
+
+            <!-- The slot widens only while the term is edited. Taking focus would end the editing. -->
             <Grid x:Name="removeSlot" Width="0">
                 <Button
                     Width="20"
-                    Margin="0,3,2,3"
+                    Margin="0,1,2,1"
                     HorizontalAlignment="Left"
                     AllowFocusOnInteraction="False"
                     AutomationProperties.Name="Remove"
