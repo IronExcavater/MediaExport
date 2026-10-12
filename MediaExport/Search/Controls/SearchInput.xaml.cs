@@ -109,7 +109,8 @@ public sealed partial class SearchInput : UserControl
     }
 
     // A horizontal ScrollViewer gives content only the width it asks for, so fieldContent is kept as wide as the field.
-    private void FieldScroll_SizeChanged(object sender, SizeChangedEventArgs args) => fieldContent.MinWidth = args.NewSize.Width;
+    private void FieldScroll_SizeChanged(object sender, SizeChangedEventArgs args) =>
+        fieldContent.MinWidth = args.NewSize.Width;
 
     private void ProviderFlyout_Opening(object? sender, object args)
     {

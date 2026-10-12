@@ -184,7 +184,8 @@
                         <!-- Recent searches, offered while the field is empty. Each reads as it would in the field. -->
                         <ListView
                             x:Name="recentsList"
-                            Padding="0,4,8,4"
+                            Padding="0,4"
+                            controls:ScrollBarGutter.Mode="Auto"
                             IsItemClickEnabled="True"
                             ItemClick="RecentsList_ItemClick"
                             ItemsSource="{x:Bind ViewModel.RecentSearches, Mode=OneWay}"
@@ -229,11 +230,11 @@
                                             TextTrimming="CharacterEllipsis" />
                                         <Button
                                             Grid.Column="3"
-                                            AutomationProperties.Name="Remove from recent searches"
+                                            AutomationProperties.Name="Remove"
                                             Click="RemoveRecent_Click"
                                             Style="{StaticResource FieldIconButtonStyle}"
                                             Tag="{x:Bind}"
-                                            ToolTipService.ToolTip="Remove from recent searches">
+                                            ToolTipService.ToolTip="Remove">
                                             <FontIcon FontSize="10" Glyph="&#xE711;" />
                                         </Button>
                                     </Grid>
@@ -252,10 +253,9 @@
                             <media:RowMediaView />
                         </StackPanel>
                         <controls:EdgeFade x:Name="resultsFade">
-                            <!-- The padding keeps the rows clear of the scroll bar. -->
                             <ListView
                                 x:Name="resultsList"
-                                Padding="0,0,8,0"
+                                controls:ScrollBarGutter.Mode="Auto"
                                 IsItemClickEnabled="True"
                                 ItemClick="ResultsList_ItemClick"
                                 ItemsSource="{x:Bind ViewModel.FirstPageResults, Mode=OneWay}"
@@ -283,10 +283,10 @@
                 <Button
                     x:Name="deleteButton"
                     controls:VisibilityTransition.Fade="True"
-                    AutomationProperties.Name="Clear search"
+                    AutomationProperties.Name="Clear"
                     Click="DeleteButton_Click"
                     Style="{StaticResource FieldIconButtonStyle}"
-                    ToolTipService.ToolTip="Clear search"
+                    ToolTipService.ToolTip="Clear"
                     Visibility="Collapsed">
                     <FontIcon Glyph="&#xE711;" Style="{StaticResource FieldIconStyle}" />
                 </Button>
@@ -305,11 +305,11 @@
                     </Button.Flyout>
                 </Button>
 
-                <!-- Adds a term to the field with its value ready to type. -->
+                <!-- Adds a term that narrows the results, with its value ready to type. -->
                 <Button
-                    AutomationProperties.Name="Add a search term"
+                    AutomationProperties.Name="Filter results"
                     Style="{StaticResource FieldIconButtonStyle}"
-                    ToolTipService.ToolTip="Add a search term">
+                    ToolTipService.ToolTip="Filter results">
                     <FontIcon Glyph="&#xE71C;" Style="{StaticResource FieldIconStyle}" />
                     <Button.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedRight">

@@ -152,7 +152,8 @@ public sealed partial class SearchTermBox : UserControl
     // A box that already has the keyboard gets no focus event when pressed, so this reopens its picker.
     private void ValueBox_Tapped(object sender, TappedRoutedEventArgs args) => OpenPicker((TextBox)sender);
 
-    private void ValueBox_LostFocus(object sender, RoutedEventArgs args) => DispatcherQueue.TryEnqueue(EndEditingIfLeft);
+    private void ValueBox_LostFocus(object sender, RoutedEventArgs args) =>
+        DispatcherQueue.TryEnqueue(EndEditingIfLeft);
 
     private void Picker_Closed(object? sender, object args) => DispatcherQueue.TryEnqueue(EndEditingIfLeft);
 
@@ -184,7 +185,11 @@ public sealed partial class SearchTermBox : UserControl
 
         _pickedBox = box;
         ShowPickedValue();
-        var options = new FlyoutShowOptions { ShowMode = FlyoutShowMode.Transient, Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft };
+        var options = new FlyoutShowOptions
+        {
+            ShowMode = FlyoutShowMode.Transient,
+            Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft
+        };
         picker.ShowAt(box, options);
     }
 
@@ -236,7 +241,9 @@ public sealed partial class SearchTermBox : UserControl
         if (_isShowingPickedValue || box is null || args.AddedDates.Count == 0)
             return;
 
-        box.Text = SearchTermText.DescribeEnd(SearchQuery.NormalizeEnd(SearchQuery.PublishedLabel, args.AddedDates[0].ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
+        var picked = args.AddedDates[0].ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var end = SearchQuery.NormalizeEnd(SearchQuery.PublishedLabel, picked);
+        box.Text = SearchTermText.DescribeEnd(end);
         box.Focus(FocusState.Programmatic);
         box.SelectionStart = box.Text.Length;
         datePicker.Hide();
