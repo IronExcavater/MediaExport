@@ -3,6 +3,7 @@
     x:Class="MediaExport.Settings.SettingsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:settings="using:MediaExport.Settings"
     Background="Transparent"
     NavigationCacheMode="Required">
 
@@ -24,16 +25,24 @@
                     <!-- Icon -->
                     <FontIcon Grid.Column="0" Glyph="&#xE790;" Margin="0,0,16,0"/>
 
-                    <!-- Title and Description -->
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="Themes" Style="{StaticResource SettingsItemDescriptionStyle}"/>
-                    </StackPanel>
+                    <TextBlock
+                        Grid.Column="1"
+                        Text="Theme"
+                        VerticalAlignment="Center"/>
 
-                    <!-- Control on the right (e.g., ComboBox or ToggleSwitch) -->
-                    <ComboBox Grid.Column="2" Width="100" SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}">
-                        <ComboBoxItem>System</ComboBoxItem>
-                        <ComboBoxItem>Dark</ComboBoxItem>
-                        <ComboBoxItem>Light</ComboBoxItem>
+                    <ComboBox
+                        Grid.Column="2"
+                        Width="140"
+                        ItemsSource="{x:Bind ViewModel.ThemeOptions}"
+                        SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="settings:ThemeOption">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="{x:Bind Glyph}" />
+                                    <TextBlock Text="{x:Bind Name}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
                     </ComboBox>
                 </Grid>
             </Border>

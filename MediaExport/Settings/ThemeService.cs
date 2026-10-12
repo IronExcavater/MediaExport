@@ -1,6 +1,7 @@
 ﻿// Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 using MediaExport.Core.Settings;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 
 namespace MediaExport.Settings;
@@ -30,5 +31,22 @@ public sealed class ThemeService(SettingsStore settings) : IThemeService
 
         if (App.Current.MainWindow is MainWindow mainWindow)
             mainWindow.ApplyTheme(elementTheme);
+        ApplyTitleBarColors(theme);
     }
+    private static void ApplyTitleBarColors(AppTheme theme)
+    {
+        var titleBar = App.Current.MainWindow.AppWindow.TitleBar;
+
+        if (theme == AppTheme.Light)
+        {
+            titleBar.ButtonBackgroundColor = Colors.Transparent;
+            titleBar.ButtonForegroundColor = Colors.Black;
+        }
+        else
+        {
+            titleBar.ButtonBackgroundColor = Colors.Transparent;
+            titleBar.ButtonForegroundColor = Colors.White;
+        }
+    }
+
 }
