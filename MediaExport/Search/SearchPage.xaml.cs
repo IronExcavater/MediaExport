@@ -20,14 +20,26 @@ public sealed partial class SearchPage : Page
     {
         InitializeComponent();
         ViewModel.Results.CollectionChanged += Results_CollectionChanged;
+        ViewModel.SelectedProviders.CollectionChanged += (_, _) => ShowSkeletons();
+        ShowSkeletons();
     }
 
     public SearchViewModel ViewModel { get; } = App.Current.Services.GetRequiredService<SearchViewModel>();
 
-    /// <summary>The shapes of the skeleton cards shown while a page loads: a page's worth, with a square one in every three.</summary>
-    public double[] LoadingShapes { get; } = Enumerable.Range(0, 20)
-        .Select(index => MediaThumbnail.ShapeOf(index % 3 == 1 ? MediaKind.Audio : MediaKind.Video))
-        .ToArray();
+    // More than a page holds, so that a tall window is filled to its bottom edge while a page loads.
+    private const int SkeletonCount = 36;
+
+    // The skeleton cards have the shapes the results will have, which are each chosen provider's in turn. That
+    // puts them in the same rows as the results, so the page doesn't shift when they arrive.
+    private void ShowSkeletons()
+    {
+        var kinds = ViewModel.SelectedProviders.Select(provider => provider.Kind).ToList();
+        if (kinds.Count == 0)
+            kinds.Add(MediaKind.Video);
+
+        var shapes = Enumerable.Range(0, SkeletonCount).Select(index => MediaThumbnail.ShapeOf(kinds[index % kinds.Count]));
+        skeletons.ItemsSource = shapes.ToArray();
+    }
 
     private void PageBox_GotFocus(object sender, RoutedEventArgs args) => pageBox.SelectAll();
 
@@ -69,6 +81,12 @@ public sealed partial class SearchPage : Page
     private void Results_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
         if (args.Action == NotifyCollectionChangedAction.Reset)
-            resultsScroll.ChangeView(horizontalOffset: null, verticalOffset: 0, zoomFactor: null, disableAnimation: true);
+        {
+            resultsScroll.ChangeView(
+                horizontalOffset: null,
+                verticalOffset: 0,
+                zoomFactor: null,
+                disableAnimation: true);
+        }
     }
 }

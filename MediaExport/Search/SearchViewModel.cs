@@ -19,7 +19,11 @@ namespace MediaExport.Search;
 /// <param name="ProviderIcons">The resource keys of its sources' icons.</param>
 /// <param name="Terms">Its terms other than the source and the ranking.</param>
 /// <param name="Words">The words it searches for.</param>
-public sealed record RecentSearch(string FullText, IReadOnlyList<string> ProviderIcons, IReadOnlyList<SearchTerm> Terms, string Words);
+public sealed record RecentSearch(
+    string FullText,
+    IReadOnlyList<string> ProviderIcons,
+    IReadOnlyList<SearchTerm> Terms,
+    string Words);
 
 /// <summary>Coordinates the shared search query, selected source, and current results.</summary>
 public sealed partial class SearchViewModel : ObservableObject
@@ -95,6 +99,10 @@ public sealed partial class SearchViewModel : ObservableObject
     // The page that last had results to show, which is gone back to from a page that has none.
     private int _shownPage = 1;
 
+    // The furthest page of the search that has been shown. Pages are found one after another, so the furthest that
+    // can be gone to is the one after it.
+    private int _furthestPage = 1;
+
     // A different search starts again from its first page, with its last page unknown.
     partial void OnQueryChanged(string value) => StartFromFirstPage();
 
@@ -113,13 +121,16 @@ public sealed partial class SearchViewModel : ObservableObject
     }
 
     // The sources as they are named in a message: the provider's name, or how many there are.
-    private string SourceName => SelectedProviders.Count == 1 ? SelectedProviders[0].DisplayName : $"{SelectedProviders.Count} sources";
+    private string SourceName => SelectedProviders.Count == 1
+        ? SelectedProviders[0].DisplayName
+        : $"{SelectedProviders.Count} sources";
 
     private void StartFromFirstPage()
     {
         Page = 1;
         _lastPage = null;
         _shownPage = 1;
+        _furthestPage = 1;
     }
 
     /// <summary>The whole search as text, such as <c>source:youtube sort:views exact:"lofi beats" study</c>.</summary>
@@ -242,8 +253,10 @@ public sealed partial class SearchViewModel : ObservableObject
         get
         {
             var search = _shownSearch;
-            var exact = search.Terms.Where(term => term.Label == SearchQuery.ExactLabel).Select(term => $"\"{term.Value}\"");
-            var asked = string.Join(' ', exact.Prepend(search.Text).Where(part => part.Length > 0));
+            var exactTerms = search.Terms.Where(term => term.Label == SearchQuery.ExactLabel);
+            var quoted = exactTerms.Select(term => $"\"{term.Value}\"");
+            var parts = quoted.Prepend(search.Text).Where(part => part.Length > 0);
+            var asked = string.Join(' ', parts);
             var hasWords = asked.Length > 0;
 
             var ranking = hasWords ? "Results" : "Popular";
@@ -256,9 +269,14 @@ public sealed partial class SearchViewModel : ObservableObject
                 title += $" by {author}";
 
             // The other terms follow in the words of their tooltips.
-            var others = search.Terms.Where(term => term.Label is SearchQuery.ExcludeLabel or SearchQuery.DurationLabel or SearchQuery.PublishedLabel);
-            foreach (var explanation in others.Select(SearchTermText.Explain).Where(explanation => explanation.Length > 0))
-                title += $", {char.ToLowerInvariant(explanation[0])}{explanation[1..]}";
+            var others = search.Terms.Where(term =>
+                term.Label is SearchQuery.ExcludeLabel or SearchQuery.DurationLabel or SearchQuery.PublishedLabel);
+            var explanations = others.Select(SearchTermText.Explain).Where(explanation => explanation.Length > 0);
+            foreach (var explanation in explanations)
+            {
+                var firstLetter = char.ToLowerInvariant(explanation[0]);
+                title += $", {firstLetter}{explanation[1..]}";
+            }
 
             return title;
         }
@@ -291,8 +309,16 @@ public sealed partial class SearchViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(HasNextPage))]
     private Task NextPageAsync() => ShowPageAsync(Page + 1);
 
-    /// <summary>Shows a page by its number. One past the end of the search goes back to the page that was showing.</summary>
-    public Task GoToPageAsync(int page) => ShowPageAsync(Math.Max(1, page));
+    /// <summary>
+    /// Shows a page by its number. A number past the pages seen so far goes to the one after them, and from there
+    /// back to the page that was showing if the search has ended.
+    /// </summary>
+    public Task GoToPageAsync(int page)
+    {
+        var lastReachable = _lastPage ?? _furthestPage + 1;
+        var reachable = Math.Clamp(page, 1, lastReachable);
+        return ShowPageAsync(reachable);
+    }
 
     // Pages are stepped one at a time, as a source reads every result before a page and doesn't say how many exist.
     private Task ShowPageAsync(int page)
@@ -349,8 +375,10 @@ public sealed partial class SearchViewModel : ObservableObject
         var search = SearchQuery.Parse(fullText, IsKnownTerm);
         var source = search.Terms.LastOrDefault(term => term.Label == SearchQuery.SourceLabel);
         var sourceIds = source?.Values ?? [];
-        var icons = sourceIds.Select(FindProvider).OfType<IMediaSearchProvider>().Select(provider => provider.Icon).ToList();
-        var terms = search.Terms.Where(term => term.Label is not (SearchQuery.SourceLabel or SearchQuery.SortLabel)).ToList();
+        var sources = sourceIds.Select(FindProvider).OfType<IMediaSearchProvider>();
+        var icons = sources.Select(provider => provider.Icon).ToList();
+        var isShownAsTerm = (SearchTerm term) => term.Label is not (SearchQuery.SourceLabel or SearchQuery.SortLabel);
+        var terms = search.Terms.Where(isShownAsTerm).ToList();
         return new RecentSearch(fullText, icons, terms, search.Text);
     }
 
@@ -449,7 +477,11 @@ public sealed partial class SearchViewModel : ObservableObject
     private int ShareOfPage => (int)Math.Ceiling(PageSize / (double)Math.Max(1, SelectedProviders.Count));
 
     // Asks every provider for its share of the page at once, then deals their results out in turn to mix them.
-    private async Task<IReadOnlyList<MediaSearchResult>> FindAsync(IReadOnlyList<IMediaSearchProvider> providers, string query, int page, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<MediaSearchResult>> FindAsync(
+        IReadOnlyList<IMediaSearchProvider> providers,
+        string query,
+        int page,
+        CancellationToken cancellationToken)
     {
         var share = ShareOfPage;
         var skip = (page - 1) * share;
@@ -471,6 +503,7 @@ public sealed partial class SearchViewModel : ObservableObject
     private void Show(IReadOnlyList<MediaSearchResult> found, SearchQuery search, int page)
     {
         _shownPage = page;
+        _furthestPage = Math.Max(_furthestPage, page);
         var withinRanges = found.Where(search.Matches).ToList();
         foreach (var result in withinRanges)
         {
