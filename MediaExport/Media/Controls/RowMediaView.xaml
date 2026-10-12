@@ -11,7 +11,7 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <!-- With no media the view is a skeleton of itself: bars where the title and byline will be. -->
+        <!-- With no media, the view is a skeleton of itself. -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup>
                 <VisualState x:Name="Loaded" />
@@ -26,7 +26,7 @@
 
         <local:MediaThumbnail Height="56" Media="{x:Bind Media, Mode=OneWay}" />
 
-        <!-- The bars are as tall, with their margins, as the lines of text they stand in for. -->
+        <!-- Each bar is as tall, with its margins, as the text it stands in for. -->
         <StackPanel
             x:Name="skeleton"
             Grid.Column="1"

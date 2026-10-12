@@ -14,8 +14,7 @@ public sealed partial class MediaByline : MediaView
         InitializeComponent();
     }
 
-    // The values that aren't known are hidden along with the dot before them, and a dot only shows when there
-    // is something before it to separate its value from.
+    // An unknown value is hidden with the dot before it, and a dot only shows after another value.
     protected override void OnMediaChanged(MediaSearchResult? oldMedia, MediaSearchResult? newMedia)
     {
         var hasCreator = !string.IsNullOrEmpty(newMedia?.Creator);

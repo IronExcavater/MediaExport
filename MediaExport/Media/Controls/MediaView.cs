@@ -12,19 +12,7 @@ using System.Linq;
 
 namespace MediaExport.Media.Controls;
 
-/// <summary>
-/// The base of every control that shows one media result. A variant is a XAML file whose root is this class
-/// and which arranges the same parts in its own way:
-/// <list type="bullet">
-/// <item><see cref="MediaThumbnail"/>: the picture, with the duration over it.</item>
-/// <item><see cref="MediaByline"/>: the line saying where it is from, who made it, its views and its age.</item>
-/// <item><see cref="RowMediaView"/>: a row, for lists.</item>
-/// <item><see cref="CardMediaView"/>: a card, for grids.</item>
-/// </list>
-/// A variant given no media shows a skeleton of itself, which is how a result that is still loading looks.
-/// The variants share their words too: the <b>thumbnail</b> is the picture, the <b>title</b> is its name, and
-/// the <b>byline</b> is the line under it saying who made it, its views and its age, after its provider's icon.
-/// </summary>
+/// <summary>The base of every control that shows one media result. Without media it shows its skeleton.</summary>
 public abstract partial class MediaView : UserControl
 {
     public static readonly DependencyProperty MediaProperty = DependencyProperty.Register(
@@ -63,10 +51,7 @@ public abstract partial class MediaView : UserControl
         set => SetValue(MediaProperty, value);
     }
 
-    /// <summary>
-    /// The icon of the provider with this id, as a resource key for an <c>IconView</c>. A variant shows where
-    /// its media came from with <c>{x:Bind ProviderIcon(Media.ProviderId), Mode=OneWay}</c>.
-    /// </summary>
+    /// <summary>The resource key of a provider's icon, for <c>{x:Bind ProviderIcon(Media.ProviderId)}</c>.</summary>
     protected string? ProviderIcon(string? providerId)
     {
         var providers = App.Current.Services.GetServices<IMediaSearchProvider>();
@@ -74,17 +59,12 @@ public abstract partial class MediaView : UserControl
         return provider?.Icon;
     }
 
-    /// <summary>
-    /// Called when <see cref="Media"/> changes, for a variant with something to do in code. It is given both
-    /// values so it can redo only what is different: a list reuses its rows, so a view is handed one media
-    /// after another, often with parts in common.
-    /// </summary>
+    /// <summary>Called when <see cref="Media"/> changes. A reused view can redo only what differs.</summary>
     protected virtual void OnMediaChanged(MediaSearchResult? oldMedia, MediaSearchResult? newMedia)
     {
     }
 
-    // A view with no media shows a skeleton of itself, for a result that is still loading. A variant draws its
-    // skeleton in a visual state named Skeleton; one that has no such state, such as the thumbnail, is plain.
+    // With no media a variant goes to its Skeleton visual state; one without it, such as the thumbnail, is plain.
     private void UpdateSkeleton()
     {
         var isLoading = Media is null;
