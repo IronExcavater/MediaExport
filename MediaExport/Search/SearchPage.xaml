@@ -67,7 +67,7 @@
                         Text="{x:Bind ViewModel.Page, Mode=OneWay}"
                         TextAlignment="Center"
                         TextWrapping="Wrap"
-                        ToolTipService.ToolTip="Go to a page">
+                        ToolTipService.ToolTip="Go to page">
                         <TextBox.Resources>
                             <!-- Parts of TextBox's template are held to these sizes as well as the box itself. -->
                             <x:Double x:Key="TextControlThemeMinWidth">0</x:Double>
@@ -90,28 +90,26 @@
                     </Button>
                 </StackPanel>
 
-                <!-- Which results are showing, or why there are none. A search that is still going shows as a bar instead. -->
-                <Grid MinHeight="16">
-                    <TextBlock
-                        MaxWidth="320"
-                        HorizontalAlignment="Center"
-                        HorizontalTextAlignment="Center"
-                        Style="{StaticResource SecondaryTextStyle}"
-                        Text="{x:Bind ViewModel.Summary, Mode=OneWay}" />
-                    <ProgressBar
-                        VerticalAlignment="Center"
-                        IsIndeterminate="True"
-                        Visibility="{x:Bind ViewModel.IsSearching, Mode=OneWay}" />
-                </Grid>
+                <!-- Which results are showing, or why there are none. MinHeight keeps its room while it is empty. -->
+                <TextBlock
+                    MinHeight="16"
+                    MaxWidth="320"
+                    HorizontalAlignment="Center"
+                    HorizontalTextAlignment="Center"
+                    Style="{StaticResource SecondaryTextStyle}"
+                    Text="{x:Bind ViewModel.Summary, Mode=OneWay}" />
             </StackPanel>
         </Grid>
 
         <controls:EdgeFade Grid.Row="1">
             <!-- Anchoring is off (NaN), as it left the page part-way down when a search replaced the results. -->
-            <ScrollViewer x:Name="resultsScroll" VerticalAnchorRatio="NaN">
-                <Grid Margin="4,4,16,4">
+            <ScrollViewer
+                x:Name="resultsScroll"
+                controls:ScrollBarGutter.Mode="Auto"
+                VerticalAnchorRatio="NaN">
+                <Grid Margin="4">
                     <!-- Skeleton cards in the same grid while a page loads, so the results fill in without a jump. -->
-                    <ItemsRepeater ItemsSource="{x:Bind LoadingShapes}" Visibility="{x:Bind ViewModel.IsSearching, Mode=OneWay}">
+                    <ItemsRepeater x:Name="skeletons" Visibility="{x:Bind ViewModel.IsSearching, Mode=OneWay}">
                         <ItemsRepeater.Layout>
                             <controls:JustifiedLayout ItemPadding="16" RowHeight="150" RowSpacing="4" />
                         </ItemsRepeater.Layout>

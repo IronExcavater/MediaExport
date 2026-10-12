@@ -24,7 +24,10 @@ public sealed partial class ExportViewModel : ObservableObject
     // The link being read. A newer one replaces it, and what an older one finds is ignored.
     private CancellationTokenSource? _reading;
 
-    public ExportViewModel(ActivityViewModel activity, SettingsStore settings, IEnumerable<IMediaSearchProvider> providers)
+    public ExportViewModel(
+        ActivityViewModel activity,
+        SettingsStore settings,
+        IEnumerable<IMediaSearchProvider> providers)
     {
         _activity = activity;
         _settings = settings;
