@@ -65,6 +65,9 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
     /// <summary>The label of a term for who made the media.</summary>
     public const string AuthorLabel = "author";
 
+    /// <summary>Another way to write <see cref="AuthorLabel"/>, which is read as it.</summary>
+    public const string CreatorLabel = "creator";
+
     /// <summary>The label of the term for a range of durations, written as <c>duration:3m..10m</c>.</summary>
     public const string DurationLabel = "duration";
 
@@ -227,6 +230,15 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
     [GeneratedRegex(@"^(?<hours>\d+):(?<minutes>\d{1,2})$")]
     private static partial Regex Clock();
 
+    /// <summary>The link that text is, or <c>null</c> if it is anything else, such as words to search for.</summary>
+    public static Uri? ReadLink(string text)
+    {
+        var isLink = Uri.TryCreate(text.Trim(), UriKind.Absolute, out var link);
+        var isWebLink = isLink && link!.Scheme is "http" or "https";
+        var isOneWord = !text.Trim().Any(char.IsWhiteSpace);
+        return isWebLink && isOneWord ? link : null;
+    }
+
     /// <summary>How many terms with a label one search can have.</summary>
     public static int MaxCount(string label) => label switch
     {
@@ -291,7 +303,7 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
     private static SearchTerm? ReadTerm(Match part)
     {
         if (part.Groups["quoted"].Success)
-            return new SearchTerm(part.Groups["label"].Value.ToLowerInvariant(), part.Groups["quoted"].Value);
+            return new SearchTerm(ReadLabel(part.Groups["label"].Value), part.Groups["quoted"].Value);
 
         var word = part.Value;
         var separator = word.IndexOf(':');
@@ -301,6 +313,12 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
 
         var label = word[..separator];
         var value = word[(separator + 1)..];
-        return label.All(char.IsAsciiLetter) ? new SearchTerm(label.ToLowerInvariant(), value) : null;
+        return label.All(char.IsAsciiLetter) ? new SearchTerm(ReadLabel(label), value) : null;
+    }
+
+    private static string ReadLabel(string written)
+    {
+        var label = written.ToLowerInvariant();
+        return label == CreatorLabel ? AuthorLabel : label;
     }
 }
