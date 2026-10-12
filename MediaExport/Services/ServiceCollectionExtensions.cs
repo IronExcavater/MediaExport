@@ -30,7 +30,7 @@ public static class ServiceCollectionExtensions
 
         // Search providers, in the order they are listed in the search field.
         services.AddSingleton<IMediaSearchProvider, YouTubeSearchProvider>();
-        services.AddSingleton<IMediaSearchProvider, YouTubeCopySearchProvider>();
+        services.AddSingleton<IMediaSearchProvider, SoundCloudSearchProvider>();
 
         services.AddSingleton<ExportViewModel>();
         services.AddSingleton<SearchViewModel>();

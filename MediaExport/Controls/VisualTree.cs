@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml.Media;
 
 namespace MediaExport.Controls;
 
-/// <summary>Finds elements by their place in the visual tree.</summary>
+/// <summary>Answers where an element is in the visual tree.</summary>
 public static class VisualTree
 {
     /// <summary>Whether an element is the ancestor itself or somewhere inside it.</summary>
@@ -20,20 +20,5 @@ public static class VisualTree
             element = VisualTreeHelper.GetParent(element);
         }
         return false;
-    }
-
-    /// <summary>The first element of a type inside another, such as a part of its template; <c>null</c> if there is none.</summary>
-    public static T? FindDescendant<T>(DependencyObject parent)
-        where T : DependencyObject
-    {
-        var childCount = VisualTreeHelper.GetChildrenCount(parent);
-        for (var index = 0; index < childCount; index++)
-        {
-            var child = VisualTreeHelper.GetChild(parent, index);
-            var found = child as T ?? FindDescendant<T>(child);
-            if (found is not null)
-                return found;
-        }
-        return null;
     }
 }

@@ -54,8 +54,10 @@ public sealed partial class SearchTermBox : UserControl
             ShowValue();
             ShowParts();
 
-            // The icon stands for the label, so the label is given in words to a tooltip and to screen readers.
-            ToolTipService.SetToolTip(this, value?.Label);
+            // The icon stands for the label, so a tooltip says in words what the term does. It is on the resting
+            // button, which leaves the boxes without one while the term is edited.
+            var explanation = Explain(value);
+            ToolTipService.SetToolTip(restingButton, explanation.Length > 0 ? explanation : null);
             AutomationProperties.SetName(restingButton, value?.ToString());
             AutomationProperties.SetName(valueBox, IsRange ? $"{value?.Label} from" : value?.Label);
             AutomationProperties.SetName(upperBox, $"{value?.Label} to");
@@ -343,6 +345,36 @@ public sealed partial class SearchTermBox : UserControl
             return $"{lower} \u2013 {upper}";
 
         return lower.Length > 0 ? $"> {lower}" : $"< {upper}";
+    }
+
+    // What the term asks of a result, as a sentence. A term with no value yet says nothing.
+    private static string Explain(SearchTerm? term)
+    {
+        if (term is null || term.Value.Length == 0)
+            return string.Empty;
+
+        if (!SearchQuery.IsRange(term.Label))
+        {
+            return term.Label switch
+            {
+                SearchQuery.ExactLabel => $"Has the exact words \"{term.Value}\"",
+                SearchQuery.ExcludeLabel => $"Doesn't have \"{term.Value}\"",
+                SearchQuery.AuthorLabel => $"By {term.Value}",
+                _ => term.ToString()
+            };
+        }
+
+        var range = SearchRange.Parse(term.Value);
+        var lower = DescribeEnd(range.Lower);
+        var upper = DescribeEnd(range.Upper);
+        var isDuration = term.Label == SearchQuery.DurationLabel;
+        if (lower.Length > 0 && upper.Length > 0)
+            return isDuration ? $"Between {lower} and {upper} long" : $"Published between {lower} and {upper}";
+
+        if (lower.Length > 0)
+            return isDuration ? $"Longer than {lower}" : $"Published after {lower}";
+
+        return isDuration ? $"Shorter than {upper}" : $"Published before {upper}";
     }
 
     // A date reads as day, month and year, a year alone as its first of January. Anything else reads as written.
