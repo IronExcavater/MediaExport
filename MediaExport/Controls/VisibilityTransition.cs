@@ -8,18 +8,8 @@ using System;
 
 namespace MediaExport.Controls;
 
-/// <summary>
-/// The transition WinUI has no property for: one that runs when an element's <c>Visibility</c> changes. It is
-/// set on an element beside the built-in ones such as <c>OpacityTransition</c>:
-/// <code>
-/// &lt;Button controls:VisibilityTransition.Fade="True" /&gt;
-/// </code>
-/// </summary>
-/// <remarks>
-/// Collapsing an element hides it at once, so an <c>OpacityTransition</c> can't fade it out. This uses the
-/// composition layer's show and hide animations, which run on the picture of the element and keep it on
-/// screen until the animation ends.
-/// </remarks>
+/// <summary>Fades an element when its <c>Visibility</c> changes, which WinUI has no transition for.</summary>
+/// <remarks>Uses composition show and hide animations, which keep a collapsed element drawn until they end.</remarks>
 public static class VisibilityTransition
 {
     /// <summary>How long a fade lasts. An <c>OpacityTransition</c> beside one of these should last as long.</summary>

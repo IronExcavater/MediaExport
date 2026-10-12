@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="MediaExport.Controls.ClipboardButton"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Copies when there is something to copy, pastes when there isn't. Right-clicking offers both. -->
+    <Button
+        x:Name="button"
+        Click="Button_Click"
+        Style="{StaticResource FieldIconButtonStyle}">
+        <!-- Two overlapping icons that cross-fade. -->
+        <Grid>
+            <FontIcon
+                x:Name="copyIcon"
+                Glyph="&#xE8C8;"
+                Style="{StaticResource FieldIconStyle}" />
+            <FontIcon
+                x:Name="pasteIcon"
+                Glyph="&#xE77F;"
+                Style="{StaticResource FieldIconStyle}" />
+        </Grid>
+        <Button.ContextFlyout>
+            <MenuFlyout Opening="Menu_Opening" Placement="BottomEdgeAlignedRight">
+                <MenuFlyoutItem
+                    x:Name="copyItem"
+                    Click="Copy_Click"
+                    Text="Copy to clipboard">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE8C8;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem
+                    x:Name="pasteItem"
+                    Click="Paste_Click"
+                    Text="Paste from clipboard">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE77F;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+            </MenuFlyout>
+        </Button.ContextFlyout>
+    </Button>
+</UserControl>
