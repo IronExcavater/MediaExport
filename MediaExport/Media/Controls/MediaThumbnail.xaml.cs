@@ -10,10 +10,7 @@ using Windows.Foundation;
 
 namespace MediaExport.Media.Controls;
 
-/// <summary>
-/// A media result's thumbnail, with its duration over it. It keeps the right shape for its media by itself:
-/// give it a height and it works out its width, or let it stretch across and it works out its height.
-/// </summary>
+/// <summary>A media result's thumbnail, with its duration over it, sized to its picture's shape.</summary>
 public sealed partial class MediaThumbnail : MediaView
 {
     // Wide enough for the largest size a thumbnail is shown at, on a sharp display.
@@ -33,8 +30,7 @@ public sealed partial class MediaThumbnail : MediaView
         if (oldMedia?.Kind != newMedia?.Kind)
             InvalidateMeasure();
 
-        // The picture is only fetched again when it is a different picture. Clearing it for media without
-        // one also stops a reused row showing the previous media's picture.
+        // Fetched only when the picture differs, and cleared so a reused row doesn't show the previous media's picture.
         var thumbnailUri = newMedia?.ThumbnailUri;
         if (oldMedia?.ThumbnailUri != thumbnailUri)
             image.Source = thumbnailUri is null ? null : new BitmapImage(thumbnailUri) { DecodePixelWidth = DecodeWidth };

@@ -13,11 +13,7 @@
         </Style>
     </UserControl.Resources>
 
-    <!--
-        The creator's name is the part that is cut short when the line doesn't fit; the views and age after it
-        always show in full. The grid is aligned left so that it is only as wide as its content: the name's
-        star column is then no wider than the name, and shrinks first when there isn't room.
-    -->
+    <!-- The left-aligned grid is only as wide as its content, so the creator's name is what gets cut short. -->
     <Grid HorizontalAlignment="Left" ColumnSpacing="6">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
@@ -36,11 +32,7 @@
             Text="{x:Bind Media.Creator, Mode=OneWay}"
             TextTrimming="CharacterEllipsis" />
 
-        <!--
-            Each value has its own text, and a dot before it that OnMediaChanged shows only when there is
-            something on both sides of it. A value that isn't known is empty text: FallbackValue is what a
-            binding gives when the value is null, since a function isn't called for null.
-        -->
+        <!-- A dot shows only between two values (see OnMediaChanged). FallbackValue covers a null value. -->
         <StackPanel
             Grid.Column="2"
             Orientation="Horizontal"
