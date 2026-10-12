@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 using MediaExport.Activity;
+using MediaExport.Core.Media.Models;
 using MediaExport.Core.Settings;
 using MediaExport.Export;
 using MediaExport.Search;
@@ -41,6 +42,8 @@ public sealed partial class MainWindow : Window
     /// <summary>The search state shared by the title bar and Search page.</summary>
     public SearchViewModel Search { get; } = App.Current.Services.GetRequiredService<SearchViewModel>();
 
+    private readonly ExportViewModel _export = App.Current.Services.GetRequiredService<ExportViewModel>();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -55,6 +58,9 @@ public sealed partial class MainWindow : Window
 
         RestoreWindowSize();
         RestoreSearch();
+
+        // Whatever opens media, the Export page is where it shows.
+        _export.Opened += (_, _) => GoTo("Export");
         Closed += (_, _) =>
         {
             _settings.Current.LastSearch = Search.FullText;
@@ -152,6 +158,10 @@ public sealed partial class MainWindow : Window
         GoTo("Search");
         Search.CommitSearchCommand.Execute(null);
     }
+
+    private void SearchInput_ResultChosen(object? sender, MediaSearchResult media) => _export.Open(media);
+
+    private async void SearchInput_LinkSubmitted(object? sender, Uri link) => await _export.OpenLinkAsync(link);
 
     private void FocusSearch_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {

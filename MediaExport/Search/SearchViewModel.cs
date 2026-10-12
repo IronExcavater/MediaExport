@@ -14,11 +14,12 @@ using System.Threading.Tasks;
 
 namespace MediaExport.Search;
 
-/// <summary>A search that was carried out earlier, as it is listed for doing again.</summary>
+/// <summary>A search that was carried out earlier, in the parts it is listed in for doing again.</summary>
 /// <param name="FullText">The whole search as text, as <see cref="SearchViewModel.FullText"/> writes it.</param>
-/// <param name="Words">The search without its source, which <paramref name="ProviderIcon"/> shows instead.</param>
-/// <param name="ProviderIcon">The resource key of the source's icon, or <c>null</c> if the source is gone.</param>
-public sealed record RecentSearch(string FullText, string Words, string? ProviderIcon);
+/// <param name="ProviderIcons">The resource keys of its sources' icons.</param>
+/// <param name="Terms">Its terms other than the source and the ranking.</param>
+/// <param name="Words">The words it searches for.</param>
+public sealed record RecentSearch(string FullText, IReadOnlyList<string> ProviderIcons, IReadOnlyList<SearchTerm> Terms, string Words);
 
 /// <summary>Coordinates the shared search query, selected source, and current results.</summary>
 public sealed partial class SearchViewModel : ObservableObject
@@ -296,12 +297,12 @@ public sealed partial class SearchViewModel : ObservableObject
 
     private RecentSearch ToRecentSearch(string fullText)
     {
-        // Only the source is taken out, so the other terms stay in the words as they were written.
-        var search = SearchQuery.Parse(fullText, term => term.Label == SearchQuery.SourceLabel);
-        var source = search.Terms.LastOrDefault();
-        var firstSourceId = source?.Values.FirstOrDefault();
-        var provider = firstSourceId is null ? null : FindProvider(firstSourceId);
-        return new RecentSearch(fullText, search.Text, provider?.Icon);
+        var search = SearchQuery.Parse(fullText, IsKnownTerm);
+        var source = search.Terms.LastOrDefault(term => term.Label == SearchQuery.SourceLabel);
+        var sourceIds = source?.Values ?? [];
+        var icons = sourceIds.Select(FindProvider).OfType<IMediaSearchProvider>().Select(provider => provider.Icon).ToList();
+        var terms = search.Terms.Where(term => term.Label is not (SearchQuery.SourceLabel or SearchQuery.SortLabel)).ToList();
+        return new RecentSearch(fullText, icons, terms, search.Text);
     }
 
     /// <summary>Searches the selected providers and replaces <see cref="Results"/> with the newest response.</summary>
@@ -323,7 +324,9 @@ public sealed partial class SearchViewModel : ObservableObject
         HasNextPage = false;
         SearchedQuery = query;
 
-        if (query.Length == 0)
+        // A link is opened, not searched for.
+        var isLink = SearchQuery.ReadLink(Query) is not null;
+        if (query.Length == 0 || isLink)
             return;
 
         var providers = SelectedProviders.ToList();

@@ -75,55 +75,56 @@
                                         </Style>
                                     </Flyout.FlyoutPresenterStyle>
                                     <StackPanel>
-                                        <!-- Ticked while every provider is chosen. Unticking it goes back to one. -->
-                                        <CheckBox
-                                            x:Name="allProvidersBox"
-                                            Margin="16,0"
-                                            Checked="AllProvidersBox_Toggled"
-                                            Content="All sources"
-                                            Unchecked="AllProvidersBox_Toggled" />
-                                        <Border
-                                            Height="1"
-                                            Margin="0,2"
-                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                    <Grid Margin="6,4,6,2" ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
 
-                                        <!-- A press on a row chooses that provider alone. Its box adds or removes it. -->
-                                        <ListView
-                                            x:Name="providerList"
-                                            IsItemClickEnabled="True"
-                                            ItemClick="ProviderList_ItemClick"
-                                            ItemsSource="{x:Bind ViewModel.Providers, Mode=OneWay}"
-                                            PreviewKeyDown="ProviderList_PreviewKeyDown"
-                                            SelectionMode="None">
-                                            <ListView.ItemTemplate>
-                                                <DataTemplate x:DataType="providers:IMediaSearchProvider">
-                                                    <StackPanel AutomationProperties.Name="{x:Bind DisplayName}" Orientation="Horizontal">
-                                                        <CheckBox
-                                                            MinWidth="0"
-                                                            AutomationProperties.Name="{x:Bind DisplayName}"
-                                                            Checked="ProviderBox_Toggled"
-                                                            IsTabStop="False"
-                                                            Loaded="ProviderBox_Loaded"
-                                                            Tag="{x:Bind}"
-                                                            Unchecked="ProviderBox_Toggled" />
-                                                        <controls:IconView
-                                                            Width="16"
-                                                            Height="16"
-                                                            Margin="0,0,12,0"
-                                                            Icon="{x:Bind Icon}" />
-                                                        <TextBlock VerticalAlignment="Center" Text="{x:Bind DisplayName}" />
-                                                    </StackPanel>
-                                                </DataTemplate>
-                                            </ListView.ItemTemplate>
-                                        </ListView>
+                                        <!-- While on, a press adds or removes a provider, as it does with Ctrl held. -->
+                                        <ToggleButton
+                                            x:Name="severalButton"
+                                            Padding="8,4"
+                                            Click="SeveralButton_Click"
+                                            Content="Select several"
+                                            FontSize="12" />
+                                        <HyperlinkButton
+                                            x:Name="allProvidersButton"
+                                            Grid.Column="1"
+                                            Padding="8,4"
+                                            Click="AllProvidersButton_Click"
+                                            Content="Select all"
+                                            FontSize="12" />
+                                    </Grid>
+
+                                    <!-- A press chooses one provider and closes, unless several are being chosen. -->
+                                    <ListView
+                                        x:Name="providerList"
+                                        IsItemClickEnabled="True"
+                                        IsMultiSelectCheckBoxEnabled="False"
+                                        ItemClick="ProviderList_ItemClick"
+                                        ItemsSource="{x:Bind ViewModel.Providers, Mode=OneWay}"
+                                        SelectionChanged="ProviderList_SelectionChanged"
+                                        SelectionMode="Extended">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate x:DataType="providers:IMediaSearchProvider">
+                                                <StackPanel
+                                                    AutomationProperties.Name="{x:Bind DisplayName}"
+                                                    Orientation="Horizontal"
+                                                    Spacing="12">
+                                                    <controls:IconView
+                                                        Width="16"
+                                                        Height="16"
+                                                        Icon="{x:Bind Icon}" />
+                                                    <TextBlock VerticalAlignment="Center" Text="{x:Bind DisplayName}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
                                     </StackPanel>
                                 </Flyout>
                             </Button.Flyout>
-                            <StackPanel
-                                x:Name="providerIcons"
-                                VerticalAlignment="Center"
-                                Orientation="Horizontal"
-                                Spacing="-6" />
+                            <controls:IconStack x:Name="providerIcons" VerticalAlignment="Center" />
                         </Button>
                         <Border
                             x:Name="providerDivider"
@@ -150,9 +151,11 @@
                             </ItemsRepeater.ItemTemplate>
                         </ItemsRepeater>
 
+                        <!-- The margin undoes the field's inset, so the box is the field's height and its text sits mid-field. -->
                         <TextBox
                             x:Name="queryBox"
                             Grid.Column="3"
+                            Margin="0,-2"
                             AutomationProperties.Name="Search"
                             GotFocus="QueryBox_FocusChanged"
                             KeyDown="QueryBox_KeyDown"
@@ -220,7 +223,7 @@
                             </TransitionCollection>
                         </Border.Transitions>
                         <Grid>
-                        <!-- Recent searches, offered while the field is empty. -->
+                        <!-- Recent searches, offered while the field is empty. Each reads as it would in the field. -->
                         <ListView
                             x:Name="recentsList"
                             Padding="0,4,8,4"
@@ -231,31 +234,43 @@
                             PreviewKeyDown="ResultsList_PreviewKeyDown"
                             SelectionMode="None"
                             Visibility="Collapsed">
-                            <ListView.Header>
-                                <TextBlock
-                                    Margin="16,6,16,4"
-                                    Style="{StaticResource SecondaryTextStyle}"
-                                    Text="Recent searches" />
-                            </ListView.Header>
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="search:RecentSearch">
-                                    <Grid ColumnSpacing="10">
+                                    <Grid>
                                         <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <controls:IconView
-                                            Width="16"
-                                            Height="16"
-                                            Icon="{x:Bind ProviderIcon}" />
-                                        <TextBlock
+                                        <controls:IconStack
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center"
+                                            Icons="{x:Bind ProviderIcons}" />
+
+                                        <!-- The terms are only shown here, so they take no presses and no focus. -->
+                                        <ItemsRepeater
                                             Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            IsHitTestVisible="False"
+                                            ItemsSource="{x:Bind Terms}">
+                                            <ItemsRepeater.Layout>
+                                                <StackLayout Orientation="Horizontal" />
+                                            </ItemsRepeater.Layout>
+                                            <ItemsRepeater.ItemTemplate>
+                                                <DataTemplate x:DataType="providers:SearchTerm">
+                                                    <local:SearchTermBox IsEnabled="False" Term="{x:Bind}" />
+                                                </DataTemplate>
+                                            </ItemsRepeater.ItemTemplate>
+                                        </ItemsRepeater>
+                                        <TextBlock
+                                            Grid.Column="2"
+                                            Margin="6,0"
                                             VerticalAlignment="Center"
                                             Text="{x:Bind Words}"
                                             TextTrimming="CharacterEllipsis" />
                                         <Button
-                                            Grid.Column="2"
+                                            Grid.Column="3"
                                             AutomationProperties.Name="Remove from recent searches"
                                             Click="RemoveRecent_Click"
                                             Style="{StaticResource FieldIconButtonStyle}"

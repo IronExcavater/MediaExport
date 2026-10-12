@@ -1,7 +1,10 @@
 // Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
+using MediaExport.Core.Media.Models;
+using MediaExport.Export;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System.Collections.Specialized;
 
@@ -19,6 +22,14 @@ public sealed partial class SearchPage : Page
 
     /// <summary>One for each skeleton card shown while a page loads. Only how many there are matters.</summary>
     public int[] LoadingSlots { get; } = new int[12];
+
+    // A pressed result opens in the Export page.
+    private void Result_Click(object sender, RoutedEventArgs args)
+    {
+        var button = (Button)sender;
+        var export = App.Current.Services.GetRequiredService<ExportViewModel>();
+        export.Open((MediaSearchResult)button.Tag);
+    }
 
     // Results are cleared when a new search or page starts, which is when the view goes back to the top.
     private void Results_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
