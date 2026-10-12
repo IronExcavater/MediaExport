@@ -13,6 +13,9 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
     public abstract string DisplayName { get; }
     public abstract string Icon { get; }
 
+    /// <summary>The sites whose links are to this source, such as <c>youtube.com</c>. Their subdomains count too.</summary>
+    protected abstract IReadOnlyList<string> Hosts { get; }
+
     /// <summary>Whether the provider's results are video or audio.</summary>
     protected virtual MediaKind Kind => MediaKind.Video;
 
@@ -31,26 +34,36 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
         var target = GetSearchTarget(query.Trim(), skip + limit, sort);
         var found = await ytdlp.SearchAsync(target, skip, limit, cancellationToken);
 
-        var results = new List<MediaSearchResult>();
-        foreach (var result in found)
-        {
-            // A result without a page can't be opened or exported.
-            var sourceUrl = GetSourceUrl(result);
-            if (sourceUrl is null)
-                continue;
+        return found.Select(ToMedia).OfType<MediaSearchResult>().ToList();
+    }
 
-            results.Add(new MediaSearchResult(
-                result.Identity,
-                sourceUrl,
-                result.ThumbnailUri,
-                result.Title,
-                result.Creator,
-                result.Duration,
-                Kind,
-                Id,
-                result.Views,
-                result.Published));
-        }
-        return results;
+    public async Task<MediaSearchResult?> FindByLinkAsync(Uri link, CancellationToken cancellationToken = default)
+    {
+        var isToThisSource = Hosts.Any(host => link.Host == host || link.Host.EndsWith("." + host, StringComparison.OrdinalIgnoreCase));
+        if (!isToThisSource)
+            return null;
+
+        var found = await ytdlp.ReadAsync(link.AbsoluteUri, cancellationToken);
+        return found is null ? null : ToMedia(found);
+    }
+
+    // A result without a page can't be opened or exported, so it isn't one.
+    private MediaSearchResult? ToMedia(YtdlpSearchResult result)
+    {
+        var sourceUrl = GetSourceUrl(result);
+        if (sourceUrl is null)
+            return null;
+
+        return new MediaSearchResult(
+            result.Identity,
+            sourceUrl,
+            result.ThumbnailUri,
+            result.Title,
+            result.Creator,
+            result.Duration,
+            Kind,
+            Id,
+            result.Views,
+            result.Published);
     }
 }
