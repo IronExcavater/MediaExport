@@ -67,6 +67,8 @@
                             <Button.Flyout>
                                 <Flyout
                                     x:Name="providerFlyout"
+                                    Closed="ProviderFlyout_Closed"
+                                    Opened="ProviderFlyout_Opened"
                                     Opening="ProviderFlyout_Opening"
                                     Placement="BottomEdgeAlignedLeft">
                                     <Flyout.FlyoutPresenterStyle>
@@ -74,54 +76,10 @@
                                             <Setter Property="Padding" Value="0,2" />
                                         </Style>
                                     </Flyout.FlyoutPresenterStyle>
-                                    <StackPanel>
-                                    <Grid Margin="6,4,6,2" ColumnSpacing="8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <!-- While on, a press adds or removes a provider, as it does with Ctrl held. -->
-                                        <ToggleButton
-                                            x:Name="severalButton"
-                                            Padding="8,4"
-                                            Click="SeveralButton_Click"
-                                            Content="Select several"
-                                            FontSize="12" />
-                                        <HyperlinkButton
-                                            x:Name="allProvidersButton"
-                                            Grid.Column="1"
-                                            Padding="8,4"
-                                            Click="AllProvidersButton_Click"
-                                            Content="Select all"
-                                            FontSize="12" />
-                                    </Grid>
-
-                                    <!-- A press chooses one provider and closes, unless several are being chosen. -->
-                                    <ListView
-                                        x:Name="providerList"
-                                        IsItemClickEnabled="True"
-                                        IsMultiSelectCheckBoxEnabled="False"
-                                        ItemClick="ProviderList_ItemClick"
-                                        ItemsSource="{x:Bind ViewModel.Providers, Mode=OneWay}"
-                                        SelectionChanged="ProviderList_SelectionChanged"
-                                        SelectionMode="Extended">
-                                        <ListView.ItemTemplate>
-                                            <DataTemplate x:DataType="providers:IMediaSearchProvider">
-                                                <StackPanel
-                                                    AutomationProperties.Name="{x:Bind DisplayName}"
-                                                    Orientation="Horizontal"
-                                                    Spacing="12">
-                                                    <controls:IconView
-                                                        Width="16"
-                                                        Height="16"
-                                                        Icon="{x:Bind Icon}" />
-                                                    <TextBlock VerticalAlignment="Center" Text="{x:Bind DisplayName}" />
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ListView.ItemTemplate>
-                                    </ListView>
-                                    </StackPanel>
+                                    <local:ProviderPicker
+                                        x:Name="providerPicker"
+                                        OneChosen="ProviderPicker_OneChosen"
+                                        ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
                                 </Flyout>
                             </Button.Flyout>
                             <controls:IconStack x:Name="providerIcons" VerticalAlignment="Center" />

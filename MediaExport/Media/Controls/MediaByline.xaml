@@ -13,46 +13,54 @@
         </Style>
     </UserControl.Resources>
 
-    <!-- The left-aligned grid is only as wide as its content, so the creator's name is what gets cut short. -->
-    <Grid HorizontalAlignment="Left" ColumnSpacing="6">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="Auto" />
-        </Grid.ColumnDefinitions>
+    <!-- MeasureOverride places each part beside the one before it, or on a new line when it doesn't fit there. -->
+    <Canvas>
+        <!--
+            Opens the creator's page. The negative margin takes back the button's padding and border, so its icon
+            starts where the title above it does and the line is no taller than its text.
+        -->
+        <HyperlinkButton
+            x:Name="creatorButton"
+            MinWidth="0"
+            MinHeight="0"
+            Margin="-5,-3,0,-3"
+            Padding="4,2"
+            AutomationProperties.Name="{x:Bind Media.Creator, Mode=OneWay}"
+            CornerRadius="4"
+            NavigateUri="{x:Bind Media.CreatorUri, Mode=OneWay}">
+            <Grid ColumnSpacing="5">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <controls:IconView
+                    Width="14"
+                    Height="14"
+                    Icon="{x:Bind ProviderIcon(Media.ProviderId), Mode=OneWay}" />
+                <TextBlock
+                    Grid.Column="1"
+                    Style="{StaticResource BylineTextStyle}"
+                    Text="{x:Bind Media.Creator, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </HyperlinkButton>
 
-        <controls:IconView
-            Width="14"
-            Height="14"
-            Icon="{x:Bind ProviderIcon(Media.ProviderId), Mode=OneWay}" />
-
+        <!-- A dot shows only between two parts on the same line. FallbackValue covers a null value. -->
         <TextBlock
-            Grid.Column="1"
+            x:Name="viewsSeparator"
             Style="{StaticResource BylineTextStyle}"
-            Text="{x:Bind Media.Creator, Mode=OneWay}"
-            TextTrimming="CharacterEllipsis" />
-
-        <!-- A dot shows only between two values (see OnMediaChanged). FallbackValue covers a null value. -->
-        <StackPanel
-            Grid.Column="2"
-            Orientation="Horizontal"
-            Spacing="6">
-            <TextBlock
-                x:Name="viewsSeparator"
-                Style="{StaticResource BylineTextStyle}"
-                Text="·" />
-            <TextBlock
-                x:Name="viewsText"
-                Style="{StaticResource BylineTextStyle}"
-                Text="{x:Bind converters:Format.Views(Media.Views), Mode=OneWay, FallbackValue=''}" />
-            <TextBlock
-                x:Name="ageSeparator"
-                Style="{StaticResource BylineTextStyle}"
-                Text="·" />
-            <TextBlock
-                x:Name="ageText"
-                Style="{StaticResource BylineTextStyle}"
-                Text="{x:Bind converters:Format.Age(Media.Published), Mode=OneWay, FallbackValue=''}" />
-        </StackPanel>
-    </Grid>
+            Text="·" />
+        <TextBlock
+            x:Name="viewsText"
+            Style="{StaticResource BylineTextStyle}"
+            Text="{x:Bind converters:Format.Views(Media.Views), Mode=OneWay, FallbackValue=''}" />
+        <TextBlock
+            x:Name="ageSeparator"
+            Style="{StaticResource BylineTextStyle}"
+            Text="·" />
+        <TextBlock
+            x:Name="ageText"
+            Style="{StaticResource BylineTextStyle}"
+            Text="{x:Bind converters:Format.Age(Media.Published), Mode=OneWay, FallbackValue=''}" />
+    </Canvas>
 </local:MediaView>

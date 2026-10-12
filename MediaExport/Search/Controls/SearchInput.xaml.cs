@@ -113,94 +113,17 @@ public sealed partial class SearchInput : UserControl
 
     private void ProviderFlyout_Opening(object? sender, object args)
     {
-        severalButton.IsChecked = ViewModel?.SelectedProviders.Count > 1;
-        ShowChosenProviders();
+        // The pointer is still on the button, so its tooltip would come up over the open flyout.
+        ToolTipService.SetToolTip(providerButton, null);
+        providerPicker.Refresh();
     }
 
-    // Set while the list's selection and the chosen providers are being made the same, in either direction.
-    private bool _isMatchingProviders;
+    private void ProviderFlyout_Opened(object? sender, object args) => providerPicker.FocusChosenRow();
 
-    // Selects the chosen providers' rows, in the mode the toggle asks for.
-    private void ShowChosenProviders()
-    {
-        var viewModel = ViewModel;
-        if (viewModel is null || _isMatchingProviders)
-            return;
+    private void ProviderFlyout_Closed(object? sender, object args) => ShowProviderIcons();
 
-        _isMatchingProviders = true;
-
-        // With the toggle on a plain press adds or removes a row. With it off that takes Ctrl, and a plain press
-        // chooses one row alone. Changing the mode clears the selection, so it is only set when it differs.
-        var isChoosingSeveral = severalButton.IsChecked == true;
-        var mode = isChoosingSeveral ? ListViewSelectionMode.Multiple : ListViewSelectionMode.Extended;
-        if (providerList.SelectionMode != mode)
-            providerList.SelectionMode = mode;
-
-        var chosen = viewModel.SelectedProviders.ToList();
-        var selected = providerList.SelectedItems.Cast<IMediaSearchProvider>().ToList();
-        var isShown = chosen.Count == selected.Count && chosen.All(selected.Contains);
-        if (!isShown)
-        {
-            providerList.SelectedItems.Clear();
-            foreach (var provider in chosen)
-                providerList.SelectedItems.Add(provider);
-        }
-
-        _isMatchingProviders = false;
-
-        var isAll = chosen.Count == viewModel.Providers.Count;
-        allProvidersButton.Content = isAll ? "Deselect all" : "Select all";
-    }
-
-    private void ProviderList_SelectionChanged(object sender, SelectionChangedEventArgs args)
-    {
-        if (_isMatchingProviders)
-            return;
-
-        _isMatchingProviders = true;
-        var selected = providerList.SelectedItems.Cast<IMediaSearchProvider>().ToList();
-        ViewModel?.SelectProviders(selected);
-        _isMatchingProviders = false;
-
-        // Several chosen with Ctrl turn the toggle on, so the list carries on the same way without the key.
-        if (selected.Count > 1)
-            severalButton.IsChecked = true;
-
-        // A search needs a provider, so deselecting the last one is ignored and its row is selected again.
-        ShowChosenProviders();
-    }
-
-    // A plain press has chosen one provider, which closes the flyout as a menu would.
-    private void ProviderList_ItemClick(object sender, ItemClickEventArgs args)
-    {
-        var ctrl = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
-        var isChoosingSeveral = severalButton.IsChecked == true || ctrl.HasFlag(CoreVirtualKeyStates.Down);
-        if (!isChoosingSeveral)
-            providerFlyout.Hide();
-    }
-
-    // Turned off, the first of the chosen providers is kept.
-    private void SeveralButton_Click(object sender, RoutedEventArgs args)
-    {
-        var viewModel = ViewModel;
-        if (viewModel is not null && severalButton.IsChecked != true)
-            viewModel.SelectProviders(viewModel.SelectedProviders.Take(1).ToList());
-
-        ShowChosenProviders();
-    }
-
-    // Deselecting leaves the first provider, since a search needs one.
-    private void AllProvidersButton_Click(object sender, RoutedEventArgs args)
-    {
-        var viewModel = ViewModel;
-        if (viewModel is null)
-            return;
-
-        var isAll = viewModel.SelectedProviders.Count == viewModel.Providers.Count;
-        severalButton.IsChecked = !isAll;
-        viewModel.SelectProviders(isAll ? viewModel.Providers.Take(1) : viewModel.Providers);
-        ShowChosenProviders();
-    }
+    // Choosing one provider closes the flyout, as choosing from a menu does.
+    private void ProviderPicker_OneChosen(object? sender, EventArgs args) => providerFlyout.Hide();
 
     // The ways of ranking, listed as the menu opens with the one in use in bold.
     private void SortMenu_Opening(object? sender, object args)
@@ -210,12 +133,17 @@ public sealed partial class SearchInput : UserControl
         if (viewModel is null)
             return;
 
-        (SearchSort Sort, string Name)[] choices = [(SearchSort.Relevance, "Most relevant"), (SearchSort.Views, "Most viewed")];
+        (SearchSort Sort, string Name, string Glyph)[] choices =
+        [
+            (SearchSort.Relevance, "Most relevant", "\uE734"),
+            (SearchSort.Views, "Most viewed", "\uE7B3")
+        ];
         foreach (var choice in choices)
         {
             var item = new MenuFlyoutItem
             {
                 Text = choice.Name,
+                Icon = new FontIcon { Glyph = choice.Glyph },
                 FontWeight = choice.Sort == viewModel.Sort ? FontWeights.SemiBold : FontWeights.Normal
             };
             item.Click += (_, _) => viewModel.Sort = choice.Sort;
@@ -228,13 +156,16 @@ public sealed partial class SearchInput : UserControl
     {
         var providers = ViewModel?.SelectedProviders.ToList() ?? [];
         providerIcons.Icons = providers.Select(provider => provider.Icon);
-        ToolTipService.SetToolTip(providerButton, string.Join(", ", providers.Select(provider => provider.DisplayName)));
+
+        // The tooltip stays off while the flyout is open, where the providers are named anyway.
+        var names = string.Join(", ", providers.Select(provider => provider.DisplayName));
+        var hasTooltip = names.Length > 0 && !providerFlyout.IsOpen;
+        ToolTipService.SetToolTip(providerButton, hasTooltip ? names : null);
     }
 
     private void SelectedProviders_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
         ShowProviderIcons();
-        ShowChosenProviders();
         RestartDebounce();
     }
 

@@ -21,8 +21,22 @@ public sealed partial class MediaThumbnail : MediaView
         InitializeComponent();
     }
 
-    // Audio comes with square cover art; video thumbnails are 16:9.
-    private double AspectRatio => Media?.Kind == MediaKind.Audio ? 1 : 16.0 / 9;
+    /// <summary>How wide a kind of media's picture is for each unit of its height.</summary>
+    /// <remarks>Audio comes with square cover art, and video thumbnails are 16:9.</remarks>
+    public static double ShapeOf(MediaKind kind) => kind == MediaKind.Audio ? 1 : 16.0 / 9;
+
+    /// <summary>The shape to be while there is no media to take it from, as a skeleton is.</summary>
+    public double PlaceholderShape
+    {
+        get;
+        set
+        {
+            field = value;
+            InvalidateMeasure();
+        }
+    } = ShapeOf(MediaKind.Video);
+
+    private double AspectRatio => Media is null ? PlaceholderShape : ShapeOf(Media.Kind);
 
     protected override void OnMediaChanged(MediaSearchResult? oldMedia, MediaSearchResult? newMedia)
     {
