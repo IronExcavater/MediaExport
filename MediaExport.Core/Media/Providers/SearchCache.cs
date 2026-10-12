@@ -10,15 +10,11 @@ namespace MediaExport.Core.Media.Providers;
 /// <summary>One page of a search and what it found.</summary>
 public sealed record CachedSearch(string ProviderId, string Query, int Page, DateTimeOffset SearchedAt, IReadOnlyList<MediaSearchResult> Results);
 
-/// <summary>
-/// Remembers what recent searches found, page by page, so repeating one shows its results at once instead of asking the
-/// provider again. It keeps the first page of the last 50 searches and the last 30 later pages. The searches are kept in a file, so they are still there after the app is restarted.
-/// </summary>
+/// <summary>Remembers what searches found, page by page, in memory and in a file, so a repeat shows at once.</summary>
 /// <param name="path">The cache file, or <c>null</c> for a cache that lasts only as long as the app runs.</param>
 public sealed class SearchCache(string? path)
 {
-    // First pages are limited separately from later ones, so paging deep into one search can't push out
-    // the first pages of other searches, which are the ones that get repeated.
+    // First pages have their own limit, so paging deep into one search can't push out other searches' first pages.
     private const int FirstPageCapacity = 50;
     private const int LaterPageCapacity = 30;
 

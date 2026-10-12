@@ -7,12 +7,19 @@ using System.Text.RegularExpressions;
 
 namespace MediaExport.Core.Media.Providers;
 
-/// <summary>
-/// One term of a search, written as <c>label:value</c>, or <c>label:"two words"</c> when the value has a
-/// space in it. <c>source:youtube</c> names the provider to search.
-/// </summary>
+/// <summary>One term of a search, written <c>label:value</c> or <c>label:value1,value2</c>.</summary>
 public sealed record SearchTerm(string Label, string Value)
 {
+    private const char ValueSeparator = ',';
+
+    public SearchTerm(string label, IEnumerable<string> values)
+        : this(label, string.Join(ValueSeparator, values))
+    {
+    }
+
+    /// <summary>The values of a term that may have several, split at its commas.</summary>
+    public IReadOnlyList<string> Values => Value.Split(ValueSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
     public override string ToString()
     {
         var hasSpace = Value.Any(char.IsWhiteSpace);
@@ -20,10 +27,7 @@ public sealed record SearchTerm(string Label, string Value)
     }
 }
 
-/// <summary>
-/// The value of a range term: its two ends, written <c>3m..10m</c>. Either end may be left out, as in
-/// <c>3m..</c> for anything from three minutes up; an end that is left out is empty text.
-/// </summary>
+/// <summary>A range term's two ends, written <c>3m..10m</c>. An end left out, as in <c>3m..</c>, is empty.</summary>
 public sealed record SearchRange(string Lower, string Upper)
 {
     private const string Separator = "..";
@@ -45,15 +49,11 @@ public sealed record SearchRange(string Lower, string Upper)
     public override string ToString() => $"{Lower}{Separator}{Upper}";
 }
 
-/// <summary>
-/// A search as it is written in text: its terms, then the words to search for. In
-/// <c>source:youtube exact:"lofi beats" study</c> there are two terms, and the text is <c>study</c>.
-/// This is the form a search is copied and pasted in.
-/// </summary>
+/// <summary>A search as text, terms then words, such as <c>source:youtube exact:"lofi beats" study</c>.</summary>
 /// <param name="Text">The words to search for, without any terms.</param>
 public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> Terms)
 {
-    /// <summary>The label of the term that names the provider to search.</summary>
+    /// <summary>The label of the term that names the providers to search.</summary>
     public const string SourceLabel = "source";
 
     /// <summary>The label of a term for a word or phrase that results must contain as it is written.</summary>
@@ -68,24 +68,24 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
     /// <summary>The label of the term for a range of durations, written as <c>duration:3m..10m</c>.</summary>
     public const string DurationLabel = "duration";
 
-    /// <summary>The label of the term for a range of publish dates, written as <c>published:2024..2025-06</c>.</summary>
+    /// <summary>The label of the term for a range of publish dates, as in <c>published:2024..2025-06</c>.</summary>
     public const string PublishedLabel = "published";
 
-    /// <summary>
-    /// Labels for one end of a range by itself, as a shorter way to write it: <c>longer:3m</c> is
-    /// <c>duration:3m..</c>. <see cref="WithEnd"/> turns one into its range.
-    /// </summary>
+    /// <summary>Shorter ways to write one end of a range, so <c>longer:3m</c> is <c>duration:3m..</c>.</summary>
     public const string LongerLabel = "longer";
     public const string ShorterLabel = "shorter";
     public const string AfterLabel = "after";
     public const string BeforeLabel = "before";
 
-    public static SearchTerm Source(string providerId) => new(SourceLabel, providerId);
+    /// <summary>The label of the term for how the results are ranked, written as <c>sort:views</c>.</summary>
+    public const string SortLabel = "sort";
+
+    public static SearchTerm Source(IEnumerable<string> providerIds) => new(SourceLabel, providerIds);
 
     /// <summary>Whether a label is for a term whose value is a <see cref="SearchRange"/>.</summary>
     public static bool IsRange(string label) => label is DurationLabel or PublishedLabel;
 
-    /// <summary>The label of the range that a label for one end belongs to, or <c>null</c> for any other label.</summary>
+    /// <summary>The label of the range that a label for one end belongs to, or <c>null</c> for any other.</summary>
     public static string? RangeLabelOf(string endLabel) => endLabel switch
     {
         LongerLabel or ShorterLabel => DurationLabel,
@@ -93,10 +93,7 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
         _ => null
     };
 
-    /// <summary>
-    /// Whether a term's value can be read for its label. A range needs at least one end, each end that is
-    /// there readable as a length or a date, and something between the two. Any other term needs any value.
-    /// </summary>
+    /// <summary>Whether a term's value can be read. A range needs a readable end and room between its ends.</summary>
     public static bool IsValid(SearchTerm term)
     {
         if (!IsRange(term.Label))
@@ -111,10 +108,7 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
         return !range.IsEmpty && isLowerReadable && isUpperReadable && leavesRoom;
     }
 
-    /// <summary>
-    /// Sets one end of a range from a term written for that end alone, such as <c>longer:3m</c>. If the new
-    /// end leaves nothing between it and the other, it is the one just asked for, so the other end goes.
-    /// </summary>
+    /// <summary>Sets one end of a range from a term like <c>longer:3m</c>. The other end goes if they cross.</summary>
     /// <param name="range">The range term the search already has, or <c>null</c> if it has none.</param>
     public static SearchTerm WithEnd(SearchTerm? range, SearchTerm end)
     {
@@ -131,35 +125,72 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
         return new SearchTerm(label, alone.ToString());
     }
 
-    /// <summary>Reads a length of time written as <c>90s</c>, <c>3m</c>, <c>1h</c> or <c>1h30m</c>. A bare number is minutes.</summary>
+    /// <summary>Reads a length such as <c>90s</c>, <c>1h30m</c>, <c>1:30</c>, or a number of minutes.</summary>
     public static TimeSpan? ReadLength(string value)
     {
-        var text = value.Trim();
+        var text = value.Replace(" ", string.Empty);
         if (int.TryParse(text, out var minutes))
             return TimeSpan.FromMinutes(minutes);
+
+        var clock = Clock().Match(text);
+        if (clock.Success)
+            return new TimeSpan(ReadPart(clock, "hours"), ReadPart(clock, "minutes"), 0);
 
         var parts = Length().Match(text);
         if (!parts.Success || text.Length == 0)
             return null;
 
-        var hours = ReadPart(parts, "hours");
-        var wholeMinutes = ReadPart(parts, "minutes");
-        var seconds = ReadPart(parts, "seconds");
-        return new TimeSpan(hours, wholeMinutes, seconds);
+        return new TimeSpan(ReadPart(parts, "hours"), ReadPart(parts, "minutes"), ReadPart(parts, "seconds"));
     }
 
-    /// <summary>Reads a date written as a year, a month or a day: <c>2024</c>, <c>2024-06</c>, <c>2024-06-01</c>.</summary>
+    /// <summary>Reads a date such as <c>2024</c>, <c>2024-06-01</c>, or a day in regional format.</summary>
     public static DateTimeOffset? ReadDate(string value)
     {
-        string[] formats = ["yyyy", "yyyy-MM", "yyyy-MM-dd"];
-        var isDate = DateTimeOffset.TryParseExact(value.Trim(), formats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var date);
-        return isDate ? date : null;
+        var text = value.Trim();
+        var isStandard = DateTimeOffset.TryParseExact(text, StandardDateFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var date);
+        if (isStandard)
+            return date;
+
+        // A bare number would be read as a day of this month, which nobody means by it.
+        var hasOnlyDigits = text.All(char.IsAsciiDigit);
+        var isRegional = !hasOnlyDigits && DateTimeOffset.TryParse(text, CultureInfo.CurrentCulture, DateTimeStyles.AssumeLocal, out date);
+        return isRegional ? date : null;
     }
 
-    /// <summary>
-    /// Whether a result is within the search's ranges of duration and publish date. A result whose duration
-    /// or date isn't known is outside any range on it. The other terms are for the provider to apply.
-    /// </summary>
+    /// <summary>Writes one end of a range the standard way, so <c>1:30</c> is <c>1h30m</c>. Others are kept.</summary>
+    public static string NormalizeEnd(string rangeLabel, string typed)
+    {
+        var text = typed.Trim();
+        if (rangeLabel == DurationLabel)
+        {
+            var length = ReadLength(text);
+            return length is null ? text : WriteLength(length.Value);
+        }
+
+        // A year or a month written the standard way stays as it is; any other date is written as its day.
+        var isStandard = DateTimeOffset.TryParseExact(text, StandardDateFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out _);
+        var date = ReadDate(text);
+        return isStandard || date is null ? text : date.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    }
+
+    private static readonly string[] StandardDateFormats = ["yyyy", "yyyy-MM", "yyyy-MM-dd"];
+
+    // A length with a unit after each part that isn't zero: 45m, 2h, 1h30m, 90s as 1m30s.
+    private static string WriteLength(TimeSpan length)
+    {
+        var hours = (int)length.TotalHours;
+        var written = string.Empty;
+        if (hours > 0)
+            written += $"{hours}h";
+        if (length.Minutes > 0)
+            written += $"{length.Minutes}m";
+        if (length.Seconds > 0)
+            written += $"{length.Seconds}s";
+
+        return written;
+    }
+
+    /// <summary>Whether a result is within the duration and date ranges. One that lacks the value is outside.</summary>
     public bool Matches(MediaSearchResult result)
     {
         foreach (var term in Terms)
@@ -193,10 +224,10 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
     [GeneratedRegex(@"^(?:(?<hours>\d+)h)?(?:(?<minutes>\d+)m)?(?:(?<seconds>\d+)s)?$", RegexOptions.IgnoreCase)]
     private static partial Regex Length();
 
-    /// <summary>
-    /// How many terms with a label one search can have. A search has one source, one author and one range
-    /// of each kind.
-    /// </summary>
+    [GeneratedRegex(@"^(?<hours>\d+):(?<minutes>\d{1,2})$")]
+    private static partial Regex Clock();
+
+    /// <summary>How many terms with a label one search can have.</summary>
     public static int MaxCount(string label) => label switch
     {
         ExactLabel => 3,
@@ -205,10 +236,7 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
     };
 
     /// <summary>Splits text into its terms and the words left over.</summary>
-    /// <param name="isKnown">
-    /// Decides whether something written like a term really is one. Anything it turns down stays in the
-    /// text as ordinary words, so a link such as <c>https://example.com</c> or a mistyped label is still searched for.
-    /// </param>
+    /// <param name="isKnown">Whether something written like a term is one. Anything else stays as words.</param>
     public static SearchQuery Parse(string text, Func<SearchTerm, bool> isKnown)
     {
         var terms = new List<SearchTerm>();
@@ -233,11 +261,7 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
         return string.Join(' ', parts);
     }
 
-    /// <summary>
-    /// The search as the words a provider is sent, with the terms written the way search engines read them:
-    /// an exact phrase in quotation marks, an excluded one after a minus sign. An author has no such form,
-    /// so the name is sent as an exact phrase, which favours that author without ruling out others.
-    /// </summary>
+    /// <summary>The words sent to a provider, with exact and author terms quoted and excluded ones negated.</summary>
     public string ToSearchText()
     {
         var parts = new List<string>();
@@ -259,8 +283,7 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
         return string.Join(' ', parts);
     }
 
-    // A quoted term such as exact:"lofi beats" is one part even though it has a space in it; anything else is
-    // split at spaces.
+    // A quoted term such as exact:"lofi beats" is one part despite its space; anything else is split at spaces.
     [GeneratedRegex("""(?<label>[A-Za-z]+):"(?<quoted>[^"]+)"|\S+""")]
     private static partial Regex TermOrWord();
 

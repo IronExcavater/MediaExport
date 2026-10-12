@@ -18,10 +18,7 @@ public sealed class AppSettings
 
     public bool IsWindowMaximized { get; set; }
 
-    /// <summary>
-    /// The search as it was when the app closed, written as text with its source and terms. It is kept
-    /// whether or not it was ever carried out, so the app opens as it was left.
-    /// </summary>
+    /// <summary>The search when the app closed, as text. It is kept even if it was never carried out.</summary>
     public string? LastSearch { get; set; }
 
     /// <summary>The searches that were carried out, newest first, each written as text like <see cref="LastSearch"/>.</summary>

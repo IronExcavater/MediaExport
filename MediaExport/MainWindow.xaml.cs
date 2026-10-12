@@ -31,9 +31,7 @@ public sealed partial class MainWindow : Window
         ["Activity"] = typeof(ActivityPage)
     };
 
-    // The window must keep its size this long before the app name slides. Sliding while the window is
-    // still being resized makes both stutter, and a resize that wavers around the compact width would
-    // slide the name in and out.
+    // How long the window must keep its size before the app name slides, so it doesn't flicker mid-resize.
     private static readonly TimeSpan ResizeDebounce = TimeSpan.FromMilliseconds(400);
 
     private readonly SettingsStore _settings = App.Current.Services.GetRequiredService<SettingsStore>();
@@ -69,8 +67,7 @@ public sealed partial class MainWindow : Window
         _resizeDebounceTimer.Tick += (_, _) => UpdateAppName();
     }
 
-    // The window's minimum size and the caption buttons' width are both measured in screen pixels, so
-    // they are converted with the display's scale.
+    // The minimum size and the caption buttons' width are in screen pixels, so both are converted by display scale.
     private void Root_Loaded(object sender, RoutedEventArgs args)
     {
         var scale = root.XamlRoot.RasterizationScale;
@@ -175,8 +172,7 @@ public sealed partial class MainWindow : Window
         _resizeDebounceTimer.Start();
     }
 
-    // Slides the app name away behind the logo on a compact window, leaving its space to the search field,
-    // and slides it back out on a wider one.
+    // Slides the app name behind the logo on a compact window, giving its space to the search field.
     private void UpdateAppName()
     {
         var isCompact = titleBar.ActualWidth < WindowSizes.Compact;
