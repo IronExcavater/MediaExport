@@ -14,6 +14,17 @@ public enum AppTheme
     Light = 2
 }
 
+public sealed class ToolSettings
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Executable { get; set; } = "";
+    public string? InstallPath { get; set; }
+    public bool AutoUpdate { get; set; } = true;
+    public string? Version { get; set; }
+    public bool IsInstalled { get; set; }
+    public DateTimeOffset? LastCheckedUtc { get; set; }
+}
 /// <summary>Application settings persisted between runs.</summary>
 public sealed class AppSettings
 {
@@ -35,6 +46,31 @@ public sealed class AppSettings
     /// This defaults to the system theme 0.
     /// </summary>
     public int ThemeIndex { get; set; } = 0; // 0 = System, 1 = Dark, 2 = Light
+
+    public Dictionary<string, ToolSettings> Tools { get; set; } = new()
+    {
+        ["yt-dlp"] = new ToolSettings
+        {
+            Id = "yt-dlp",
+            Name = "yt-dlp",
+            Executable = "yt-dlp",
+            AutoUpdate = true
+        },
+        ["ffmpeg"] = new ToolSettings
+        {
+            Id = "ffmpeg",
+            Name = "ffmpeg",
+            Executable = "ffmpeg",
+            AutoUpdate = true
+        },
+        ["ffprobe"] = new ToolSettings
+        {
+            Id = "ffprobe",
+            Name = "ffprobe",
+            Executable = "ffprobe",
+            AutoUpdate = true
+        }
+    };
 }
 
 /// <summary>Loads and saves <see cref="AppSettings"/> as JSON.</summary>

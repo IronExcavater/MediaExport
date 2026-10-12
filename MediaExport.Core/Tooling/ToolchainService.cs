@@ -1,28 +1,93 @@
 // Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
+using MediaExport.Core.Settings;
+
 namespace MediaExport.Core.Tooling;
 
-/// <summary>Finds, installs and updates the external programs the app runs (yt-dlp, ffmpeg).</summary>
-/// <param name="folder">The folder holding the copies the app installs itself.</param>
-public sealed class ToolchainService(string folder)
+public sealed class ToolchainService(SettingsStore settings)
 {
-    public string Folder { get; } = folder;
+    public string Folder { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "MediaExport",
+        "Tools");
 
-    /// <summary>Finds a program by name, e.g. <c>yt-dlp</c>: the app's own copy if it has one, otherwise one on PATH.</summary>
-    /// <returns>The program's full path, or <c>null</c> if it isn't installed.</returns>
+    public ToolSettings? GetTool(string id) =>
+        settings.Current.Tools.TryGetValue(id, out var tool) ? tool : null;
+
     public string? Locate(string executable)
     {
-        var fileName = executable + ".exe";
-        var searchPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-        var folders = searchPath.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var fileName = executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? executable
+            : executable + ".exe";
 
-        foreach (var candidateFolder in folders.Prepend(Folder))
+        var paths = (Environment.GetEnvironmentVariable("PATH") ?? "")
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var folder in paths.Prepend(Folder))
         {
-            var candidate = Path.Combine(candidateFolder, fileName);
+            var candidate = Path.Combine(folder, fileName);
             if (File.Exists(candidate))
                 return candidate;
         }
+
         return null;
+    }
+
+    public bool IsInstalled(string id)
+    {
+        var tool = GetTool(id);
+        if (tool is null)
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(tool.InstallPath))
+            return File.Exists(tool.InstallPath);
+
+        return Locate(tool.Executable) is not null;
+    }
+
+    public async Task EnsureInstalledAsync(string id, string downloadUrl, CancellationToken cancellationToken = default)
+    {
+        var tool = GetTool(id) ?? new ToolSettings { Id = id, Executable = id };
+        var installDir = Path.Combine(Folder, id);
+        Directory.CreateDirectory(installDir);
+
+        var targetFile = Path.Combine(
+            installDir,
+            tool.Executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                ? tool.Executable
+                : tool.Executable + ".exe");
+
+        if (!File.Exists(targetFile))
+        {
+            using var client = new HttpClient();
+            var data = await client.GetByteArrayAsync(downloadUrl, cancellationToken);
+            await File.WriteAllBytesAsync(targetFile, data, cancellationToken);
+        }
+
+        tool.InstallPath = targetFile;
+        tool.IsInstalled = true;
+        tool.Version = "latest";
+        tool.LastCheckedUtc = DateTimeOffset.UtcNow;
+
+        settings.Current.Tools[id] = tool;
+        settings.Save();
+    }
+
+    public async Task UpdateAsync(string id, string downloadUrl, CancellationToken cancellationToken = default)
+    {
+        await EnsureInstalledAsync(id, downloadUrl, cancellationToken);
+    }
+
+    public Task RemoveAsync(string id)
+    {
+        var tool = GetTool(id);
+        if (tool is not null && !string.IsNullOrWhiteSpace(tool.InstallPath) && File.Exists(tool.InstallPath))
+            File.Delete(tool.InstallPath);
+
+        settings.Current.Tools.Remove(id);
+        settings.Save();
+
+        return Task.CompletedTask;
     }
 }

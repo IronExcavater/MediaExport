@@ -49,61 +49,106 @@
 
             <TextBlock Text="Tools" Style="{StaticResource SettingsGroupTitleStyle}"/>
             <Border Style="{StaticResource SettingsItemStyle}">
-                <Grid>
+                <Grid HorizontalAlignment="Stretch">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
+                    <FontIcon Grid.Column="0" Glyph="&#xE896;" Margin="0,0,16,0"/>
+                    
                     <!-- Title and Description -->
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="Auto Update" Style="{StaticResource SettingsItemDescriptionStyle}"/>
                     </StackPanel>
-                </Grid>
-            </Border>
-            <Border Style="{StaticResource SettingsItemStyle}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
 
-                    <!-- Title and Description -->
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="YT-DLP" Style="{StaticResource SettingsItemDescriptionStyle}"/>
-                    </StackPanel>
+                    <ToggleSwitch 
+                        Grid.Column="2" 
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="ToggleSwitch" 
+                        Margin="0,0,0,0"/>
                 </Grid>
             </Border>
-            <Border Style="{StaticResource SettingsItemStyle}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
 
-                    <!-- Title and Description -->
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="YT-DLP" Style="{StaticResource SettingsItemDescriptionStyle}"/>
-                    </StackPanel>
-                </Grid>
-            </Border>
-            <Border Style="{StaticResource SettingsItemStyle}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+            <Expander
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                IsExpanded="True"
+                ExpandDirection="Down"
+                MinHeight="70">
+                <Expander.Header>
+                    <Grid HorizontalAlignment="Stretch">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
-                    <!-- Title and Description -->
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="YT-DLP" Style="{StaticResource SettingsItemDescriptionStyle}"/>
-                    </StackPanel>
-                </Grid>
-            </Border>
+                        <TextBlock Grid.Column="1"
+                            Text="Installed Tools"
+                            VerticalAlignment="Center" />
+
+                        <Button Grid.Column="2"
+                            Content="Update All"
+                            MinWidth="110"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center" />
+                    </Grid>
+                </Expander.Header>
+                <StackPanel Spacing="12">
+                    <Grid HorizontalAlignment="Stretch">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <FontIcon Grid.Column="0" Glyph="&#xE896;" Margin="0,0,16,0"/>
+
+                        <!-- Title and Description -->
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="yt-dlp" Style="{StaticResource SettingsItemDescriptionStyle}"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" Content="Download"/>
+                    </Grid>
+                    
+                    <Grid HorizontalAlignment="Stretch">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <FontIcon Grid.Column="0" Glyph="&#xE896;" Margin="0,0,16,0"/>
+
+                        <!-- Title and Description -->
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="ffmpeg" Style="{StaticResource SettingsItemDescriptionStyle}"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" Content="Download"/>
+                    </Grid>
+                    <Grid HorizontalAlignment="Stretch">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <FontIcon Grid.Column="0" Glyph="&#xE896;" Margin="0,0,16,0"/>
+
+                        <!-- Title and Description -->
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Fprobe" Style="{StaticResource SettingsItemDescriptionStyle}"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" Content="Download"/>
+                    </Grid>
+                </StackPanel>
+            </Expander>
         </StackPanel>
     </Grid>
 </Page>
