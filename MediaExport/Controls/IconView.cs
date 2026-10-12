@@ -17,6 +17,8 @@ public sealed partial class IconView : Grid
         typeof(IconView),
         new PropertyMetadata(null, (view, _) => ((IconView)view).Refresh()));
 
+    private const float ShadowInset = 1;
+
     private readonly ImageIcon _icon = new();
 
     // Lies behind the icon and holds its shadow, which is drawn by the composition layer.
@@ -85,8 +87,11 @@ public sealed partial class IconView : Grid
         shadow.BlurRadius = 2;
         shadow.Opacity = 0.85f;
 
+        // The shadow's shape is a little smaller than the icon, so it starts under the icon's edge and only its
+        // soft outer part shows.
         var shadowVisual = compositor.CreateSpriteVisual();
-        shadowVisual.Size = _icon.ActualSize;
+        shadowVisual.Size = _icon.ActualSize - new Vector2(2 * ShadowInset);
+        shadowVisual.Offset = new Vector3(ShadowInset, ShadowInset, 0);
         shadowVisual.Shadow = shadow;
         ElementCompositionPreview.SetElementChildVisual(_shadowHost, shadowVisual);
     }
