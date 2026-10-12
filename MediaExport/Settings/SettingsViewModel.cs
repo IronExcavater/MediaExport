@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using MediaExport.Core.Settings;
 using MediaExport.Core.Tooling;
 using Microsoft.UI.Xaml;
+using System.Collections.Generic;
 
 namespace MediaExport.Settings;
 
@@ -34,4 +35,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         var theme = (AppTheme)value;
         _themeService.Apply(theme);
     }
+
+    public List<ThemeOption> ThemeOptions { get; } =
+    [
+        new() { Name = "System", Glyph = "\uE8B8" },
+        new() { Name = "Dark", Glyph = "\uE708" },
+        new() { Name = "Light", Glyph = "\uE706" }
+    ];
 }
