@@ -67,6 +67,8 @@
                             <Button.Flyout>
                                 <Flyout
                                     x:Name="providerFlyout"
+                                    Closed="ProviderFlyout_Closed"
+                                    Opened="ProviderFlyout_Opened"
                                     Opening="ProviderFlyout_Opening"
                                     Placement="BottomEdgeAlignedLeft">
                                     <Flyout.FlyoutPresenterStyle>
@@ -74,53 +76,83 @@
                                             <Setter Property="Padding" Value="0,2" />
                                         </Style>
                                     </Flyout.FlyoutPresenterStyle>
-                                    <StackPanel>
-                                    <Grid Margin="6,4,6,2" ColumnSpacing="8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
+                                    <StackPanel PreviewKeyDown="ProviderFlyout_CtrlChanged" PreviewKeyUp="ProviderFlyout_CtrlChanged">
+                                        <StackPanel.Resources>
+                                            <!-- The rows are the size and rounding of the items in the menus beside this one. -->
+                                            <x:Double x:Key="ListViewItemMinHeight">32</x:Double>
+                                            <StaticResource x:Key="ListViewItemCornerRadius" ResourceKey="ControlCornerRadius" />
 
-                                        <!-- While on, a press adds or removes a provider, as it does with Ctrl held. -->
-                                        <ToggleButton
-                                            x:Name="severalButton"
-                                            Padding="8,4"
-                                            Click="SeveralButton_Click"
-                                            Content="Select several"
-                                            FontSize="12" />
-                                        <HyperlinkButton
-                                            x:Name="allProvidersButton"
-                                            Grid.Column="1"
-                                            Padding="8,4"
-                                            Click="AllProvidersButton_Click"
-                                            Content="Select all"
-                                            FontSize="12" />
-                                    </Grid>
+                                            <!-- The toggle has no fill or outline until it is on, like the buttons in the field. -->
+                                            <StaticResource x:Key="ToggleButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
+                                            <StaticResource x:Key="ToggleButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                                            <StaticResource x:Key="ToggleButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                                            <StaticResource x:Key="ToggleButtonBorderBrush" ResourceKey="SubtleFillColorTransparentBrush" />
+                                            <StaticResource x:Key="ToggleButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                                            <StaticResource x:Key="ToggleButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                                        </StackPanel.Resources>
 
-                                    <!-- A press chooses one provider and closes, unless several are being chosen. -->
-                                    <ListView
-                                        x:Name="providerList"
-                                        IsItemClickEnabled="True"
-                                        IsMultiSelectCheckBoxEnabled="False"
-                                        ItemClick="ProviderList_ItemClick"
-                                        ItemsSource="{x:Bind ViewModel.Providers, Mode=OneWay}"
-                                        SelectionChanged="ProviderList_SelectionChanged"
-                                        SelectionMode="Extended">
-                                        <ListView.ItemTemplate>
-                                            <DataTemplate x:DataType="providers:IMediaSearchProvider">
-                                                <StackPanel
-                                                    AutomationProperties.Name="{x:Bind DisplayName}"
-                                                    Orientation="Horizontal"
-                                                    Spacing="12">
-                                                    <controls:IconView
-                                                        Width="16"
-                                                        Height="16"
-                                                        Icon="{x:Bind Icon}" />
-                                                    <TextBlock VerticalAlignment="Center" Text="{x:Bind DisplayName}" />
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ListView.ItemTemplate>
-                                    </ListView>
+                                        <Grid Margin="4,2" ColumnSpacing="2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- While on, a press adds or removes a provider. It is on while Ctrl is held. -->
+                                            <ToggleButton
+                                                x:Name="severalButton"
+                                                Width="24"
+                                                Height="24"
+                                                Padding="0"
+                                                AutomationProperties.Name="Select several"
+                                                CornerRadius="6"
+                                                Click="SeveralButton_Click"
+                                                ToolTipService.ToolTip="Select several (Ctrl)">
+                                                <FontIcon FontSize="12" Glyph="&#xE762;" />
+                                            </ToggleButton>
+                                            <Button
+                                                x:Name="allProvidersButton"
+                                                Grid.Column="1"
+                                                Height="24"
+                                                Padding="8,0"
+                                                HorizontalAlignment="Stretch"
+                                                Click="AllProvidersButton_Click"
+                                                Content="Select all"
+                                                FontSize="12"
+                                                Style="{StaticResource SubtleButtonStyle}" />
+                                        </Grid>
+                                        <Border
+                                            Height="1"
+                                            Margin="0,2"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                                        <!-- A press chooses one provider and closes, unless several are being chosen. -->
+                                        <ListView
+                                            x:Name="providerList"
+                                            IsItemClickEnabled="True"
+                                            ItemClick="ProviderList_ItemClick"
+                                            ItemsSource="{x:Bind ViewModel.Providers, Mode=OneWay}"
+                                            SelectionChanged="ProviderList_SelectionChanged"
+                                            SelectionMode="Extended">
+                                            <ListView.ItemContainerStyle>
+                                                <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                                                    <Setter Property="Padding" Value="15,0" />
+                                                </Style>
+                                            </ListView.ItemContainerStyle>
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate x:DataType="providers:IMediaSearchProvider">
+                                                    <StackPanel
+                                                        AutomationProperties.Name="{x:Bind DisplayName}"
+                                                        Orientation="Horizontal"
+                                                        Spacing="12">
+                                                        <controls:IconView
+                                                            Width="16"
+                                                            Height="16"
+                                                            Icon="{x:Bind Icon}" />
+                                                        <TextBlock VerticalAlignment="Center" Text="{x:Bind DisplayName}" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
                                     </StackPanel>
                                 </Flyout>
                             </Button.Flyout>

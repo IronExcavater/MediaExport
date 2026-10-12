@@ -7,9 +7,20 @@
     Background="Transparent"
     NavigationCacheMode="Required">
 
-    <Grid MaxWidth="{StaticResource PageMaxWidth}" Padding="{StaticResource PagePadding}">
+    <Grid
+        MaxWidth="{StaticResource PageMaxWidth}"
+        Padding="{StaticResource PagePadding}"
+        RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Style="{StaticResource PageTitleStyle}" Text="Export" />
+
         <!-- The media that is open. It is a skeleton of itself while its link is being read. -->
         <media:CardMediaView
+            Grid.Row="1"
             MaxWidth="720"
             HorizontalAlignment="Left"
             VerticalAlignment="Top"
