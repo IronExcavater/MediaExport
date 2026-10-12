@@ -12,6 +12,7 @@ using MediaExport.Search;
 using MediaExport.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using System.IO;
+using System.Net.Http;
 
 namespace MediaExport.Services;
 
@@ -28,7 +29,12 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IThemeService, ThemeService>();
 
-        services.AddSingleton(new SearchCache(Path.Combine(dataFolder, "search-cache.json")));
+        services.AddSingleton(new SearchCache(Path.Combine(dataFolder, "search-cache-2.json")));
+
+        // SoundCloud's website turns away a request that doesn't say what browser it is from.
+        var http = new HttpClient();
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0");
+        services.AddSingleton(new SoundCloudCharts(http));
 
         // Search providers, in the order they are listed in the search field.
         services.AddSingleton<IMediaSearchProvider, YouTubeSearchProvider>();

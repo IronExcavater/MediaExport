@@ -96,10 +96,10 @@
         <Setter Property="HorizontalAlignment" Value="Left" />
     </Style>
 
-    <!-- A square button for stepping through pages. -->
+    <!-- A button for stepping through pages. -->
     <Style x:Key="PageButtonStyle" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
         <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
-        <Setter Property="Height" Value="32" />
+        <Setter Property="Height" Value="28" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="Width" Value="32" />
     </Style>

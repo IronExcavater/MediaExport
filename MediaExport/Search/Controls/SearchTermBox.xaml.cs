@@ -50,13 +50,13 @@ public sealed partial class SearchTermBox : UserControl
         {
             field = value;
             labelIcon.Glyph = GlyphFor(value?.Label);
-            valueText.Text = Describe(value);
+            valueText.Text = SearchTermText.Describe(value);
             ShowValue();
             ShowParts();
 
             // The icon stands for the label, so a tooltip says in words what the term does. It is on the resting
             // button, which leaves the boxes without one while the term is edited.
-            var explanation = Explain(value);
+            var explanation = SearchTermText.Explain(value);
             ToolTipService.SetToolTip(restingButton, explanation.Length > 0 ? explanation : null);
             AutomationProperties.SetName(restingButton, value?.ToString());
             AutomationProperties.SetName(valueBox, IsRange ? $"{value?.Label} from" : value?.Label);
@@ -236,7 +236,7 @@ public sealed partial class SearchTermBox : UserControl
         if (_isShowingPickedValue || box is null || args.AddedDates.Count == 0)
             return;
 
-        box.Text = DescribeEnd(SearchQuery.NormalizeEnd(SearchQuery.PublishedLabel, args.AddedDates[0].ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
+        box.Text = SearchTermText.DescribeEnd(SearchQuery.NormalizeEnd(SearchQuery.PublishedLabel, args.AddedDates[0].ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
         box.Focus(FocusState.Programmatic);
         box.SelectionStart = box.Text.Length;
         datePicker.Hide();
@@ -287,8 +287,8 @@ public sealed partial class SearchTermBox : UserControl
 
         var range = SearchRange.Parse(term!.Value);
         var isDuration = term.Label == SearchQuery.DurationLabel;
-        valueBox.Text = DescribeEnd(range.Lower);
-        upperBox.Text = DescribeEnd(range.Upper);
+        valueBox.Text = SearchTermText.DescribeEnd(range.Lower);
+        upperBox.Text = SearchTermText.DescribeEnd(range.Upper);
         valueBox.PlaceholderText = isDuration ? SearchQuery.LongerLabel : SearchQuery.AfterLabel;
         upperBox.PlaceholderText = isDuration ? SearchQuery.ShorterLabel : SearchQuery.BeforeLabel;
     }
@@ -330,58 +330,6 @@ public sealed partial class SearchTermBox : UserControl
                 args.Handled = true;
                 break;
         }
-    }
-
-    // The value at rest. A range reads as both ends around a dash, or one end after a sign for which end it is.
-    private static string Describe(SearchTerm? term)
-    {
-        if (term is null || !SearchQuery.IsRange(term.Label))
-            return term?.Value ?? string.Empty;
-
-        var range = SearchRange.Parse(term.Value);
-        var lower = DescribeEnd(range.Lower);
-        var upper = DescribeEnd(range.Upper);
-        if (lower.Length > 0 && upper.Length > 0)
-            return $"{lower} \u2013 {upper}";
-
-        return lower.Length > 0 ? $"> {lower}" : $"< {upper}";
-    }
-
-    // What the term asks of a result, as a sentence. A term with no value yet says nothing.
-    private static string Explain(SearchTerm? term)
-    {
-        if (term is null || term.Value.Length == 0)
-            return string.Empty;
-
-        if (!SearchQuery.IsRange(term.Label))
-        {
-            return term.Label switch
-            {
-                SearchQuery.ExactLabel => $"Has the exact words \"{term.Value}\"",
-                SearchQuery.ExcludeLabel => $"Doesn't have \"{term.Value}\"",
-                SearchQuery.AuthorLabel => $"By {term.Value}",
-                _ => term.ToString()
-            };
-        }
-
-        var range = SearchRange.Parse(term.Value);
-        var lower = DescribeEnd(range.Lower);
-        var upper = DescribeEnd(range.Upper);
-        var isDuration = term.Label == SearchQuery.DurationLabel;
-        if (lower.Length > 0 && upper.Length > 0)
-            return isDuration ? $"Between {lower} and {upper} long" : $"Published between {lower} and {upper}";
-
-        if (lower.Length > 0)
-            return isDuration ? $"Longer than {lower}" : $"Published after {lower}";
-
-        return isDuration ? $"Shorter than {upper}" : $"Published before {upper}";
-    }
-
-    // A date reads as day, month and year, a year alone as its first of January. Anything else reads as written.
-    private static string DescribeEnd(string end)
-    {
-        var date = SearchQuery.ReadDate(end);
-        return date is null ? end : date.Value.ToString("d MMM yyyy", CultureInfo.CurrentCulture);
     }
 
     // The same icons as the menu the terms are added from, in the Segoe Fluent Icons font.

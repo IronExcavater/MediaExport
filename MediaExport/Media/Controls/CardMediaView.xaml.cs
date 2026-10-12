@@ -10,4 +10,11 @@ public sealed partial class CardMediaView : MediaView
     {
         InitializeComponent();
     }
+
+    /// <summary>The shape of the card's picture while it is a skeleton, with no media to take it from.</summary>
+    public double PlaceholderShape
+    {
+        get => thumbnail.PlaceholderShape;
+        set => thumbnail.PlaceholderShape = value;
+    }
 }

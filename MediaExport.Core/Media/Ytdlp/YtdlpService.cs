@@ -97,6 +97,8 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
         var views = GetNumber(entry, "view_count");
         // Falls back to the release time. A live stream has neither, nor a duration or a view count.
         var timestamp = GetNumber(entry, "timestamp") ?? GetNumber(entry, "release_timestamp");
+        var creatorLink = GetString(entry, "channel_url") ?? GetString(entry, "uploader_url");
+        Uri.TryCreate(creatorLink, UriKind.Absolute, out var creatorUri);
         return new YtdlpSearchResult(
             identity,
             GetString(entry, "webpage_url") ?? GetString(entry, "url"),
@@ -105,7 +107,8 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
             GetString(entry, "uploader") ?? GetString(entry, "channel"),
             duration is null ? null : TimeSpan.FromSeconds(duration.Value),
             views is null ? null : (long)views.Value,
-            timestamp is null ? null : DateTimeOffset.FromUnixTimeSeconds((long)timestamp.Value));
+            timestamp is null ? null : DateTimeOffset.FromUnixTimeSeconds((long)timestamp.Value),
+            creatorUri);
     }
 
     // Runs yt-dlp and returns what it wrote to standard output.
@@ -176,7 +179,7 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
     }
 
     // yt-dlp often writes a missing value as null or an empty string rather than leaving it out.
-    private static string? GetString(JsonElement entry, string name)
+    internal static string? GetString(JsonElement entry, string name)
     {
         var isString = entry.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String;
         if (!isString)
@@ -186,7 +189,7 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
         return string.IsNullOrWhiteSpace(text) ? null : text;
     }
 
-    private static double? GetNumber(JsonElement entry, string name)
+    internal static double? GetNumber(JsonElement entry, string name)
     {
         var isNumber = entry.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number;
         return isNumber ? value.GetDouble() : null;
