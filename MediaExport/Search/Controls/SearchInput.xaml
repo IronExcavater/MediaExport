@@ -36,6 +36,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <!-- Everything before the buttons scrolls sideways together when it is longer than the field. -->
@@ -50,8 +51,8 @@
                     ZoomMode="Disabled">
                     <Grid
                         x:Name="fieldContent"
-                        Padding="2,2,0,2"
-                        ColumnSpacing="2">
+                        Padding="3,3,0,3"
+                        ColumnSpacing="4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
@@ -113,7 +114,7 @@
                         <TextBox
                             x:Name="queryBox"
                             Grid.Column="3"
-                            Margin="0,-2"
+                            Margin="0,-3"
                             AutomationProperties.Name="Search"
                             GotFocus="QueryBox_FocusChanged"
                             KeyDown="QueryBox_KeyDown"
@@ -141,7 +142,7 @@
             <!-- The focus underline, drawn over the border so that nothing inside the field moves. -->
             <Border
                 x:Name="focusBorder"
-                Grid.ColumnSpan="2"
+                Grid.ColumnSpan="3"
                 Margin="-1"
                 BorderBrush="{ThemeResource TextControlBorderBrushFocused}"
                 BorderThickness="{ThemeResource TextControlBorderThemeThicknessFocused}"
@@ -150,7 +151,7 @@
                 Visibility="Collapsed" />
 
             <ProgressBar
-                Grid.ColumnSpan="2"
+                Grid.ColumnSpan="3"
                 VerticalAlignment="Bottom"
                 IsHitTestVisible="False"
                 IsIndeterminate="True"
@@ -161,7 +162,7 @@
                 x:Name="resultsPopup"
                 Closed="ResultsPopup_OpenChanged"
                 Opened="ResultsPopup_OpenChanged"
-                Grid.ColumnSpan="2"
+                Grid.ColumnSpan="3"
                 HorizontalOffset="-1">
                 <!-- The panel slides down like a menu, clipped by the grid so it comes out from under the field. -->
                 <Grid>
@@ -310,9 +311,9 @@
 
             <StackPanel
                 Grid.Column="1"
-                Margin="2"
+                Margin="4,3,0,3"
                 Orientation="Horizontal"
-                Spacing="2">
+                Spacing="4">
                 <!-- Empties the query box and every term, in place of the query box's own hidden delete button. -->
                 <Button
                     x:Name="deleteButton"
@@ -383,28 +384,34 @@
                     controls:VisibilityTransition.Fade="True"
                     Pasted="ClipboardButton_Pasted"
                     Text="{x:Bind ViewModel.FullText, Mode=OneWay}" />
-
-                <!-- Opens the Search page, and reads "See all results" while results are listed under the field. -->
-                <Button
-                    x:Name="searchButton"
-                    AutomationProperties.Name="Search"
-                    Click="Search_Click"
-                    Style="{StaticResource FieldIconButtonStyle}"
-                    ToolTipService.ToolTip="Search">
-                    <!-- Two overlapping icons that cross-fade. -->
-                    <Grid>
-                        <FontIcon
-                            x:Name="searchIcon"
-                            Glyph="&#xE721;"
-                            Style="{StaticResource FieldIconStyle}" />
-                        <FontIcon
-                            x:Name="seeAllIcon"
-                            Glyph="&#xE8A7;"
-                            Opacity="0"
-                            Style="{StaticResource FieldIconStyle}" />
-                    </Grid>
-                </Button>
             </StackPanel>
+
+            <!--
+                Opens the Search page, and reads "See all results" while results are listed under the field. It has a
+                column of its own so that it sits a set distance from the field's edge. At the end of the panel of
+                buttons, the rounding of each button's place to whole pixels added up and pushed it towards the edge.
+            -->
+            <Button
+                x:Name="searchButton"
+                Grid.Column="2"
+                Margin="4,3,3,3"
+                AutomationProperties.Name="Search"
+                Click="Search_Click"
+                Style="{StaticResource FieldIconButtonStyle}"
+                ToolTipService.ToolTip="Search">
+                <!-- Two overlapping icons that cross-fade. -->
+                <Grid>
+                    <FontIcon
+                        x:Name="searchIcon"
+                        Glyph="&#xE721;"
+                        Style="{StaticResource FieldIconStyle}" />
+                    <FontIcon
+                        x:Name="seeAllIcon"
+                        Glyph="&#xE8A7;"
+                        Opacity="0"
+                        Style="{StaticResource FieldIconStyle}" />
+                </Grid>
+            </Button>
         </Grid>
     </Border>
 </UserControl>

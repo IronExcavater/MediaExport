@@ -104,10 +104,13 @@
         <Setter Property="Width" Value="32" />
     </Style>
 
-    <!-- A field button that holds only an icon. -->
+    <!--
+        A field button that holds only an icon. Its size and the gaps around it in a field are multiples of 4, which
+        come to whole pixels at 125% and 150% display scale, so the buttons sit evenly however the field is placed.
+    -->
     <Style x:Key="FieldIconButtonStyle" BasedOn="{StaticResource FieldButtonStyle}" TargetType="Button">
         <Setter Property="Padding" Value="0" />
-        <Setter Property="Width" Value="30" />
+        <Setter Property="Width" Value="28" />
     </Style>
 
     <!-- A small square button at the end of a row in a list. -->
