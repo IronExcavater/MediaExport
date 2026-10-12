@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MediaExport.Core.Media.Models;
 using MediaExport.Core.Media.Providers;
+using MediaExport.Core.Storage;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -19,11 +20,16 @@ namespace MediaExport.Search;
 /// <param name="ProviderIcons">The resource keys of its sources' icons.</param>
 /// <param name="Terms">Its terms other than the source and the ranking.</param>
 /// <param name="Words">The words it searches for.</param>
+/// <param name="IsPinned">Whether it is kept at the top of the list, however many searches follow it.</param>
 public sealed record RecentSearch(
     string FullText,
     IReadOnlyList<string> ProviderIcons,
     IReadOnlyList<SearchTerm> Terms,
-    string Words);
+    string Words,
+    bool IsPinned = false) : IPinnable<RecentSearch>
+{
+    public RecentSearch WithPin(bool isPinned) => this with { IsPinned = isPinned };
+}
 
 /// <summary>Coordinates the shared search query, selected source, and current results.</summary>
 public sealed partial class SearchViewModel : ObservableObject
@@ -74,7 +80,7 @@ public sealed partial class SearchViewModel : ObservableObject
     public ObservableCollection<SearchTerm> Terms { get; } = [];
 
     /// <summary>The searches that were committed to with <see cref="CommitSearchAsync"/>, newest first.</summary>
-    public ObservableCollection<RecentSearch> RecentSearches { get; } = [];
+    public RecentList<RecentSearch> RecentSearches { get; } = new(RecentSearchCapacity, IsSame);
 
     /// <summary>The query the results are for. It lags behind <see cref="Query"/> while that is being typed.</summary>
     [ObservableProperty]
@@ -253,6 +259,9 @@ public sealed partial class SearchViewModel : ObservableObject
         get
         {
             var search = _shownSearch;
+            if (SearchQuery.ReadLink(search.Text) is not null)
+                return "Playlist";
+
             var exactTerms = search.Terms.Where(term => term.Label == SearchQuery.ExactLabel);
             var quoted = exactTerms.Select(term => $"\"{term.Value}\"");
             var parts = quoted.Prepend(search.Text).Where(part => part.Length > 0);
@@ -328,16 +337,10 @@ public sealed partial class SearchViewModel : ObservableObject
     }
 
     /// <summary>Fills <see cref="RecentSearches"/> with searches written as text, such as ones saved earlier.</summary>
-    public void LoadRecentSearches(IEnumerable<string> searches)
+    public void LoadRecentSearches(IEnumerable<string> searches, IEnumerable<string>? pinned = null)
     {
-        RecentSearches.Clear();
-        foreach (var text in searches)
-        {
-            var recent = ToRecentSearch(text);
-            var isListed = RecentSearches.Any(earlier => IsSame(earlier, recent));
-            if (!isListed)
-                RecentSearches.Add(recent);
-        }
+        var pinnedSearches = (pinned ?? []).Select(ToRecentSearch);
+        RecentSearches.Load(searches.Select(ToRecentSearch), pinnedSearches);
     }
 
     /// <summary>Searches and records the search as a recent one. Not for a search made while typing.</summary>
@@ -346,22 +349,44 @@ public sealed partial class SearchViewModel : ObservableObject
     {
         var hasSearch = Query.Trim().Length > 0 || Terms.Count > 0;
         if (hasSearch)
-            Remember(FullText);
+            RecentSearches.Remember(ToRecentSearch(FullText));
 
         return SearchAsync();
     }
 
-    // A search done again moves to the front instead of being listed twice.
-    private void Remember(string fullText)
-    {
-        var recent = ToRecentSearch(fullText);
-        var earlier = RecentSearches.Where(listed => IsSame(listed, recent)).ToList();
-        foreach (var duplicate in earlier)
-            RecentSearches.Remove(duplicate);
+    private IMediaSearchProvider? FindLinkProvider(Uri link) =>
+        Providers.FirstOrDefault(provider => provider.GetLinkKind(link) != LinkKind.None);
 
-        RecentSearches.Insert(0, recent);
-        while (RecentSearches.Count > RecentSearchCapacity)
-            RecentSearches.RemoveAt(RecentSearches.Count - 1);
+    /// <summary>What a link is to, on whichever source it is a link to.</summary>
+    public LinkKind GetLinkKind(Uri link) => FindLinkProvider(link)?.GetLinkKind(link) ?? LinkKind.None;
+
+    /// <summary>Replaces the search with one for the creator whose page a link is to, on their source.</summary>
+    /// <returns>Why the creator couldn't be searched for, or <c>null</c> if they were.</returns>
+    public async Task<string?> SearchCreatorAsync(Uri link)
+    {
+        var provider = FindLinkProvider(link);
+        if (provider is null)
+            return "Couldn't open that link. It isn't to a source the app searches.";
+
+        string? creator;
+        try
+        {
+            creator = await provider.FindCreatorAsync(link);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return $"Couldn't open that link. {exception.Message}";
+        }
+
+        if (string.IsNullOrWhiteSpace(creator))
+            return "Couldn't open that link. The page doesn't say whose it is.";
+
+        var source = SearchQuery.Source([provider.Id]);
+        var author = new SearchTerm(SearchQuery.AuthorLabel, creator);
+        var search = new SearchQuery(string.Empty, [source, author]);
+        Replace(search.ToString());
+        await CommitSearchAsync();
+        return null;
     }
 
     // Two searches are the same when they are listed the same, however each was written.
@@ -404,15 +429,18 @@ public sealed partial class SearchViewModel : ObservableObject
         _shownSort = Sort;
         OnPropertyChanged(nameof(Title));
 
-        // A link is opened, not searched for. An empty search is made all the same, for what is popular.
-        var isLink = SearchQuery.ReadLink(Query) is not null;
-        if (isLink)
+        // A link to one item or to a creator is opened, not searched for. A link to a list is searched for what
+        // the list holds, on the source it is a link to. An empty search is made all the same, for what is popular.
+        var link = SearchQuery.ReadLink(Query);
+        var listProvider = link is null ? null : FindLinkProvider(link);
+        var isList = listProvider?.GetLinkKind(link!) == LinkKind.List;
+        if (link is not null && !isList)
             return;
 
-        var providers = SelectedProviders.ToList();
+        var providers = isList ? [listProvider!] : SelectedProviders.ToList();
         if (providers.Count == 0)
         {
-            Message = "There are no sources to search yet";
+            Message = "There are no sources to search.";
             return;
         }
 
@@ -434,7 +462,9 @@ public sealed partial class SearchViewModel : ObservableObject
         IsSearching = true;
         try
         {
-            var found = await FindAsync(providers, query, page, running.Token);
+            var found = isList
+                ? await listProvider!.ListByLinkAsync(link!, (page - 1) * PageSize, PageSize, running.Token)
+                : await FindAsync(providers, query, page, running.Token);
             // A newer search started while this one was waiting, so these results are out of date.
             if (running.IsCancellationRequested)
                 return;
@@ -457,7 +487,7 @@ public sealed partial class SearchViewModel : ObservableObject
         }
         catch (Exception exception) when (!running.IsCancellationRequested)
         {
-            Message = $"Search hit a snag. {exception.Message}";
+            Message = $"Couldn't search {SourceName}. {exception.Message}";
         }
         finally
         {
@@ -515,9 +545,9 @@ public sealed partial class SearchViewModel : ObservableObject
         // A source with nothing popular to list is not a search that failed.
         var isSearch = search.ToSearchText().Length > 0;
         if (found.Count == 0)
-            Message = isSearch ? $"No results found in {SourceName}" : null;
+            Message = isSearch ? $"No results on {SourceName}. Try different words." : null;
         else if (withinRanges.Count == 0)
-            Message = "Nothing on this page is within the search's ranges";
+            Message = "No results on this page match the filters. Try the next page.";
         else
             Message = null;
 
