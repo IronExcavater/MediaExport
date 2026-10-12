@@ -5,6 +5,16 @@ using MediaExport.Core.Media.Models;
 
 namespace MediaExport.Core.Media.Providers;
 
+/// <summary>How a source ranks what it finds.</summary>
+public enum SearchSort
+{
+    /// <summary>The source's own idea of what fits the search best.</summary>
+    Relevance,
+
+    /// <summary>The most viewed first.</summary>
+    Views
+}
+
 /// <summary>Searches a single media source such as YouTube.</summary>
 public interface IMediaSearchProvider
 {
@@ -20,5 +30,5 @@ public interface IMediaSearchProvider
     /// <summary>Searches the source. A failure is thrown, not returned as an empty list.</summary>
     /// <param name="skip">How many results to pass over first. Page 3 of 20 a page skips 40.</param>
     /// <param name="limit">The most results wanted. The source may have fewer.</param>
-    Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, int skip = 0, int limit = 10, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, int skip = 0, int limit = 10, SearchSort sort = SearchSort.Relevance, CancellationToken cancellationToken = default);
 }
