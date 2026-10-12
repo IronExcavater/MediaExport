@@ -3,6 +3,7 @@
 
 using MediaExport.Core.Media.Models;
 using MediaExport.Export;
+using MediaExport.Media.Controls;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -23,8 +24,10 @@ public sealed partial class SearchPage : Page
 
     public SearchViewModel ViewModel { get; } = App.Current.Services.GetRequiredService<SearchViewModel>();
 
-    /// <summary>One for each skeleton card shown while a page loads. Only how many there are matters.</summary>
-    public int[] LoadingSlots { get; } = new int[12];
+    /// <summary>The shapes of the skeleton cards shown while a page loads: a page's worth, with a square one in every three.</summary>
+    public double[] LoadingShapes { get; } = Enumerable.Range(0, 20)
+        .Select(index => MediaThumbnail.ShapeOf(index % 3 == 1 ? MediaKind.Audio : MediaKind.Video))
+        .ToArray();
 
     private void PageBox_GotFocus(object sender, RoutedEventArgs args) => pageBox.SelectAll();
 
