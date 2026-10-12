@@ -4,6 +4,7 @@
 using MediaExport.Core.Media.Providers;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using System;
@@ -16,7 +17,7 @@ namespace MediaExport.Search.Controls;
 
 /// <summary>
 /// Lists the search providers and chooses which are searched. A press chooses one provider alone. With the toggle
-/// on, or Ctrl held, a press adds or removes one.
+/// on, which it is while Ctrl is held, a press adds or removes one.
 /// </summary>
 public sealed partial class ProviderPicker : UserControl
 {
@@ -49,7 +50,7 @@ public sealed partial class ProviderPicker : UserControl
     /// <summary>Makes the picker show what is chosen, for when it is about to be shown.</summary>
     public void Refresh()
     {
-        IsChoosingSeveral = ViewModel?.SelectedProviders.Count > 1;
+        IsChoosingSeveral = IsCtrlHeld;
         ShowChosenProviders();
     }
 
@@ -71,16 +72,24 @@ public sealed partial class ProviderPicker : UserControl
         set => severalButton.IsChecked = value;
     }
 
-    private static bool IsCtrlHeld => InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down);
+    private static bool IsCtrlHeld
+    {
+        get
+        {
+            var ctrl = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
+            return ctrl.HasFlag(CoreVirtualKeyStates.Down);
+        }
+    }
 
-    // Holding Ctrl chooses several for as long as it is held. Letting go ends that, unless several are chosen by then.
+    // The toggle is on for as long as Ctrl is held, whatever is chosen.
     private void Root_CtrlChanged(object sender, KeyRoutedEventArgs args)
     {
         if (args.Key == VirtualKey.Control)
-            IsChoosingSeveral = IsCtrlHeld || ViewModel?.SelectedProviders.Count > 1;
+            IsChoosingSeveral = IsCtrlHeld;
     }
 
-    private void SelectedProviders_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args) => ShowChosenProviders();
+    private void SelectedProviders_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args) =>
+        ShowChosenProviders();
 
     // Selects the chosen providers' rows, and says what the button beside the toggle now does.
     private void ShowChosenProviders()
@@ -102,7 +111,10 @@ public sealed partial class ProviderPicker : UserControl
         }
 
         var isAll = chosen.Count == viewModel.Providers.Count;
-        allProvidersButton.Content = isAll ? "Deselect all" : "Select all";
+        allProvidersIcon.Glyph = isAll ? "\uF16C" : "\uF16B";
+        var action = isAll ? "Deselect all" : "Select all";
+        allProvidersText.Text = action;
+        AutomationProperties.SetName(allProvidersButton, action);
     }
 
     // The list only shows what is chosen. Its own idea of what a press or an arrow key selects is put back, so the
@@ -134,21 +146,10 @@ public sealed partial class ProviderPicker : UserControl
             chosen.Add(provider);
 
         viewModel.SelectProviders(chosen);
-
-        // Once several are chosen, the list carries on that way without Ctrl.
-        if (viewModel.SelectedProviders.Count > 1)
-            IsChoosingSeveral = true;
     }
 
-    // Turned off, the first of the chosen providers is kept.
-    private void SeveralButton_Click(object sender, RoutedEventArgs args)
-    {
-        var viewModel = ViewModel;
-        if (viewModel is not null && !IsChoosingSeveral)
-            viewModel.SelectProviders(viewModel.SelectedProviders.Take(1).ToList());
-    }
-
-    // Deselecting leaves the first provider, since a search needs one.
+    // Deselecting leaves the first provider, since a search needs one. Selecting them all turns the toggle on, as
+    // the next press is most likely to take one away again.
     private void AllProvidersButton_Click(object sender, RoutedEventArgs args)
     {
         var viewModel = ViewModel;

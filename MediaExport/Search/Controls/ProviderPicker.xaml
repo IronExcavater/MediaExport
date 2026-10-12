@@ -36,7 +36,6 @@
                 Padding="0"
                 AutomationProperties.Name="Select several"
                 CornerRadius="6"
-                Click="SeveralButton_Click"
                 ToolTipService.ToolTip="Select several (Ctrl)">
                 <FontIcon FontSize="12" Glyph="&#xE762;" />
             </ToggleButton>
@@ -46,11 +45,17 @@
                 Grid.Column="1"
                 Height="24"
                 Padding="8,0"
-                HorizontalAlignment="Stretch"
+                HorizontalAlignment="Right"
                 Click="AllProvidersButton_Click"
-                Content="Select all"
+                CornerRadius="6"
                 FontSize="12"
-                Style="{StaticResource SubtleButtonStyle}" />
+                Style="{StaticResource SubtleButtonStyle}">
+                <!-- The box is ticked while every provider is chosen, and the words say what a press will do. -->
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon x:Name="allProvidersIcon" FontSize="14" />
+                    <TextBlock x:Name="allProvidersText" />
+                </StackPanel>
+            </Button>
         </Grid>
         <Border
             Height="1"
