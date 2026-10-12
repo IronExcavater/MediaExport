@@ -3,6 +3,7 @@
     x:Class="MediaExport.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:MediaExport.Controls"
     xmlns:shell="using:MediaExport.Shell"
     xmlns:shellControls="using:MediaExport.Shell.Controls"
     xmlns:search="using:MediaExport.Search.Controls"
@@ -106,6 +107,7 @@
             x:Name="navView"
             Grid.Row="1"
             AutoCollapseWidth="{x:Bind shell:WindowSizes.Compact}"
+            ItemInvoked="NavView_ItemInvoked"
             Loaded="NavView_Loaded"
             SelectionChanged="NavView_SelectionChanged">
             <NavigationView.MenuItems>
@@ -117,6 +119,12 @@
                         <FontIcon Glyph="&#xE81C;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+
+                <!-- The media opened lately is listed after this, by ShowRecentlyViewed. -->
+                <NavigationViewItemHeader
+                    x:Name="viewedHeader"
+                    controls:VisibilityTransition.Slide="True"
+                    Content="Recently viewed" />
             </NavigationView.MenuItems>
 
             <Frame x:Name="navFrame" />

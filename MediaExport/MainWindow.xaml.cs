@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 using MediaExport.Activity;
+using MediaExport.Controls;
 using MediaExport.Core.Media.Models;
+using MediaExport.Core.Media.Providers;
 using MediaExport.Core.Settings;
 using MediaExport.Export;
 using MediaExport.Search;
@@ -13,6 +15,7 @@ using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using System;
@@ -61,6 +64,7 @@ public sealed partial class MainWindow : Window
 
         // Whatever opens media, the Export page is where it shows.
         _export.Opened += (_, _) => GoTo("Export");
+        RestoreRecentlyViewed();
         Closed += (_, _) =>
         {
             _settings.Current.LastSearch = Search.FullText;
@@ -101,10 +105,13 @@ public sealed partial class MainWindow : Window
     // too, so they show at once.
     private void RestoreSearch()
     {
-        Search.LoadRecentSearches(_settings.Current.RecentSearches);
+        Search.LoadRecentSearches(_settings.Current.RecentSearches, _settings.Current.PinnedSearches);
         Search.RecentSearches.CollectionChanged += (_, _) =>
         {
-            _settings.Current.RecentSearches = Search.RecentSearches.Select(recent => recent.FullText).ToList();
+            var pinned = Search.RecentSearches.Where(recent => recent.IsPinned);
+            var unpinned = Search.RecentSearches.Where(recent => !recent.IsPinned);
+            _settings.Current.PinnedSearches = pinned.Select(recent => recent.FullText).ToList();
+            _settings.Current.RecentSearches = unpinned.Select(recent => recent.FullText).ToList();
             _settings.Save();
         };
 
@@ -113,6 +120,161 @@ public sealed partial class MainWindow : Window
             Search.Replace(lastSearch);
 
         Search.SearchCommand.Execute(null);
+    }
+
+    private void RestoreRecentlyViewed()
+    {
+        var settings = _settings.Current;
+        var unpinned = settings.RecentlyViewed.Select(media => new ViewedMedia(media));
+        var pinned = settings.PinnedViewed.Select(media => new ViewedMedia(media));
+        _export.RecentlyViewed.Load(unpinned, pinned);
+        ShowRecentlyViewed();
+        navView.IsCompactChanged += (_, _) => ShowViewedSection();
+
+        _export.RecentlyViewed.CollectionChanged += (_, _) =>
+        {
+            var viewed = _export.RecentlyViewed;
+            settings.PinnedViewed = viewed.Where(item => item.IsPinned).Select(item => item.Media).ToList();
+            settings.RecentlyViewed = viewed.Where(item => !item.IsPinned).Select(item => item.Media).ToList();
+            _settings.Save();
+
+            // The list may be changing because one of its items in the pane was chosen, so the pane's items are
+            // replaced once that has been dealt with.
+            DispatcherQueue.TryEnqueue(ShowRecentlyViewed);
+        };
+    }
+
+    // Lists the recently viewed media in the pane, under their heading. Each is opened again when it is chosen,
+    // and is pinned or removed from its right-click menu.
+    private void ShowRecentlyViewed()
+    {
+        var items = navView.MenuItems;
+        foreach (var row in GetViewedRows())
+            items.Remove(row);
+
+        var viewed = _export.RecentlyViewed;
+        foreach (var media in viewed)
+            items.Add(CreateViewedItem(media));
+
+        if (viewed.Count == 0)
+            items.Add(CreateViewedItem(content: "Nothing viewed yet", ViewedTag.Empty, isEnabled: false));
+
+        ShowViewedSection();
+    }
+
+    // A compact pane has no room for the section, which fades and slides away with its heading.
+    private void ShowViewedSection()
+    {
+        var visibility = navView.IsCompact ? Visibility.Collapsed : Visibility.Visible;
+        viewedHeader.Visibility = visibility;
+        foreach (var row in GetViewedRows())
+            row.Visibility = visibility;
+    }
+
+    private List<NavigationViewItem> GetViewedRows()
+    {
+        var items = navView.MenuItems.OfType<NavigationViewItem>();
+        return items.Where(item => item.Tag is ViewedTag or ViewedMedia).ToList();
+    }
+
+    private const double RowEndInset = -8;
+
+    // What marks the row that stands in for the list while it is empty.
+    private enum ViewedTag
+    {
+        Empty
+    }
+
+    // A row in the recently viewed list, which is a little shorter than the pane's other items.
+    private static NavigationViewItem CreateViewedItem(object content, object tag, bool isEnabled = true)
+    {
+        var item = new NavigationViewItem
+        {
+            Content = content,
+            Tag = tag,
+            IsEnabled = isEnabled,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            // Choosing it opens the media on the Export page, which is the item that then shows as selected.
+            SelectsOnInvoked = false
+        };
+        item.Resources["NavigationViewItemOnLeftMinHeight"] = 30.0;
+        VisibilityTransition.SetSlide(item, true);
+        return item;
+    }
+
+    private NavigationViewItem CreateViewedItem(ViewedMedia viewed)
+    {
+        var provider = Search.Providers.FirstOrDefault(candidate => candidate.Id == viewed.Media.ProviderId);
+        var icon = new IconView { Width = 16, Height = 16, Icon = provider?.Icon };
+        var title = new TextBlock
+        {
+            Text = viewed.Media.Title,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        // A pinned one keeps a pin at its end. The remove button takes that place while the pointer is over the
+        // row, and takes no room otherwise, so the title has the row's width.
+        var pinMark = new FontIcon
+        {
+            Glyph = "\uE840",
+            FontSize = 12,
+            Margin = new Thickness(0, 0, 6, 0),
+            Visibility = viewed.IsPinned ? Visibility.Visible : Visibility.Collapsed
+        };
+        var removeButton = new Button
+        {
+            Content = new FontIcon { Glyph = "\uE711", FontSize = 10 },
+            Style = (Style)Application.Current.Resources["RowIconButtonStyle"],
+            Visibility = Visibility.Collapsed
+        };
+        AutomationProperties.SetName(removeButton, "Remove");
+        ToolTipService.SetToolTip(removeButton, "Remove");
+        removeButton.Click += (_, _) => _export.RecentlyViewed.Remove(viewed);
+
+        // The negative margin puts the button in the row's corner, past the padding a pane item has on its right.
+        var row = new Grid { ColumnSpacing = 8, Margin = new Thickness(0, 0, RowEndInset, 0) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(title, 1);
+        Grid.SetColumn(pinMark, 2);
+        Grid.SetColumn(removeButton, 2);
+        row.Children.Add(icon);
+        row.Children.Add(title);
+        row.Children.Add(pinMark);
+        row.Children.Add(removeButton);
+
+        var pin = new MenuFlyoutItem
+        {
+            Text = viewed.IsPinned ? "Unpin" : "Pin",
+            Icon = new FontIcon { Glyph = viewed.IsPinned ? "\uE77A" : "\uE718" }
+        };
+        pin.Click += (_, _) => _export.RecentlyViewed.TogglePin(viewed);
+
+        var remove = new MenuFlyoutItem { Text = "Remove", Icon = new FontIcon { Glyph = "\uE711" } };
+        remove.Click += (_, _) => _export.RecentlyViewed.Remove(viewed);
+
+        var item = CreateViewedItem(row, viewed);
+        item.ContextFlyout = new MenuFlyout { Items = { pin, remove } };
+        item.PointerEntered += (_, _) => ShowRemoveButton(isShown: true);
+        item.PointerExited += (_, _) => ShowRemoveButton(isShown: false);
+        AutomationProperties.SetName(item, viewed.Media.Title);
+        ToolTipService.SetToolTip(item, viewed.Media.Title);
+        return item;
+
+        void ShowRemoveButton(bool isShown)
+        {
+            var showsPin = viewed.IsPinned && !isShown;
+            removeButton.Visibility = isShown ? Visibility.Visible : Visibility.Collapsed;
+            pinMark.Visibility = showsPin ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private void NavView_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
+    {
+        if (args.InvokedItemContainer?.Tag is ViewedMedia viewed)
+            _export.Open(viewed.Media);
     }
 
     // Windows doesn't remember the size of a WinUI window between runs, so the app does.
@@ -161,7 +323,14 @@ public sealed partial class MainWindow : Window
 
     private void SearchInput_ResultChosen(object? sender, MediaSearchResult media) => _export.Open(media);
 
-    private async void SearchInput_LinkSubmitted(object? sender, Uri link) => await _export.OpenLinkAsync(link);
+    // A link that can't be opened is explained under the field it was entered in.
+    private async void SearchInput_LinkSubmitted(object? sender, Uri link)
+    {
+        // A link to a creator becomes a search for them. Any other is opened, or said to be one that can't be.
+        searchInput.Message = null;
+        var isCreator = Search.GetLinkKind(link) == LinkKind.Creator;
+        searchInput.Message = isCreator ? await Search.SearchCreatorAsync(link) : await _export.OpenLinkAsync(link);
+    }
 
     private void FocusSearch_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {

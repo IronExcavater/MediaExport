@@ -6,6 +6,7 @@ using MediaExport.Activity;
 using MediaExport.Core.Media.Models;
 using MediaExport.Core.Media.Providers;
 using MediaExport.Core.Settings;
+using MediaExport.Core.Storage;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,9 +15,17 @@ using System.Threading.Tasks;
 
 namespace MediaExport.Export;
 
+/// <summary>Media that was opened earlier, as it is listed for opening again.</summary>
+public sealed record ViewedMedia(MediaSearchResult Media, bool IsPinned = false) : IPinnable<ViewedMedia>
+{
+    public ViewedMedia WithPin(bool isPinned) => this with { IsPinned = isPinned };
+}
+
 /// <summary>The media that's open and how it's to be exported. Exporting hands the job to <see cref="ActivityViewModel"/>.</summary>
 public sealed partial class ExportViewModel : ObservableObject
 {
+    private const int ViewedCapacity = 8;
+
     private readonly ActivityViewModel _activity;
     private readonly SettingsStore _settings;
     private readonly IReadOnlyList<IMediaSearchProvider> _providers;
@@ -39,6 +48,11 @@ public sealed partial class ExportViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsOpen))]
     public partial MediaSearchResult? Media { get; private set; }
 
+    /// <summary>The media that was opened, newest first after the pinned ones.</summary>
+    public RecentList<ViewedMedia> RecentlyViewed { get; } = new(ViewedCapacity, IsSame);
+
+    private static bool IsSame(ViewedMedia one, ViewedMedia other) => one.Media.SourceUrl == other.Media.SourceUrl;
+
     /// <summary>Whether a link is being read.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsOpen))]
@@ -56,11 +70,13 @@ public sealed partial class ExportViewModel : ObservableObject
         _reading = null;
         IsLoading = false;
         Media = media;
+        RecentlyViewed.Remember(new ViewedMedia(media));
         Opened?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Opens the media a link is to. The page shows at once, and the media when the link has been read.</summary>
-    public async Task OpenLinkAsync(Uri link)
+    /// <returns>Why the link couldn't be opened, or <c>null</c> if it was, or if a newer link took its place.</returns>
+    public async Task<string?> OpenLinkAsync(Uri link)
     {
         _reading?.Cancel();
         var reading = new CancellationTokenSource();
@@ -72,13 +88,27 @@ public sealed partial class ExportViewModel : ObservableObject
         try
         {
             var media = await FindAsync(link, reading.Token);
-            if (reading == _reading)
-                Media = media;
+            if (reading != _reading)
+                return null;
+
+            Media = media;
+            if (media is not null)
+            {
+                RecentlyViewed.Remember(new ViewedMedia(media));
+                return null;
+            }
+
+            // No provider had one item at the link, either because it is to another site or to a list.
+            var sources = string.Join(" or ", _providers.Select(provider => provider.DisplayName));
+            return $"Couldn't open that link. It needs to be to one video or track on {sources}.";
         }
-        catch (Exception exception) when (exception is OperationCanceledException or InvalidOperationException)
+        catch (OperationCanceledException)
         {
-            // A link that was replaced by a newer one, or that couldn't be read, opens nothing. The page has
-            // nowhere to say why yet.
+            return null;
+        }
+        catch (InvalidOperationException exception)
+        {
+            return reading == _reading ? $"Couldn't open that link. {exception.Message}" : null;
         }
         finally
         {
