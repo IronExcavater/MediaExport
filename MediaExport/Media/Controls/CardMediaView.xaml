@@ -19,7 +19,7 @@
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
 
-        <local:MediaThumbnail Media="{x:Bind Media, Mode=OneWay}" />
+        <local:MediaThumbnail x:Name="thumbnail" Media="{x:Bind Media, Mode=OneWay}" />
 
         <!-- Each bar is as tall, with its margins, as the text it stands in for. -->
         <StackPanel
