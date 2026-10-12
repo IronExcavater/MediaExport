@@ -26,44 +26,83 @@
             </Grid.ColumnDefinitions>
 
             <TextBlock
+                VerticalAlignment="Center"
                 Style="{StaticResource PageTitleStyle}"
-                Text="{x:Bind ViewModel.Summary, Mode=OneWay}"
+                Text="{x:Bind ViewModel.Title, Mode=OneWay}"
                 TextTrimming="CharacterEllipsis" />
 
-            <StackPanel
-                Grid.Column="1"
-                VerticalAlignment="Center"
-                Orientation="Horizontal"
-                Spacing="4"
-                Visibility="{x:Bind converters:VisibleWhen.NotBlank(ViewModel.SearchedQuery), Mode=OneWay}">
-                <Button
-                    AutomationProperties.Name="Previous page"
-                    Command="{x:Bind ViewModel.PreviousPageCommand}"
-                    Style="{StaticResource PageButtonStyle}"
-                    ToolTipService.ToolTip="Previous page">
-                    <FontIcon Glyph="&#xE76B;" Style="{StaticResource FieldIconStyle}" />
-                </Button>
+            <StackPanel Grid.Column="1" Spacing="2">
+                <StackPanel
+                    HorizontalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="4">
+                    <Button
+                        AutomationProperties.Name="Previous page"
+                        Command="{x:Bind ViewModel.PreviousPageCommand}"
+                        Style="{StaticResource PageButtonStyle}"
+                        ToolTipService.ToolTip="Previous page">
+                        <FontIcon Glyph="&#xE76B;" Style="{StaticResource FieldIconStyle}" />
+                    </Button>
 
-                <Border
-                    Width="32"
-                    Height="32"
-                    Background="{ThemeResource AccentFillColorDefaultBrush}"
-                    CornerRadius="{StaticResource ControlCornerRadius}">
-                    <TextBlock
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
+                    <!--
+                        The page that is showing, and a box to type another in. It looks like an accent button until
+                        it has focus, when it is an ordinary text box: only the colours a TextBox has at rest and
+                        under the pointer are replaced. TextWrapping is Wrap only because a wrapping TextBox has
+                        no delete button, which would cover a box this narrow.
+                    -->
+                    <TextBox
+                        x:Name="pageBox"
+                        Width="32"
+                        Height="28"
+                        MinWidth="0"
+                        MinHeight="0"
+                        Padding="0,3,0,4"
                         AutomationProperties.Name="Page"
-                        Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                        Text="{x:Bind ViewModel.Page, Mode=OneWay}" />
-                </Border>
+                        BeforeTextChanging="PageBox_BeforeTextChanging"
+                        GotFocus="PageBox_GotFocus"
+                        InputScope="Number"
+                        KeyDown="PageBox_KeyDown"
+                        LostFocus="PageBox_LostFocus"
+                        MaxLength="3"
+                        Text="{x:Bind ViewModel.Page, Mode=OneWay}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        ToolTipService.ToolTip="Go to a page">
+                        <TextBox.Resources>
+                            <!-- Parts of TextBox's template are held to these sizes as well as the box itself. -->
+                            <x:Double x:Key="TextControlThemeMinWidth">0</x:Double>
+                            <x:Double x:Key="TextControlThemeMinHeight">0</x:Double>
+                            <StaticResource x:Key="TextControlBackground" ResourceKey="AccentFillColorDefaultBrush" />
+                            <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="AccentFillColorSecondaryBrush" />
+                            <StaticResource x:Key="TextControlForeground" ResourceKey="TextOnAccentFillColorPrimaryBrush" />
+                            <StaticResource x:Key="TextControlForegroundPointerOver" ResourceKey="TextOnAccentFillColorPrimaryBrush" />
+                            <StaticResource x:Key="TextControlBorderBrush" ResourceKey="AccentControlElevationBorderBrush" />
+                            <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="AccentControlElevationBorderBrush" />
+                        </TextBox.Resources>
+                    </TextBox>
 
-                <Button
-                    AutomationProperties.Name="Next page"
-                    Command="{x:Bind ViewModel.NextPageCommand}"
-                    Style="{StaticResource PageButtonStyle}"
-                    ToolTipService.ToolTip="Next page">
-                    <FontIcon Glyph="&#xE76C;" Style="{StaticResource FieldIconStyle}" />
-                </Button>
+                    <Button
+                        AutomationProperties.Name="Next page"
+                        Command="{x:Bind ViewModel.NextPageCommand}"
+                        Style="{StaticResource PageButtonStyle}"
+                        ToolTipService.ToolTip="Next page">
+                        <FontIcon Glyph="&#xE76C;" Style="{StaticResource FieldIconStyle}" />
+                    </Button>
+                </StackPanel>
+
+                <!-- Which results are showing, or why there are none. A search that is still going shows as a bar instead. -->
+                <Grid MinHeight="16">
+                    <TextBlock
+                        MaxWidth="320"
+                        HorizontalAlignment="Center"
+                        HorizontalTextAlignment="Center"
+                        Style="{StaticResource SecondaryTextStyle}"
+                        Text="{x:Bind ViewModel.Summary, Mode=OneWay}" />
+                    <ProgressBar
+                        VerticalAlignment="Center"
+                        IsIndeterminate="True"
+                        Visibility="{x:Bind ViewModel.IsSearching, Mode=OneWay}" />
+                </Grid>
             </StackPanel>
         </Grid>
 
@@ -74,7 +113,7 @@
                     <!-- Skeleton cards in the same grid while a page loads, so the results fill in without a jump. -->
                     <ItemsRepeater ItemsSource="{x:Bind LoadingSlots}" Visibility="{x:Bind ViewModel.IsSearching, Mode=OneWay}">
                         <ItemsRepeater.Layout>
-                            <controls:RowGridLayout MinItemWidth="256" MinRowSpacing="4" />
+                            <controls:JustifiedLayout ItemPadding="16" RowHeight="150" RowSpacing="4" />
                         </ItemsRepeater.Layout>
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate>
@@ -87,13 +126,14 @@
                     </ItemsRepeater>
 
                     <ItemsRepeater ItemsSource="{x:Bind ViewModel.Results}">
-                        <!-- The spacing is small because each card's button has padding of its own. -->
+                        <!-- The spacing is small because each card's button has padding of its own, which ItemPadding is. -->
                         <ItemsRepeater.Layout>
-                            <controls:RowGridLayout MinItemWidth="256" MinRowSpacing="4" />
+                            <controls:JustifiedLayout ItemPadding="16" RowHeight="150" RowSpacing="4" />
                         </ItemsRepeater.Layout>
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="models:MediaSearchResult">
                                 <Button
+                                    controls:JustifiedLayout.Shape="{x:Bind media:MediaThumbnail.ShapeOf(Kind)}"
                                     AutomationProperties.Name="{x:Bind Title}"
                                     Click="Result_Click"
                                     Style="{StaticResource CardButtonStyle}"

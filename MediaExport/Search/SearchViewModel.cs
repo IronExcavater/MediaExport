@@ -92,6 +92,9 @@ public sealed partial class SearchViewModel : ObservableObject
     // The last page of the current search, once the page after it has been asked for and had nothing on it.
     private int? _lastPage;
 
+    // The page that last had results to show, which is gone back to from a page that has none.
+    private int _shownPage = 1;
+
     // A different search starts again from its first page, with its last page unknown.
     partial void OnQueryChanged(string value) => StartFromFirstPage();
 
@@ -116,6 +119,7 @@ public sealed partial class SearchViewModel : ObservableObject
     {
         Page = 1;
         _lastPage = null;
+        _shownPage = 1;
     }
 
     /// <summary>The whole search as text, such as <c>source:youtube sort:views exact:"lofi beats" study</c>.</summary>
@@ -232,18 +236,48 @@ public sealed partial class SearchViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(Summary))]
     public partial string? Message { get; private set; }
 
-    /// <summary>The Search page's heading, saying how the search is going, which results show, or why none.</summary>
+    /// <summary>What the results are: how they are ranked, what was searched for and what narrows them.</summary>
+    public string Title
+    {
+        get
+        {
+            var search = _shownSearch;
+            var exact = search.Terms.Where(term => term.Label == SearchQuery.ExactLabel).Select(term => $"\"{term.Value}\"");
+            var asked = string.Join(' ', exact.Prepend(search.Text).Where(part => part.Length > 0));
+            var hasWords = asked.Length > 0;
+
+            var ranking = hasWords ? "Results" : "Popular";
+            var title = _shownSort == SearchSort.Views ? "Most viewed" : ranking;
+            if (hasWords)
+                title += $" for {asked}";
+
+            var author = search.Terms.FirstOrDefault(term => term.Label == SearchQuery.AuthorLabel)?.Value;
+            if (!string.IsNullOrEmpty(author))
+                title += $" by {author}";
+
+            // The other terms follow in the words of their tooltips.
+            var others = search.Terms.Where(term => term.Label is SearchQuery.ExcludeLabel or SearchQuery.DurationLabel or SearchQuery.PublishedLabel);
+            foreach (var explanation in others.Select(SearchTermText.Explain).Where(explanation => explanation.Length > 0))
+                title += $", {char.ToLowerInvariant(explanation[0])}{explanation[1..]}";
+
+            return title;
+        }
+    }
+
+    // The search and ranking the results are for, which Title describes.
+    private SearchQuery _shownSearch = new(string.Empty, []);
+    private SearchSort _shownSort;
+
+    /// <summary>Which results are showing, or why there are none. Empty while a search is still going.</summary>
     public string Summary
     {
         get
         {
-            if (SearchedQuery.Length == 0)
-                return "Search";
             if (Message is not null)
                 return Message;
 
-            if (IsSearching)
-                return $"Searching {SourceName}";
+            if (IsSearching || Results.Count == 0)
+                return string.Empty;
 
             var first = (Page - 1) * PageSize + 1;
             var last = first + Results.Count - 1;
@@ -257,6 +291,9 @@ public sealed partial class SearchViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(HasNextPage))]
     private Task NextPageAsync() => ShowPageAsync(Page + 1);
 
+    /// <summary>Shows a page by its number. One past the end of the search goes back to the page that was showing.</summary>
+    public Task GoToPageAsync(int page) => ShowPageAsync(Math.Max(1, page));
+
     // Pages are stepped one at a time, as a source reads every result before a page and doesn't say how many exist.
     private Task ShowPageAsync(int page)
     {
@@ -269,7 +306,12 @@ public sealed partial class SearchViewModel : ObservableObject
     {
         RecentSearches.Clear();
         foreach (var text in searches)
-            RecentSearches.Add(ToRecentSearch(text));
+        {
+            var recent = ToRecentSearch(text);
+            var isListed = RecentSearches.Any(earlier => IsSame(earlier, recent));
+            if (!isListed)
+                RecentSearches.Add(recent);
+        }
     }
 
     /// <summary>Searches and records the search as a recent one. Not for a search made while typing.</summary>
@@ -286,14 +328,21 @@ public sealed partial class SearchViewModel : ObservableObject
     // A search done again moves to the front instead of being listed twice.
     private void Remember(string fullText)
     {
-        var earlier = RecentSearches.FirstOrDefault(recent => string.Equals(recent.FullText, fullText, StringComparison.OrdinalIgnoreCase));
-        if (earlier is not null)
-            RecentSearches.Remove(earlier);
+        var recent = ToRecentSearch(fullText);
+        var earlier = RecentSearches.Where(listed => IsSame(listed, recent)).ToList();
+        foreach (var duplicate in earlier)
+            RecentSearches.Remove(duplicate);
 
-        RecentSearches.Insert(0, ToRecentSearch(fullText));
+        RecentSearches.Insert(0, recent);
         while (RecentSearches.Count > RecentSearchCapacity)
             RecentSearches.RemoveAt(RecentSearches.Count - 1);
     }
+
+    // Two searches are the same when they are listed the same, however each was written.
+    private static bool IsSame(RecentSearch one, RecentSearch other) =>
+        one.ProviderIcons.SequenceEqual(other.ProviderIcons)
+        && one.Terms.SequenceEqual(other.Terms)
+        && string.Equals(one.Words, other.Words, StringComparison.OrdinalIgnoreCase);
 
     private RecentSearch ToRecentSearch(string fullText)
     {
@@ -323,10 +372,13 @@ public sealed partial class SearchViewModel : ObservableObject
         Message = null;
         HasNextPage = false;
         SearchedQuery = query;
+        _shownSearch = search;
+        _shownSort = Sort;
+        OnPropertyChanged(nameof(Title));
 
-        // A link is opened, not searched for.
+        // A link is opened, not searched for. An empty search is made all the same, for what is popular.
         var isLink = SearchQuery.ReadLink(Query) is not null;
-        if (query.Length == 0 || isLink)
+        if (isLink)
             return;
 
         var providers = SelectedProviders.ToList();
@@ -359,11 +411,13 @@ public sealed partial class SearchViewModel : ObservableObject
             if (running.IsCancellationRequested)
                 return;
 
-            // An empty page after a full one is how the end of a search is found; the page before it is shown again.
+            // An empty page straight after one with results is how the end of a search is found. A page jumped to
+            // may be far past the end, which says nothing about where the end is.
             isPastTheEnd = found.Count == 0 && page > 1;
-            if (isPastTheEnd)
-                _lastPage = page - 1;
-            else
+            var isNextPage = page == _shownPage + 1;
+            if (isPastTheEnd && isNextPage)
+                _lastPage = _shownPage;
+            else if (!isPastTheEnd)
                 Show(found, search, page);
 
             // An empty answer may only be a passing fault at the source, so it isn't remembered.
@@ -388,7 +442,7 @@ public sealed partial class SearchViewModel : ObservableObject
         }
 
         if (isPastTheEnd)
-            await ShowPageAsync(page - 1);
+            await ShowPageAsync(_shownPage);
     }
 
     // A page is shared out equally among the providers, each asked for its share of it.
@@ -416,6 +470,7 @@ public sealed partial class SearchViewModel : ObservableObject
 
     private void Show(IReadOnlyList<MediaSearchResult> found, SearchQuery search, int page)
     {
+        _shownPage = page;
         var withinRanges = found.Where(search.Matches).ToList();
         foreach (var result in withinRanges)
         {
@@ -424,8 +479,10 @@ public sealed partial class SearchViewModel : ObservableObject
                 FirstPageResults.Add(result);
         }
 
+        // A source with nothing popular to list is not a search that failed.
+        var isSearch = search.ToSearchText().Length > 0;
         if (found.Count == 0)
-            Message = $"No results found in {SourceName}";
+            Message = isSearch ? $"No results found in {SourceName}" : null;
         else if (withinRanges.Count == 0)
             Message = "Nothing on this page is within the search's ranges";
         else

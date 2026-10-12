@@ -97,7 +97,8 @@ public sealed partial class MainWindow : Window
         titleBar.Margin = new Thickness(0, 0, neededWidth - reservedWidth, 0);
     }
 
-    // The app opens on the search it was closed with. Its results are usually remembered too, so they show at once.
+    // The app opens on the search it was closed with, or on what is popular. The results are usually remembered
+    // too, so they show at once.
     private void RestoreSearch()
     {
         Search.LoadRecentSearches(_settings.Current.RecentSearches);
@@ -108,10 +109,9 @@ public sealed partial class MainWindow : Window
         };
 
         var lastSearch = _settings.Current.LastSearch;
-        if (string.IsNullOrWhiteSpace(lastSearch))
-            return;
+        if (!string.IsNullOrWhiteSpace(lastSearch))
+            Search.Replace(lastSearch);
 
-        Search.Replace(lastSearch);
         Search.SearchCommand.Execute(null);
     }
 
