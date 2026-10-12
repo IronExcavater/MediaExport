@@ -15,6 +15,22 @@ public enum SearchSort
     Views
 }
 
+/// <summary>What a link is to on a source.</summary>
+public enum LinkKind
+{
+    /// <summary>The link isn't to this source.</summary>
+    None,
+
+    /// <summary>One video or track.</summary>
+    Item,
+
+    /// <summary>Several items, such as a playlist.</summary>
+    List,
+
+    /// <summary>A creator's page, such as a channel.</summary>
+    Creator
+}
+
 /// <summary>Searches a single media source such as YouTube.</summary>
 public interface IMediaSearchProvider
 {
@@ -43,7 +59,21 @@ public interface IMediaSearchProvider
         SearchSort sort = SearchSort.Relevance,
         CancellationToken cancellationToken = default);
 
+    /// <summary>What a link is to on this source, told from its address alone.</summary>
+    LinkKind GetLinkKind(Uri link);
+
     /// <summary>Reads the media a link is to. A failure is thrown.</summary>
-    /// <returns>The media, or <c>null</c> if the link isn't to this source or isn't to one item.</returns>
+    /// <returns>The media, or <c>null</c> if the link isn't to one item on this source.</returns>
     Task<MediaSearchResult?> FindByLinkAsync(Uri link, CancellationToken cancellationToken = default);
+
+    /// <summary>Reads what a link to a list holds, such as the videos of a playlist. A failure is thrown.</summary>
+    Task<IReadOnlyList<MediaSearchResult>> ListByLinkAsync(
+        Uri link,
+        int skip = 0,
+        int limit = 10,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Reads the name of the creator whose page a link is to. A failure is thrown.</summary>
+    /// <returns>The name, or <c>null</c> if the source doesn't say.</returns>
+    Task<string?> FindCreatorAsync(Uri link, CancellationToken cancellationToken = default);
 }

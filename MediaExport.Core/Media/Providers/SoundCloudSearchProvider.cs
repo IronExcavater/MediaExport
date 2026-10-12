@@ -15,6 +15,16 @@ public sealed class SoundCloudSearchProvider(YtdlpService ytdlp, SoundCloudChart
     protected override IReadOnlyList<string> Hosts => ["soundcloud.com"];
     public override MediaKind Kind => MediaKind.Audio;
 
+    // An artist's page is their name alone, a track is under it, and a playlist is under "sets".
+    protected override LinkKind ClassifyLink(Uri link)
+    {
+        var parts = link.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 1)
+            return LinkKind.Creator;
+
+        return parts.Contains("sets") ? LinkKind.List : LinkKind.Item;
+    }
+
     // yt-dlp's SoundCloud search has one ranking, its own, so the ranking asked for is not applied.
     protected override string GetSearchTarget(string query, int count, SearchSort sort) => $"scsearch{count}:{query}";
 

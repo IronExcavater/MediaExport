@@ -8,13 +8,15 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace MediaExport.Core.Media.Ytdlp;
 
 /// <summary>Searches and downloads media through yt-dlp.</summary>
-public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
+public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloader
 {
     private const string Executable = "yt-dlp";
+    private const string CouldNotStart = "yt-dlp couldn't be started. Try installing it again in Settings.";
 
     /// <summary>Reads a search without downloading anything.</summary>
     /// <param name="target">What yt-dlp should read, such as <c>ytsearch10:cats</c> or a page's URL.</param>
@@ -50,6 +52,22 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
         return ReadMedia(json);
     }
 
+    /// <summary>Reads whose page a link to a channel or an artist is.</summary>
+    /// <returns>Their name, or <c>null</c> if the page doesn't say.</returns>
+    /// <exception cref="InvalidOperationException">yt-dlp isn't installed, or reported an error.</exception>
+    public async Task<string?> ReadCreatorAsync(string link, CancellationToken cancellationToken = default)
+    {
+        // The page says whose it is before any of its entries, so one entry is all that is asked for.
+        string[] arguments =
+        [
+            "--dump-single-json", "--flat-playlist", "--playlist-end", "1",
+            "--quiet", "--no-warnings", "--encoding", "utf-8",
+            link
+        ];
+        var json = await RunAsync(arguments, cancellationToken);
+        return ReadCreator(json);
+    }
+
     public Task<IReadOnlyList<string>> DownloadAsync(
         string sourceUrl,
         ExportOptions options,
@@ -83,10 +101,24 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
         return entries.EnumerateArray().Select(ReadEntry).OfType<YtdlpSearchResult>().ToList();
     }
 
+    internal static string? ReadCreator(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var page = document.RootElement;
+        if (page.ValueKind != JsonValueKind.Object)
+            return null;
+
+        return GetString(page, "channel") ?? GetString(page, "uploader") ?? GetString(page, "title");
+    }
+
     internal static YtdlpSearchResult? ReadMedia(string json)
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
+
+        // yt-dlp writes "null" for a link it found nothing at.
+        if (root.ValueKind != JsonValueKind.Object)
+            return null;
 
         // A link to a playlist or a channel is to many items, not to one.
         var isOneItem = GetString(root, "_type") != "playlist";
@@ -124,7 +156,7 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
     private async Task<string> RunAsync(IEnumerable<string> arguments, CancellationToken cancellationToken)
     {
         var path = tools.Locate(Executable)
-            ?? throw new InvalidOperationException("yt-dlp isn't installed.");
+            ?? throw new InvalidOperationException("yt-dlp isn't installed. Install it in Settings.");
 
         var startInfo = new ProcessStartInfo(path)
         {
@@ -152,7 +184,11 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
             // yt-dlp's last line of errors is the one that says what went wrong.
             var errorText = await readingErrors;
             var errors = errorText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            throw new InvalidOperationException(errors.LastOrDefault() ?? "yt-dlp returned nothing.");
+            var lastError = errors.LastOrDefault() ?? "yt-dlp didn't return anything.";
+
+            // An error is written as "ERROR: [site] id: what went wrong", of which only the end is for the user.
+            var reason = ErrorPrefix().Replace(lastError, string.Empty);
+            throw new InvalidOperationException(reason);
         }
         catch (OperationCanceledException)
         {
@@ -161,15 +197,18 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
         }
     }
 
+    [GeneratedRegex("""^ERROR:\s*(\[[^\]]+\]\s*[^:]+:\s*)?""")]
+    private static partial Regex ErrorPrefix();
+
     private static Process Start(ProcessStartInfo startInfo)
     {
         try
         {
-            return Process.Start(startInfo) ?? throw new InvalidOperationException("yt-dlp couldn't be started.");
+            return Process.Start(startInfo) ?? throw new InvalidOperationException(CouldNotStart);
         }
         catch (Win32Exception exception)
         {
-            throw new InvalidOperationException("yt-dlp couldn't be started.", exception);
+            throw new InvalidOperationException(CouldNotStart, exception);
         }
     }
 

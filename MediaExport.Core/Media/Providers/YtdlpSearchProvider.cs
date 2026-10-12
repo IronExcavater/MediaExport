@@ -55,16 +55,38 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
         return found.Select(ToMedia).OfType<MediaSearchResult>().ToList();
     }
 
-    public async Task<MediaSearchResult?> FindByLinkAsync(Uri link, CancellationToken cancellationToken = default)
+    public LinkKind GetLinkKind(Uri link)
     {
         var isToThisSource = Hosts.Any(host =>
             link.Host == host || link.Host.EndsWith("." + host, StringComparison.OrdinalIgnoreCase));
-        if (!isToThisSource)
+        return isToThisSource ? ClassifyLink(link) : LinkKind.None;
+    }
+
+    /// <summary>What a link to this source is to, told from the shape of its address.</summary>
+    protected abstract LinkKind ClassifyLink(Uri link);
+
+    public async Task<MediaSearchResult?> FindByLinkAsync(Uri link, CancellationToken cancellationToken = default)
+    {
+        if (GetLinkKind(link) != LinkKind.Item)
             return null;
 
         var found = await ytdlp.ReadAsync(link.AbsoluteUri, cancellationToken);
         return found is null ? null : ToMedia(found);
     }
+
+    public async Task<IReadOnlyList<MediaSearchResult>> ListByLinkAsync(
+        Uri link,
+        int skip = 0,
+        int limit = 10,
+        CancellationToken cancellationToken = default)
+    {
+        // A list is read the way a page of search results is.
+        var found = await ytdlp.SearchAsync(link.AbsoluteUri, skip, limit, cancellationToken);
+        return found.Select(ToMedia).OfType<MediaSearchResult>().ToList();
+    }
+
+    public Task<string?> FindCreatorAsync(Uri link, CancellationToken cancellationToken = default) =>
+        ytdlp.ReadCreatorAsync(link.AbsoluteUri, cancellationToken);
 
     // A result without a page can't be opened or exported, so it isn't one.
     private MediaSearchResult? ToMedia(YtdlpSearchResult result)
