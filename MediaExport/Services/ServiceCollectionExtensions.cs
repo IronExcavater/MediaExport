@@ -26,6 +26,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<YtdlpService>();
         services.AddSingleton<IMediaDownloader>(provider => provider.GetRequiredService<YtdlpService>());
 
+        services.AddSingleton<IThemeService, ThemeService>();
+
         services.AddSingleton(new SearchCache(Path.Combine(dataFolder, "search-cache.json")));
 
         // Search providers, in the order they are listed in the search field.

@@ -6,16 +6,23 @@ using System.Text.Json.Serialization;
 
 namespace MediaExport.Core.Settings;
 
+// Enum for themes
+public enum AppTheme
+{
+    System = 0,
+    Dark = 1,
+    Light = 2
+}
+
 /// <summary>Application settings persisted between runs.</summary>
 public sealed class AppSettings
 {
+    public AppTheme Theme { get; set; } = AppTheme.System;
     public bool IsPaneOpen { get; set; } = true;
 
     /// <summary>The window's size in screen pixels when it was last neither maximised nor minimised.</summary>
     public int? WindowWidth { get; set; }
-
     public int? WindowHeight { get; set; }
-
     public bool IsWindowMaximized { get; set; }
 
     /// <summary>The search when the app closed, as text. It is kept even if it was never carried out.</summary>
