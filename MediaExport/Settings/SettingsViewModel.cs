@@ -13,33 +13,25 @@ public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly ToolchainService _toolchain;
     private readonly SettingsStore _settings;
+    private readonly IThemeService _themeService;
 
     [ObservableProperty]
     private int themeIndex;
 
-    public SettingsViewModel(ToolchainService toolchain, SettingsStore settings)
+    public SettingsViewModel(ToolchainService toolchain, SettingsStore settings, IThemeService themeService)
     {
         _toolchain = toolchain;
         _settings = settings;
+        _themeService = themeService;
 
         // Initialize theme from settings
-        themeIndex = _settings.Current.ThemeIndex;
+        themeIndex = (int)_settings.Current.Theme;
     }
 
     // Update the theme when the user changes the selection in the UI
     partial void OnThemeIndexChanged(int value)
     {
-        _settings.Current.ThemeIndex = value;
-        _settings.Save();
-
-        var theme = value switch
-        {
-            1 => ElementTheme.Dark,
-            2 => ElementTheme.Light,
-            _ => ElementTheme.Default
-        };
-
-        if (App.Current.MainWindow is MainWindow mainWindow)
-            mainWindow.ApplyTheme(theme);
+        var theme = (AppTheme)value;
+        _themeService.Apply(theme);
     }
 }
