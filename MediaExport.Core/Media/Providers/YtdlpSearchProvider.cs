@@ -6,10 +6,7 @@ using MediaExport.Core.Media.Ytdlp;
 
 namespace MediaExport.Core.Media.Providers;
 
-/// <summary>
-/// A provider that searches through yt-dlp. A new one only has to name itself and say what yt-dlp should
-/// read for a query; see <see cref="YouTubeSearchProvider"/>.
-/// </summary>
+/// <summary>A provider that searches through yt-dlp. A new one names itself and says what yt-dlp should read.</summary>
 public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProvider
 {
     public abstract string Id { get; }
@@ -19,19 +16,19 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
     /// <summary>Whether the provider's results are video or audio.</summary>
     protected virtual MediaKind Kind => MediaKind.Video;
 
-    /// <summary>What yt-dlp is asked to read for a query: a search such as <c>ytsearch10:cats</c>, or a search page's URL.</summary>
+    /// <summary>What yt-dlp reads for a query, such as <c>ytsearch10:cats</c> or a search page's URL.</summary>
     /// <param name="count">How many results the search must reach, counting the ones that are skipped.</param>
-    protected abstract string GetSearchTarget(string query, int count);
+    protected abstract string GetSearchTarget(string query, int count, SearchSort sort);
 
     /// <summary>The page of a result. Override it for a provider whose results don't carry their own URL.</summary>
     protected virtual string? GetSourceUrl(YtdlpSearchResult result) => result.SourceUrl;
 
-    public async Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, int skip = 0, int limit = 10, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, int skip = 0, int limit = 10, SearchSort sort = SearchSort.Relevance, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(query))
             return [];
 
-        var target = GetSearchTarget(query.Trim(), skip + limit);
+        var target = GetSearchTarget(query.Trim(), skip + limit, sort);
         var found = await ytdlp.SearchAsync(target, skip, limit, cancellationToken);
 
         var results = new List<MediaSearchResult>();
