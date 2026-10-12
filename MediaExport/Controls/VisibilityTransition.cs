@@ -15,36 +15,67 @@ public static class VisibilityTransition
     /// <summary>How long a fade lasts. An <c>OpacityTransition</c> beside one of these should last as long.</summary>
     public static readonly TimeSpan Duration = TimeSpan.FromMilliseconds(200);
 
+    // How far an element that slides moves, in from the left and back out to it.
+    private const float SlideDistance = 12;
+
     /// <summary>Whether the element fades in when it is shown and fades out when it is collapsed.</summary>
     public static readonly DependencyProperty FadeProperty = DependencyProperty.RegisterAttached(
         "Fade",
         typeof(bool),
         typeof(VisibilityTransition),
-        new PropertyMetadata(false, OnFadeChanged));
+        new PropertyMetadata(false, OnChanged));
+
+    /// <summary>Whether the element fades as with <see cref="FadeProperty"/> and slides a little way sideways too.</summary>
+    public static readonly DependencyProperty SlideProperty = DependencyProperty.RegisterAttached(
+        "Slide",
+        typeof(bool),
+        typeof(VisibilityTransition),
+        new PropertyMetadata(false, OnChanged));
 
     public static bool GetFade(UIElement element) => (bool)element.GetValue(FadeProperty);
 
     public static void SetFade(UIElement element, bool value) => element.SetValue(FadeProperty, value);
 
-    private static void OnFadeChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
+    public static bool GetSlide(UIElement element) => (bool)element.GetValue(SlideProperty);
+
+    public static void SetSlide(UIElement element, bool value) => element.SetValue(SlideProperty, value);
+
+    private static void OnChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
         var element = (UIElement)sender;
-        var isFading = (bool)args.NewValue;
         var compositor = ElementCompositionPreview.GetElementVisual(element).Compositor;
+        var slides = GetSlide(element);
+        var fades = GetFade(element) || slides;
 
-        var fadeIn = isFading ? CreateFade(compositor, from: 0, to: 1) : null;
-        var fadeOut = isFading ? CreateFade(compositor, from: 1, to: 0) : null;
-        ElementCompositionPreview.SetImplicitShowAnimation(element, fadeIn);
-        ElementCompositionPreview.SetImplicitHideAnimation(element, fadeOut);
+        // An element's Translation is only there to animate once it has been asked for.
+        if (slides)
+            ElementCompositionPreview.SetIsTranslationEnabled(element, true);
+
+        var show = fades ? CreateAnimation(compositor, isShowing: true, slides) : null;
+        var hide = fades ? CreateAnimation(compositor, isShowing: false, slides) : null;
+        ElementCompositionPreview.SetImplicitShowAnimation(element, show);
+        ElementCompositionPreview.SetImplicitHideAnimation(element, hide);
     }
 
-    private static ScalarKeyFrameAnimation CreateFade(Compositor compositor, float from, float to)
+    private static CompositionAnimationGroup CreateAnimation(Compositor compositor, bool isShowing, bool slides)
     {
+        var animation = compositor.CreateAnimationGroup();
         var fade = compositor.CreateScalarKeyFrameAnimation();
         fade.Target = nameof(Visual.Opacity);
         fade.Duration = Duration;
-        fade.InsertKeyFrame(0f, from);
-        fade.InsertKeyFrame(1f, to);
-        return fade;
+        fade.InsertKeyFrame(0f, isShowing ? 0 : 1);
+        fade.InsertKeyFrame(1f, isShowing ? 1 : 0);
+        animation.Add(fade);
+
+        if (slides)
+        {
+            var slide = compositor.CreateScalarKeyFrameAnimation();
+            slide.Target = "Translation.X";
+            slide.Duration = Duration;
+            slide.InsertKeyFrame(0f, isShowing ? -SlideDistance : 0);
+            slide.InsertKeyFrame(1f, isShowing ? 0 : -SlideDistance);
+            animation.Add(slide);
+        }
+        return animation;
     }
 }

@@ -9,6 +9,7 @@
 
     <UserControl.Resources>
         <Style x:Key="BylineTextStyle" BasedOn="{StaticResource SecondaryTextStyle}" TargetType="TextBlock">
+            <Setter Property="IsTextSelectionEnabled" Value="True" />
             <Setter Property="TextWrapping" Value="NoWrap" />
         </Style>
     </UserControl.Resources>
