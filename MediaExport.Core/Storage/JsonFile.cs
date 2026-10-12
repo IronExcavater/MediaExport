@@ -6,14 +6,8 @@ using System.Text.Json.Serialization.Metadata;
 
 namespace MediaExport.Core.Storage;
 
-/// <summary>
-/// Keeps one object in a JSON file between runs of the app. Problems with the file are not errors: a file
-/// that can't be read loads as nothing, and one that can't be written is skipped.
-/// </summary>
-/// <remarks>
-/// The type information comes from a source-generated <c>JsonSerializerContext</c>, because reflection-based
-/// JSON breaks when Release builds are trimmed.
-/// </remarks>
+/// <summary>Keeps one object in a JSON file between runs. A file that can't be read or written is skipped.</summary>
+/// <remarks>The type information is source-generated, because reflection-based JSON breaks in trimmed builds.</remarks>
 internal static class JsonFile
 {
     /// <returns>The object, or <c>null</c> if there is no file or it is unreadable or corrupt.</returns>

@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Sizes and styles shared by all pages. -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- Page content stops growing at this width and is centred instead. -->
     <x:Double x:Key="PageMaxWidth">1400</x:Double>
@@ -43,7 +42,7 @@
         <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
     </Style>
 
-    <!-- A panel in WinUI's card colours, for setting a group of related content apart from the page. -->
+    <!-- A bordered panel for a group of related content. -->
     <Style x:Key="CardStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
@@ -52,7 +51,7 @@
         <Setter Property="Padding" Value="16" />
     </Style>
 
-    <!-- The thin vertical line between the parts of a combined field, such as the search field. -->
+    <!-- The line between the parts of a field. -->
     <Style x:Key="FieldDividerStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
         <Setter Property="Height" Value="18" />
@@ -63,33 +62,24 @@
     <Style x:Key="SearchTextBoxStyle" BasedOn="{StaticResource DefaultTextBoxStyle}" TargetType="TextBox">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
-        <!-- The box has no background or border to round, so this only rounds its delete button. -->
-        <Setter Property="CornerRadius" Value="6" />
         <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="IsSpellCheckEnabled" Value="False" />
-        <Setter Property="Padding" Value="10,7,4,7" />
+        <!-- The extra top padding lines the text up with the labels beside it. -->
+        <Setter Property="Padding" Value="6,9,6,5" />
         <Setter Property="TextAlignment" Value="Left" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
 
-    <!--
-        A button inside a field such as the search field. It is set in from the field's edges and rounded,
-        and takes its height from the field, so every button in a field looks and sizes the same.
-    -->
     <Style x:Key="FieldButtonStyle" BasedOn="{StaticResource SubtleButtonStyle}" TargetType="Button">
         <Setter Property="CornerRadius" Value="6" />
-        <Setter Property="Margin" Value="2" />
         <Setter Property="MinHeight" Value="0" />
         <Setter Property="MinWidth" Value="0" />
-        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="Padding" Value="6,0" />
         <Setter Property="VerticalAlignment" Value="Stretch" />
     </Style>
 
-    <!--
-        A button around a card in a grid. It is see-through until the pointer is over it, like an item in a
-        ListView, and its padding is the room that highlight takes around the card.
-    -->
+    <!-- A card's button is see-through until hovered, like a ListView item. -->
     <Style x:Key="CardButtonStyle" BasedOn="{StaticResource SubtleButtonStyle}" TargetType="Button">
         <Setter Property="CornerRadius" Value="8" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
@@ -99,14 +89,14 @@
         <Setter Property="VerticalContentAlignment" Value="Top" />
     </Style>
 
-    <!-- A grey bar standing in for a line of text that hasn't loaded yet, in a skeleton of a view. -->
+    <!-- A bar standing in for a line of text in a skeleton. -->
     <Style x:Key="SkeletonBarStyle" TargetType="Border">
         <Setter Property="Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
         <Setter Property="CornerRadius" Value="4" />
         <Setter Property="HorizontalAlignment" Value="Left" />
     </Style>
 
-    <!-- A square button for stepping through pages, as tall as the text box between a pair of them. -->
+    <!-- A square button for stepping through pages. -->
     <Style x:Key="PageButtonStyle" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
         <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
         <Setter Property="Height" Value="32" />
@@ -114,7 +104,7 @@
         <Setter Property="Width" Value="32" />
     </Style>
 
-    <!-- A field button that holds only an icon, so it is square. -->
+    <!-- A field button that holds only an icon. -->
     <Style x:Key="FieldIconButtonStyle" BasedOn="{StaticResource FieldButtonStyle}" TargetType="Button">
         <Setter Property="Padding" Value="0" />
         <Setter Property="Width" Value="30" />

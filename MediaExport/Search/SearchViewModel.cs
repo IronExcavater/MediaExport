@@ -35,7 +35,14 @@ public sealed partial class SearchViewModel : ObservableObject
     {
         _cache = cache;
         Providers = providers.ToList();
-        SelectedProvider = Providers.FirstOrDefault();
+        if (Providers.Count > 0)
+            SelectedProviders.Add(Providers[0]);
+
+        SelectedProviders.CollectionChanged += (_, _) =>
+        {
+            StartFromFirstPage();
+            OnPropertyChanged(nameof(FullText));
+        };
         Terms.CollectionChanged += (_, _) =>
         {
             StartFromFirstPage();
@@ -46,25 +53,22 @@ public sealed partial class SearchViewModel : ObservableObject
     /// <summary>All search providers, in the order they were registered.</summary>
     public IReadOnlyList<IMediaSearchProvider> Providers { get; }
 
-    /// <summary>The provider searches are sent to; <c>null</c> only when there are none.</summary>
+    /// <summary>The providers searched, in <see cref="Providers"/> order. Empty only if there are none.</summary>
+    public ObservableCollection<IMediaSearchProvider> SelectedProviders { get; } = [];
+
+    /// <summary>How the providers are asked to rank what they find.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FullText))]
-    public partial IMediaSearchProvider? SelectedProvider { get; set; }
+    public partial SearchSort Sort { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FullText))]
     public partial string Query { get; set; } = "";
 
-    /// <summary>
-    /// The terms that narrow the search, other than its source: exact phrases, excluded ones and authors.
-    /// They are written into the search field as text and shown there as buttons.
-    /// </summary>
+    /// <summary>The terms that narrow the search, other than its source.</summary>
     public ObservableCollection<SearchTerm> Terms { get; } = [];
 
-    /// <summary>
-    /// The searches that were carried out, newest first. Typing searches as it goes, but a search only counts
-    /// as carried out once it is committed to, with <see cref="CommitSearchAsync"/>.
-    /// </summary>
+    /// <summary>The searches that were committed to with <see cref="CommitSearchAsync"/>, newest first.</summary>
     public ObservableCollection<RecentSearch> RecentSearches { get; } = [];
 
     /// <summary>The query the results are for. It lags behind <see cref="Query"/> while that is being typed.</summary>
@@ -77,10 +81,7 @@ public sealed partial class SearchViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(PreviousPageCommand))]
     public partial int Page { get; private set; } = 1;
 
-    /// <summary>
-    /// Whether there may be a page after this one. A source doesn't say how many results a search has, so a
-    /// full page is taken to mean there are more, until the page after it comes back empty.
-    /// </summary>
+    /// <summary>Whether there may be another page. A full page means so, until the next comes back empty.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(NextPageCommand))]
     public partial bool HasNextPage { get; private set; }
@@ -93,7 +94,22 @@ public sealed partial class SearchViewModel : ObservableObject
     // A different search starts again from its first page, with its last page unknown.
     partial void OnQueryChanged(string value) => StartFromFirstPage();
 
-    partial void OnSelectedProviderChanged(IMediaSearchProvider? value) => StartFromFirstPage();
+    partial void OnSortChanged(SearchSort value) => StartFromFirstPage();
+
+    /// <summary>Chooses exactly these providers, in <see cref="Providers"/> order. Choosing none is ignored.</summary>
+    public void SelectProviders(IEnumerable<IMediaSearchProvider> providers)
+    {
+        var chosen = Providers.Where(providers.Contains).ToList();
+        if (chosen.Count == 0 || chosen.SequenceEqual(SelectedProviders))
+            return;
+
+        SelectedProviders.Clear();
+        foreach (var provider in chosen)
+            SelectedProviders.Add(provider);
+    }
+
+    // The sources as they are named in a message: the provider's name, or how many there are.
+    private string SourceName => SelectedProviders.Count == 1 ? SelectedProviders[0].DisplayName : $"{SelectedProviders.Count} sources";
 
     private void StartFromFirstPage()
     {
@@ -101,28 +117,23 @@ public sealed partial class SearchViewModel : ObservableObject
         _lastPage = null;
     }
 
-    /// <summary>
-    /// The whole search as text, with the provider and the other terms written out:
-    /// <c>source:youtube exact:"lofi beats" study</c>. This is what is copied, so pasting it back restores
-    /// the provider and the terms as well as the words.
-    /// </summary>
+    /// <summary>The whole search as text, such as <c>source:youtube sort:views exact:"lofi beats" study</c>.</summary>
     public string FullText
     {
         get
         {
             var terms = new List<SearchTerm>();
-            if (SelectedProvider is not null)
-                terms.Add(SearchQuery.Source(SelectedProvider.Id));
+            if (SelectedProviders.Count > 0)
+                terms.Add(SearchQuery.Source(SelectedProviders.Select(provider => provider.Id)));
+            if (Sort != SearchSort.Relevance)
+                terms.Add(new SearchTerm(SearchQuery.SortLabel, Sort.ToString().ToLowerInvariant()));
             terms.AddRange(Terms);
 
             return new SearchQuery(Query.Trim(), terms).ToString();
         }
     }
 
-    /// <summary>
-    /// Replaces the search with one written as text, such as a pasted one. Its terms are applied and taken
-    /// out, leaving only the words in <see cref="Query"/>.
-    /// </summary>
+    /// <summary>Replaces the search with one written as text, such as a pasted one.</summary>
     public void Replace(string text)
     {
         Terms.Clear();
@@ -131,10 +142,7 @@ public sealed partial class SearchViewModel : ObservableObject
             Query = text.Trim();
     }
 
-    /// <summary>
-    /// Applies any terms written in the text and takes them out of it, leaving the words in
-    /// <see cref="Query"/>. Text without terms is left alone, so this can run while it is being typed.
-    /// </summary>
+    /// <summary>Applies the terms written in the text and leaves the words in <see cref="Query"/>.</summary>
     /// <returns>Whether there were any terms.</returns>
     public bool ResolveTerms(string text)
     {
@@ -152,7 +160,8 @@ public sealed partial class SearchViewModel : ObservableObject
     // A new kind of term is added in these two methods: one says whether it is valid, the other applies it.
     private bool IsKnownTerm(SearchTerm term) => term.Label switch
     {
-        SearchQuery.SourceLabel => FindProvider(term.Value) is not null,
+        SearchQuery.SourceLabel => term.Values.Count > 0 && term.Values.All(id => FindProvider(id) is not null),
+        SearchQuery.SortLabel => Enum.TryParse<SearchSort>(term.Value, ignoreCase: true, out _),
         SearchQuery.ExactLabel or SearchQuery.ExcludeLabel or SearchQuery.AuthorLabel => true,
         SearchQuery.DurationLabel or SearchQuery.PublishedLabel => SearchQuery.IsValid(term),
         // One end of a range written by itself is known if the range it makes is.
@@ -162,7 +171,9 @@ public sealed partial class SearchViewModel : ObservableObject
     private void Apply(SearchTerm term)
     {
         if (term.Label == SearchQuery.SourceLabel)
-            SelectedProvider = FindProvider(term.Value);
+            SelectProviders(term.Values.Select(FindProvider).OfType<IMediaSearchProvider>());
+        else if (term.Label == SearchQuery.SortLabel)
+            Sort = Enum.Parse<SearchSort>(term.Value, ignoreCase: true);
         else if (SearchQuery.RangeLabelOf(term.Label) is not null)
             ApplyRangeEnd(term);
         else if (!Terms.Contains(term))
@@ -181,10 +192,7 @@ public sealed partial class SearchViewModel : ObservableObject
             ReplaceTerm(range, changed);
     }
 
-    /// <summary>
-    /// Adds a term to the search. A search can only have so many of one kind
-    /// (<see cref="SearchQuery.MaxCount"/>), so past that the oldest of its kind makes way for it.
-    /// </summary>
+    /// <summary>Adds a term. Past <see cref="SearchQuery.MaxCount"/> of its kind, the oldest makes way.</summary>
     public void AddTerm(SearchTerm term)
     {
         var sameKind = Terms.Where(other => other.Label == term.Label).ToList();
@@ -211,10 +219,7 @@ public sealed partial class SearchViewModel : ObservableObject
     /// <summary>The page of results that is showing.</summary>
     public ObservableCollection<MediaSearchResult> Results { get; } = [];
 
-    /// <summary>
-    /// The first page of the current search, whichever page is showing. The search field's list shows
-    /// these, so it stays on the top results while the Search page is paged through.
-    /// </summary>
+    /// <summary>The first page of the current search, whichever page is showing, for the search field's list.</summary>
     public ObservableCollection<MediaSearchResult> FirstPageResults { get; } = [];
 
     [ObservableProperty]
@@ -223,13 +228,10 @@ public sealed partial class SearchViewModel : ObservableObject
 
     /// <summary>Explains an empty result list (nothing found, or an error); otherwise <c>null</c>.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasMessage))]
     [NotifyPropertyChangedFor(nameof(Summary))]
     public partial string? Message { get; private set; }
 
-    public bool HasMessage => Message is not null;
-
-    /// <summary>The Search page's heading: the search's progress, which results are showing, or why there are none.</summary>
+    /// <summary>The Search page's heading, saying how the search is going, which results show, or why none.</summary>
     public string Summary
     {
         get
@@ -239,9 +241,8 @@ public sealed partial class SearchViewModel : ObservableObject
             if (Message is not null)
                 return Message;
 
-            var source = SelectedProvider?.DisplayName;
             if (IsSearching)
-                return $"Searching {source}";
+                return $"Searching {SourceName}";
 
             var first = (Page - 1) * PageSize + 1;
             var last = first + Results.Count - 1;
@@ -255,8 +256,7 @@ public sealed partial class SearchViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(HasNextPage))]
     private Task NextPageAsync() => ShowPageAsync(Page + 1);
 
-    // Pages are only stepped through one at a time. A source can't jump to a page: it reads every result
-    // before it to get there, and it doesn't say how many pages there are to jump among.
+    // Pages are stepped one at a time, as a source reads every result before a page and doesn't say how many exist.
     private Task ShowPageAsync(int page)
     {
         Page = page;
@@ -271,10 +271,7 @@ public sealed partial class SearchViewModel : ObservableObject
             RecentSearches.Add(ToRecentSearch(text));
     }
 
-    /// <summary>
-    /// Searches, and remembers the search as one that was carried out. This is for a search the user has
-    /// asked for outright, with Enter or the Search button, not one made while they are still typing.
-    /// </summary>
+    /// <summary>Searches and records the search as a recent one. Not for a search made while typing.</summary>
     [RelayCommand]
     public Task CommitSearchAsync()
     {
@@ -302,11 +299,12 @@ public sealed partial class SearchViewModel : ObservableObject
         // Only the source is taken out, so the other terms stay in the words as they were written.
         var search = SearchQuery.Parse(fullText, term => term.Label == SearchQuery.SourceLabel);
         var source = search.Terms.LastOrDefault();
-        var provider = source is null ? null : FindProvider(source.Value);
+        var firstSourceId = source?.Values.FirstOrDefault();
+        var provider = firstSourceId is null ? null : FindProvider(firstSourceId);
         return new RecentSearch(fullText, search.Text, provider?.Icon);
     }
 
-    /// <summary>Searches the selected provider and replaces <see cref="Results"/> with the newest response.</summary>
+    /// <summary>Searches the selected providers and replaces <see cref="Results"/> with the newest response.</summary>
     [RelayCommand]
     public async Task SearchAsync()
     {
@@ -314,9 +312,7 @@ public sealed partial class SearchViewModel : ObservableObject
         _running = null;
         IsSearching = false;
 
-        // The terms a provider applies are part of what is searched for, so they are part of what a search is
-        // remembered by. Ranges of duration and date are applied here, to what the provider found, so
-        // changing one shows the remembered results again through the new range.
+        // Ranges are applied here, to what the provider found, so changing one re-filters the remembered results.
         var search = new SearchQuery(Query.Trim(), Terms.ToList());
         var query = search.ToSearchText();
         var page = Page;
@@ -330,17 +326,20 @@ public sealed partial class SearchViewModel : ObservableObject
         if (query.Length == 0)
             return;
 
-        var provider = SelectedProvider;
-        if (provider is null)
+        var providers = SelectedProviders.ToList();
+        if (providers.Count == 0)
         {
             Message = "There are no sources to search yet";
             return;
         }
 
-        var remembered = _cache.Find(provider.Id, query, page);
+        // Remembered by everything that decides the results: the providers, their ranking, the search and the page.
+        var sources = string.Join(',', providers.Select(provider => provider.Id));
+        var rankedQuery = Sort == SearchSort.Relevance ? query : $"{query} {SearchQuery.SortLabel}:{Sort}";
+        var remembered = _cache.Find(sources, rankedQuery, page);
         if (remembered is not null)
         {
-            Show(remembered, search, provider, page);
+            Show(remembered, search, page);
             return;
         }
 
@@ -352,23 +351,21 @@ public sealed partial class SearchViewModel : ObservableObject
         IsSearching = true;
         try
         {
-            var skip = (page - 1) * PageSize;
-            var found = await provider.SearchAsync(query, skip, PageSize, running.Token);
+            var found = await FindAsync(providers, query, page, running.Token);
             // A newer search started while this one was waiting, so these results are out of date.
             if (running.IsCancellationRequested)
                 return;
 
-            // The page after a full last page has nothing on it. That is how the end of a search is found,
-            // and the page before it is shown again instead.
+            // An empty page after a full one is how the end of a search is found; the page before it is shown again.
             isPastTheEnd = found.Count == 0 && page > 1;
             if (isPastTheEnd)
                 _lastPage = page - 1;
             else
-                Show(found, search, provider, page);
+                Show(found, search, page);
 
             // An empty answer may only be a passing fault at the source, so it isn't remembered.
             if (found.Count > 0)
-                _cache.Store(provider.Id, query, page, found);
+                _cache.Store(sources, rankedQuery, page, found);
         }
         catch (OperationCanceledException)
         {
@@ -379,8 +376,7 @@ public sealed partial class SearchViewModel : ObservableObject
         }
         finally
         {
-            // Only the current search clears these. One that was replaced by a newer search leaves them
-            // alone, or it would turn the busy indicator off while the newer search is still running.
+            // Only the current search clears these, or a replaced one would turn off the newer one's busy indicator.
             if (_running == running)
             {
                 _running = null;
@@ -392,7 +388,30 @@ public sealed partial class SearchViewModel : ObservableObject
             await ShowPageAsync(page - 1);
     }
 
-    private void Show(IReadOnlyList<MediaSearchResult> found, SearchQuery search, IMediaSearchProvider provider, int page)
+    // A page is shared out equally among the providers, each asked for its share of it.
+    private int ShareOfPage => (int)Math.Ceiling(PageSize / (double)Math.Max(1, SelectedProviders.Count));
+
+    // Asks every provider for its share of the page at once, then deals their results out in turn to mix them.
+    private async Task<IReadOnlyList<MediaSearchResult>> FindAsync(IReadOnlyList<IMediaSearchProvider> providers, string query, int page, CancellationToken cancellationToken)
+    {
+        var share = ShareOfPage;
+        var skip = (page - 1) * share;
+        var searches = providers.Select(provider => provider.SearchAsync(query, skip, share, Sort, cancellationToken));
+        var shares = await Task.WhenAll(searches);
+
+        var mixed = new List<MediaSearchResult>();
+        for (var index = 0; index < share; index++)
+        {
+            foreach (var found in shares)
+            {
+                if (index < found.Count)
+                    mixed.Add(found[index]);
+            }
+        }
+        return mixed;
+    }
+
+    private void Show(IReadOnlyList<MediaSearchResult> found, SearchQuery search, int page)
     {
         var withinRanges = found.Where(search.Matches).ToList();
         foreach (var result in withinRanges)
@@ -403,15 +422,15 @@ public sealed partial class SearchViewModel : ObservableObject
         }
 
         if (found.Count == 0)
-            Message = $"No results found in {provider.DisplayName}";
+            Message = $"No results found in {SourceName}";
         else if (withinRanges.Count == 0)
             Message = "Nothing on this page is within the search's ranges";
         else
             Message = null;
 
-        // Whether there is another page depends on what the provider found, not on how much of it is shown.
+        // Another page depends on what the providers found, not how much is shown: one filling its share is enough.
         var isLastPage = page == _lastPage;
-        HasNextPage = found.Count == PageSize && !isLastPage;
+        HasNextPage = found.Count >= ShareOfPage && !isLastPage;
         OnPropertyChanged(nameof(Summary));
     }
 }

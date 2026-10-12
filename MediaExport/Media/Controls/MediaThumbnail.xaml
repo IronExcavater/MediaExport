@@ -6,7 +6,7 @@
     xmlns:converters="using:MediaExport.Converters"
     xmlns:local="using:MediaExport.Media.Controls">
 
-    <!-- The grid's background shows until the picture has loaded. The duration badge is hidden for media with no known duration, such as a live stream. -->
+    <!-- The background shows until the picture loads. The badge is hidden when there is no duration. -->
     <Grid Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="4">
         <Image x:Name="image" Stretch="UniformToFill" />
         <Border

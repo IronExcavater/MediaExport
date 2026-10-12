@@ -17,10 +17,7 @@ namespace MediaExport.Services;
 
 public static class ServiceCollectionExtensions
 {
-    /// <summary>
-    /// Registers what the app is made of. Everything is a singleton: one of each for the app's life, so a page
-    /// that's left and come back to finds its view model as it was. Each asks for what it needs in its constructor.
-    /// </summary>
+    /// <summary>Registers the app's services as singletons, so a page's view model is as it was left.</summary>
     /// <param name="dataFolder">Where settings, remembered searches and the tools the app installs are kept.</param>
     public static IServiceCollection AddMediaExport(this IServiceCollection services, string dataFolder)
     {
@@ -33,6 +30,7 @@ public static class ServiceCollectionExtensions
 
         // Search providers, in the order they are listed in the search field.
         services.AddSingleton<IMediaSearchProvider, YouTubeSearchProvider>();
+        services.AddSingleton<IMediaSearchProvider, YouTubeCopySearchProvider>();
 
         services.AddSingleton<ExportViewModel>();
         services.AddSingleton<SearchViewModel>();

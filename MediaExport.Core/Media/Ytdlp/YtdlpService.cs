@@ -17,7 +17,7 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
     private const string Executable = "yt-dlp";
 
     /// <summary>Reads a search without downloading anything.</summary>
-    /// <param name="target">What yt-dlp should read: a search such as <c>ytsearch10:cats</c>, or a page's URL.</param>
+    /// <param name="target">What yt-dlp should read, such as <c>ytsearch10:cats</c> or a page's URL.</param>
     /// <param name="skip">How many entries to pass over before the first one that is read.</param>
     /// <param name="limit">How many entries to read, so a long search page isn't read to its end.</param>
     /// <exception cref="InvalidOperationException">yt-dlp isn't installed, or reported an error.</exception>
@@ -72,8 +72,7 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
 
             var duration = GetNumber(entry, "duration");
             var views = GetNumber(entry, "view_count");
-            // A result with no upload time may still say when it was released. A live stream has neither, nor
-            // a duration or a view count.
+            // Falls back to the release time. A live stream has neither, nor a duration or a view count.
             var timestamp = GetNumber(entry, "timestamp") ?? GetNumber(entry, "release_timestamp");
             results.Add(new YtdlpSearchResult(
                 identity,

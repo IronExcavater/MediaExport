@@ -10,13 +10,7 @@
     Background="Transparent"
     NavigationCacheMode="Required">
 
-    <!--
-        The cards' highlight reaches 8 pixels beyond each card, and their keyboard focus ring 4 beyond that,
-        so the page's side padding is 12 less than usual and the heading is set in by 12 to line up with
-        the pictures. There is no padding
-        on the right: the results scroll right up to the page's edge, and their own right margin keeps
-        the cards clear of the scroll bar there.
-    -->
+    <!-- 12 less side padding and a 12 heading inset leave room for the cards' focus ring. -->
     <Grid
         MaxWidth="{StaticResource PageMaxWidth}"
         Padding="12,12,0,0">
@@ -25,7 +19,6 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- The heading says which results are showing, or how the search went. The page buttons are level with it. -->
         <Grid Margin="12,0,16,4" ColumnSpacing="16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -51,7 +44,6 @@
                     <FontIcon Glyph="&#xE76B;" Style="{StaticResource FieldIconStyle}" />
                 </Button>
 
-                <!-- The page that is showing, in the accent colour and the size of the buttons beside it. -->
                 <Border
                     Width="32"
                     Height="32"
@@ -76,16 +68,10 @@
         </Grid>
 
         <controls:EdgeFade Grid.Row="1">
-            <!--
-                Scroll anchoring is turned off (NaN): it shifted the view when a new search replaced the
-                results, leaving the page part-way down.
-            -->
+            <!-- Anchoring is off (NaN), as it left the page part-way down when a search replaced the results. -->
             <ScrollViewer x:Name="resultsScroll" VerticalAnchorRatio="NaN">
                 <Grid Margin="4,4,16,4">
-                    <!--
-                        While a page is being searched for, cards with no media stand where the results will
-                        be. They are the same cards in the same grid, so the results fill in without a jump.
-                    -->
+                    <!-- Skeleton cards in the same grid while a page loads, so the results fill in without a jump. -->
                     <ItemsRepeater ItemsSource="{x:Bind LoadingSlots}" Visibility="{x:Bind ViewModel.IsSearching, Mode=OneWay}">
                         <ItemsRepeater.Layout>
                             <controls:RowGridLayout MinItemWidth="256" MinRowSpacing="4" />
@@ -101,16 +87,13 @@
                     </ItemsRepeater>
 
                     <ItemsRepeater ItemsSource="{x:Bind ViewModel.Results}">
-                        <!--
-                            Fits as many columns as there is room for, and makes the cards in a row the same
-                            height. The spacing is small because each card's button has padding of its own.
-                        -->
+                        <!-- The spacing is small because each card's button has padding of its own. -->
                         <ItemsRepeater.Layout>
                             <controls:RowGridLayout MinItemWidth="256" MinRowSpacing="4" />
                         </ItemsRepeater.Layout>
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="models:MediaSearchResult">
-                                <!-- Opening the chosen result belongs in this button's Click, once there is somewhere to open it. -->
+                                <!-- Opening the result belongs in this button's Click. -->
                                 <Button AutomationProperties.Name="{x:Bind Title}" Style="{StaticResource CardButtonStyle}">
                                     <media:CardMediaView Media="{x:Bind}" />
                                 </Button>

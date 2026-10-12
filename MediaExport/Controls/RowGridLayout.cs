@@ -8,11 +8,7 @@ using Windows.Foundation;
 
 namespace MediaExport.Controls;
 
-/// <summary>
-/// Lays items out in columns of equal width, as many as fit, like <see cref="UniformGridLayout"/> with
-/// <c>ItemsStretch="Fill"</c>. Unlike it, each row is as tall as its tallest item, and the other items in the
-/// row are stretched to that height. UniformGridLayout gives every item the height of the first one.
-/// </summary>
+/// <summary>Columns like <see cref="UniformGridLayout"/>, but each row is as tall as its tallest item.</summary>
 /// <remarks>Every item is measured on each pass, so this suits tens of items rather than thousands.</remarks>
 public sealed partial class RowGridLayout : NonVirtualizingLayout
 {
