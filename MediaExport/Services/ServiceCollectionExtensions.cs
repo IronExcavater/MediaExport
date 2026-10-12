@@ -23,7 +23,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddMediaExport(this IServiceCollection services, string dataFolder)
     {
         services.AddSingleton(new SettingsStore(Path.Combine(dataFolder, "settings.json")));
-        services.AddSingleton(new ToolchainService(Path.Combine(dataFolder, "Tools")));
+        services.AddSingleton<ToolchainService>();
         services.AddSingleton<YtdlpService>();
         services.AddSingleton<IMediaDownloader>(provider => provider.GetRequiredService<YtdlpService>());
 

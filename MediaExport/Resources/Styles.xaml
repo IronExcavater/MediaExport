@@ -122,6 +122,7 @@
     <!-- Style for each settings item card. -->
     <Style x:Key="SettingsItemStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
         <Setter Property="Margin" Value="0,0,0,0"/>
+        <Setter Property="MinHeight" Value="70" />
     </Style>
 
     <Style x:Key="SettingsGroupTitleStyle" TargetType="TextBlock">
