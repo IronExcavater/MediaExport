@@ -21,7 +21,11 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
     /// <param name="skip">How many entries to pass over before the first one that is read.</param>
     /// <param name="limit">How many entries to read, so a long search page isn't read to its end.</param>
     /// <exception cref="InvalidOperationException">yt-dlp isn't installed, or reported an error.</exception>
-    public async Task<IReadOnlyList<YtdlpSearchResult>> SearchAsync(string target, int skip, int limit, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<YtdlpSearchResult>> SearchAsync(
+        string target,
+        int skip,
+        int limit,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(target))
             return [];
@@ -36,7 +40,12 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
     public async Task<YtdlpSearchResult?> ReadAsync(string link, CancellationToken cancellationToken = default)
     {
         // A link to a video that is also in a playlist is read as the video.
-        string[] arguments = ["--dump-single-json", "--no-playlist", "--quiet", "--no-warnings", "--encoding", "utf-8", link];
+        string[] arguments =
+        [
+            "--dump-single-json", "--no-playlist",
+            "--quiet", "--no-warnings", "--encoding", "utf-8",
+            link
+        ];
         var json = await RunAsync(arguments, cancellationToken);
         return ReadMedia(json);
     }
@@ -141,7 +150,8 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
                 return output;
 
             // yt-dlp's last line of errors is the one that says what went wrong.
-            var errors = (await readingErrors).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var errorText = await readingErrors;
+            var errors = errorText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             throw new InvalidOperationException(errors.LastOrDefault() ?? "yt-dlp returned nothing.");
         }
         catch (OperationCanceledException)
@@ -166,7 +176,8 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
     // Returns the largest thumbnail, which is the last one because yt-dlp lists them from small to large.
     private static Uri? GetThumbnail(JsonElement entry)
     {
-        var hasThumbnails = entry.TryGetProperty("thumbnails", out var thumbnails) && thumbnails.ValueKind == JsonValueKind.Array;
+        var hasProperty = entry.TryGetProperty("thumbnails", out var thumbnails);
+        var hasThumbnails = hasProperty && thumbnails.ValueKind == JsonValueKind.Array;
         if (!hasThumbnails)
             return null;
 

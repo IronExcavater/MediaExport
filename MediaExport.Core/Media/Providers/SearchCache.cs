@@ -8,7 +8,12 @@ using System.Text.Json.Serialization;
 namespace MediaExport.Core.Media.Providers;
 
 /// <summary>One page of a search and what it found.</summary>
-public sealed record CachedSearch(string ProviderId, string Query, int Page, DateTimeOffset SearchedAt, IReadOnlyList<MediaSearchResult> Results);
+public sealed record CachedSearch(
+    string ProviderId,
+    string Query,
+    int Page,
+    DateTimeOffset SearchedAt,
+    IReadOnlyList<MediaSearchResult> Results);
 
 /// <summary>Remembers what searches found, page by page, in memory and in a file, so a repeat shows at once.</summary>
 /// <param name="path">The cache file, or <c>null</c> for a cache that lasts only as long as the app runs.</param>
@@ -57,8 +62,11 @@ public sealed class SearchCache(string? path)
         }
     }
 
-    private static bool IsSame(CachedSearch search, string providerId, string query, int page) =>
-        search.ProviderId == providerId && search.Page == page && string.Equals(search.Query, query, StringComparison.OrdinalIgnoreCase);
+    private static bool IsSame(CachedSearch search, string providerId, string query, int page)
+    {
+        var isSameQuery = string.Equals(search.Query, query, StringComparison.OrdinalIgnoreCase);
+        return search.ProviderId == providerId && search.Page == page && isSameQuery;
+    }
 }
 
 [JsonSerializable(typeof(List<CachedSearch>))]

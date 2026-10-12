@@ -18,7 +18,8 @@ public sealed record SearchTerm(string Label, string Value)
     }
 
     /// <summary>The values of a term that may have several, split at its commas.</summary>
-    public IReadOnlyList<string> Values => Value.Split(ValueSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    public IReadOnlyList<string> Values =>
+        Value.Split(ValueSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     public override string ToString()
     {
@@ -115,7 +116,8 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
     /// <param name="range">The range term the search already has, or <c>null</c> if it has none.</param>
     public static SearchTerm WithEnd(SearchTerm? range, SearchTerm end)
     {
-        var label = RangeLabelOf(end.Label) ?? throw new ArgumentException($"'{end.Label}' isn't an end of a range.", nameof(end));
+        var label = RangeLabelOf(end.Label)
+            ?? throw new ArgumentException($"'{end.Label}' isn't an end of a range.", nameof(end));
         var ends = range is null ? new SearchRange(string.Empty, string.Empty) : SearchRange.Parse(range.Value);
         var isLower = end.Label is LongerLabel or AfterLabel;
         var changed = isLower ? ends with { Lower = end.Value } : ends with { Upper = end.Value };
@@ -150,13 +152,19 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
     public static DateTimeOffset? ReadDate(string value)
     {
         var text = value.Trim();
-        var isStandard = DateTimeOffset.TryParseExact(text, StandardDateFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var date);
+        var isStandard = DateTimeOffset.TryParseExact(
+            text,
+            StandardDateFormats,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeLocal,
+            out var date);
         if (isStandard)
             return date;
 
         // A bare number would be read as a day of this month, which nobody means by it.
         var hasOnlyDigits = text.All(char.IsAsciiDigit);
-        var isRegional = !hasOnlyDigits && DateTimeOffset.TryParse(text, CultureInfo.CurrentCulture, DateTimeStyles.AssumeLocal, out date);
+        var isRegional = !hasOnlyDigits
+            && DateTimeOffset.TryParse(text, CultureInfo.CurrentCulture, DateTimeStyles.AssumeLocal, out date);
         return isRegional ? date : null;
     }
 
@@ -171,7 +179,12 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
         }
 
         // A year or a month written the standard way stays as it is; any other date is written as its day.
-        var isStandard = DateTimeOffset.TryParseExact(text, StandardDateFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out _);
+        var isStandard = DateTimeOffset.TryParseExact(
+            text,
+            StandardDateFormats,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeLocal,
+            out _);
         var date = ReadDate(text);
         return isStandard || date is null ? text : date.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
@@ -266,7 +279,8 @@ public sealed partial record SearchQuery(string Text, IReadOnlyList<SearchTerm> 
 
     public override string ToString()
     {
-        var parts = Terms.Where(term => !string.IsNullOrWhiteSpace(term.Value)).Select(term => term.ToString()).ToList();
+        var termsWithValues = Terms.Where(term => !string.IsNullOrWhiteSpace(term.Value));
+        var parts = termsWithValues.Select(term => term.ToString()).ToList();
         if (Text.Length > 0)
             parts.Add(Text);
 
