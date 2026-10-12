@@ -66,7 +66,7 @@
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="IsSpellCheckEnabled" Value="False" />
         <!-- The extra top padding lines the text up with the labels beside it. -->
-        <Setter Property="Padding" Value="6,9,6,5" />
+        <Setter Property="Padding" Value="6,8,6,6" />
         <Setter Property="TextAlignment" Value="Left" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
