@@ -30,6 +30,17 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
         return ReadSearchResults(json);
     }
 
+    /// <summary>Reads what a link is to, without downloading it.</summary>
+    /// <returns>The media, or <c>null</c> if the link is to several items or to none.</returns>
+    /// <exception cref="InvalidOperationException">yt-dlp isn't installed, or reported an error.</exception>
+    public async Task<YtdlpSearchResult?> ReadAsync(string link, CancellationToken cancellationToken = default)
+    {
+        // A link to a video that is also in a playlist is read as the video.
+        string[] arguments = ["--dump-single-json", "--no-playlist", "--quiet", "--no-warnings", "--encoding", "utf-8", link];
+        var json = await RunAsync(arguments, cancellationToken);
+        return ReadMedia(json);
+    }
+
     public Task<IReadOnlyList<string>> DownloadAsync(
         string sourceUrl,
         ExportOptions options,
@@ -60,31 +71,41 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
         if (!hasEntries)
             return [];
 
-        var results = new List<YtdlpSearchResult>();
-        foreach (var entry in entries.EnumerateArray())
-        {
-            var identity = GetString(entry, "id");
-            var title = GetString(entry, "title");
-            // A search page also lists playlists and channels (as "tabs"), which aren't media.
-            var isTab = GetString(entry, "ie_key") == "YoutubeTab";
-            if (identity is null || title is null || isTab)
-                continue;
+        return entries.EnumerateArray().Select(ReadEntry).OfType<YtdlpSearchResult>().ToList();
+    }
 
-            var duration = GetNumber(entry, "duration");
-            var views = GetNumber(entry, "view_count");
-            // Falls back to the release time. A live stream has neither, nor a duration or a view count.
-            var timestamp = GetNumber(entry, "timestamp") ?? GetNumber(entry, "release_timestamp");
-            results.Add(new YtdlpSearchResult(
-                identity,
-                GetString(entry, "webpage_url") ?? GetString(entry, "url"),
-                GetThumbnail(entry),
-                title,
-                GetString(entry, "uploader") ?? GetString(entry, "channel"),
-                duration is null ? null : TimeSpan.FromSeconds(duration.Value),
-                views is null ? null : (long)views.Value,
-                timestamp is null ? null : DateTimeOffset.FromUnixTimeSeconds((long)timestamp.Value)));
-        }
-        return results;
+    internal static YtdlpSearchResult? ReadMedia(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+
+        // A link to a playlist or a channel is to many items, not to one.
+        var isOneItem = GetString(root, "_type") != "playlist";
+        return isOneItem ? ReadEntry(root) : null;
+    }
+
+    private static YtdlpSearchResult? ReadEntry(JsonElement entry)
+    {
+        var identity = GetString(entry, "id");
+        var title = GetString(entry, "title");
+        // A search page also lists playlists and channels (as "tabs"), which aren't media.
+        var isTab = GetString(entry, "ie_key") == "YoutubeTab";
+        if (identity is null || title is null || isTab)
+            return null;
+
+        var duration = GetNumber(entry, "duration");
+        var views = GetNumber(entry, "view_count");
+        // Falls back to the release time. A live stream has neither, nor a duration or a view count.
+        var timestamp = GetNumber(entry, "timestamp") ?? GetNumber(entry, "release_timestamp");
+        return new YtdlpSearchResult(
+            identity,
+            GetString(entry, "webpage_url") ?? GetString(entry, "url"),
+            GetThumbnail(entry),
+            title,
+            GetString(entry, "uploader") ?? GetString(entry, "channel"),
+            duration is null ? null : TimeSpan.FromSeconds(duration.Value),
+            views is null ? null : (long)views.Value,
+            timestamp is null ? null : DateTimeOffset.FromUnixTimeSeconds((long)timestamp.Value));
     }
 
     // Runs yt-dlp and returns what it wrote to standard output.
