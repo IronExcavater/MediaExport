@@ -70,7 +70,7 @@ public sealed partial class ClipboardButton : UserControl
         var canCopy = CanCopy;
         var isUseful = canCopy || _hasClipboardText;
 
-        var action = canCopy ? "Copy to clipboard" : "Paste from clipboard";
+        var action = canCopy ? "Copy search" : "Paste";
         AutomationProperties.SetName(button, action);
         ToolTipService.SetToolTip(button, action);
 

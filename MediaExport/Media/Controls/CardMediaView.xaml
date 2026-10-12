@@ -21,20 +21,25 @@
 
         <local:MediaThumbnail x:Name="thumbnail" Media="{x:Bind Media, Mode=OneWay}" />
 
-        <!-- Each bar is as tall, with its margins, as the text it stands in for. -->
-        <StackPanel
-            x:Name="skeleton"
-            Spacing="2"
-            Visibility="Collapsed">
+        <!--
+            Each bar is as tall, with its margins, as the line of text it stands in for: two lines of title and a
+            byline, which is what most cards have.
+        -->
+        <StackPanel x:Name="skeleton" Visibility="Collapsed">
             <Border
                 Height="14"
-                Margin="0,3,48,3"
+                Margin="0,3,24,3"
+                HorizontalAlignment="Stretch"
+                Style="{StaticResource SkeletonBarStyle}" />
+            <Border
+                Height="14"
+                Margin="0,3,72,3"
                 HorizontalAlignment="Stretch"
                 Style="{StaticResource SkeletonBarStyle}" />
             <Border
                 Width="140"
                 Height="10"
-                Margin="0,3"
+                Margin="0,5,0,3"
                 Style="{StaticResource SkeletonBarStyle}" />
         </StackPanel>
 

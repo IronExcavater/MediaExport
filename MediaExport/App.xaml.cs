@@ -47,7 +47,8 @@ public partial class App : Application
         catch (InvalidOperationException)
         {
             // Unpackaged runs have no package data folder.
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MediaExport");
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            return Path.Combine(appData, "MediaExport");
         }
     }
 }
