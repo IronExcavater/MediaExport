@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
+using MediaExport.Controls;
 using MediaExport.Converters;
 using MediaExport.Core.Media.Providers;
 using Microsoft.UI.Xaml;
@@ -17,39 +18,29 @@ using VirtualKey = Windows.System.VirtualKey;
 
 namespace MediaExport.Search.Controls;
 
-/// <summary>
-/// One search term in the search field. At rest it is a button showing its kind as an icon and its value as
-/// text. Pressing it edits the value: a term of words turns into a text box where it stands, and a range, of
-/// durations or dates, opens a flyout with a box or date picker for each end.
-/// <para>
-/// Enter or leaving keeps what was set, Escape puts the old value back, and a term left with no value asks to
-/// be removed. A term can't be changed, so the control reports the edited one and its host replaces it.
-/// </para>
-/// </summary>
+/// <summary>One term in the search field. At rest it is a button; pressed, its value is edited in place.</summary>
+/// <remarks>
+/// Enter keeps the value and Escape restores it, both leaving the term selected as a whole. Leaving the term any
+/// other way keeps the value too, and a term left empty asks to be removed.
+/// </remarks>
 public sealed partial class SearchTermBox : UserControl
 {
-    // How a date is written in a range's value.
-    private const string DateFormat = "yyyy-MM-dd";
-
     // How wide the remove button's slot opens, which the Editing state in the XAML animates it to.
     private const double RemoveSlotWidth = 22;
-
-    // The earliest and latest days a date picker offers when the other end doesn't limit it.
-    private readonly DateTimeOffset _earliestDate;
-    private readonly DateTimeOffset _latestDate;
 
     // Finished when the term has slid out of view.
     private TaskCompletionSource? _slideOut;
 
-    // Whether Escape was what closed the range flyout, which gives up the changes made in it.
-    private bool _isRangeEditCancelled;
+    private bool _isEditing;
+
+    // The range box the open picker sets, and whether the picker is only being synced to that box's value.
+    private TextBox? _pickedBox;
+    private bool _isShowingPickedValue;
 
     public SearchTermBox()
     {
         InitializeComponent();
         Storyboard.SetTarget(slideWidth, this);
-        _earliestDate = afterPicker.MinDate;
-        _latestDate = afterPicker.MaxDate;
     }
 
     public SearchTerm? Term
@@ -60,42 +51,36 @@ public sealed partial class SearchTermBox : UserControl
             field = value;
             labelIcon.Glyph = GlyphFor(value?.Label);
             valueText.Text = Describe(value);
-            valueBox.Text = value?.Value ?? string.Empty;
+            ShowValue();
+            ShowParts();
 
             // The icon stands for the label, so the label is given in words to a tooltip and to screen readers.
             ToolTipService.SetToolTip(this, value?.Label);
             AutomationProperties.SetName(restingButton, value?.ToString());
-            AutomationProperties.SetName(valueBox, value?.Label);
+            AutomationProperties.SetName(valueBox, IsRange ? $"{value?.Label} from" : value?.Label);
+            AutomationProperties.SetName(upperBox, $"{value?.Label} to");
         }
     }
 
     private bool IsRange => Term is not null && SearchQuery.IsRange(Term.Label);
 
-    private bool IsDuration => Term?.Label == SearchQuery.DurationLabel;
-
     /// <summary>Raised with the term as it now is, when editing ends with a different value.</summary>
     public event EventHandler<SearchTerm>? Edited;
 
-    /// <summary>Raised when the term should go: its remove button, or its value left empty.</summary>
+    /// <summary>Raised when the term should go, by its remove button or by its value being left empty.</summary>
     public event EventHandler? Removed;
-
-    /// <summary>Raised when the editing is over, for the host to put the keyboard back in its own box.</summary>
-    public event EventHandler? EditingEnded;
 
     /// <summary>Widens the term from nothing to its full width, for one that has just been added.</summary>
     public void SlideIn()
     {
-        // A box that has just been made doesn't have its term yet, so its full width can't be measured. It
-        // is kept at no width until its turn on the dispatcher, by when the term is in place.
+        // A new box has no term to measure yet, so it stays at no width until its turn on the dispatcher.
         MaxWidth = 0;
         DispatcherQueue.TryEnqueue(() =>
         {
             var unlimited = new Size(double.PositiveInfinity, double.PositiveInfinity);
             content.Measure(unlimited);
 
-            // A term of words added from the menu starts being edited as it slides in, which opens its
-            // remove button's slot. The slide makes room for the slot whether or not it opens, or the
-            // button would be cut off until the slide had finished.
+            // Leaves room for the remove slot, which opens if the new term starts being edited as it slides in.
             slideWidth.From = 0;
             slideWidth.To = content.DesiredSize.Width + RemoveSlotWidth;
             slide.Begin();
@@ -115,8 +100,7 @@ public sealed partial class SearchTermBox : UserControl
 
     private void Slide_Completed(object? sender, object args)
     {
-        // A storyboard holds its last value. Once the term is fully in, the hold is let go, so the term can
-        // grow as its value is typed. A term that slid out stays at no width until it is removed.
+        // A storyboard holds its last value, so the hold is let go once the term is in and it can grow as it is typed.
         var hasSlidIn = slideWidth.To > 0;
         if (hasSlidIn)
         {
@@ -128,195 +112,244 @@ public sealed partial class SearchTermBox : UserControl
         _slideOut = null;
     }
 
-    /// <summary>Starts editing the value: all of it selected to type over, or a range's flyout open.</summary>
+    /// <summary>Starts editing with the value selected to type over. A range starts at its first end.</summary>
     public void StartEditing()
     {
-        if (IsRange)
-        {
-            OpenRangeFlyout();
-            return;
-        }
-
-        VisualStateManager.GoToState(this, "Editing", useTransitions: false);
+        BeginEditing();
         valueBox.Focus(FocusState.Keyboard);
         valueBox.SelectAll();
     }
 
-    /// <summary>Starts editing with the cursor at the end of the value, as when it is reached from the box after it.</summary>
-    public void StartEditingAtEnd()
+    /// <summary>Whether the term as a whole has the keyboard, not one of its boxes.</summary>
+    public bool IsSelected => restingButton.FocusState != FocusState.Unfocused;
+
+    /// <summary>Gives the keyboard to the term as a whole, which ends any editing. Enter then edits it again.</summary>
+    public void Select() => restingButton.Focus(FocusState.Keyboard);
+
+    // A press on a term that is already being edited leaves the editing as it is.
+    private void RestingButton_Click(object sender, RoutedEventArgs args)
     {
-        StartEditing();
-        valueBox.SelectionStart = valueBox.Text.Length;
+        if (!_isEditing)
+            StartEditing();
     }
 
-    private void RestingButton_Click(object sender, RoutedEventArgs args) => StartEditing();
+    private void RemoveButton_Click(object sender, RoutedEventArgs args) => Removed?.Invoke(this, EventArgs.Empty);
 
-    private void RemoveButton_Click(object sender, RoutedEventArgs args)
+    private void BeginEditing()
+    {
+        if (_isEditing)
+            return;
+
+        _isEditing = true;
+        VisualStateManager.GoToState(this, "Editing", useTransitions: false);
+        ShowParts();
+    }
+
+    private void ValueBox_GotFocus(object sender, RoutedEventArgs args) => OpenPicker((TextBox)sender);
+
+    // A box that already has the keyboard gets no focus event when pressed, so this reopens its picker.
+    private void ValueBox_Tapped(object sender, TappedRoutedEventArgs args) => OpenPicker((TextBox)sender);
+
+    private void ValueBox_LostFocus(object sender, RoutedEventArgs args) => DispatcherQueue.TryEnqueue(EndEditingIfLeft);
+
+    private void Picker_Closed(object? sender, object args) => DispatcherQueue.TryEnqueue(EndEditingIfLeft);
+
+    // A range's boxes and pickers are one edit. Where focus went is only known after the event that moved it.
+    private void EndEditingIfLeft()
+    {
+        var focused = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        var isInBoxes = focused == valueBox || focused == upperBox;
+        var isInPicker = VisualTree.IsWithin(focused, calendar);
+        if (!_isEditing || isInBoxes || isInPicker)
+            return;
+
+        durationPicker.Hide();
+        datePicker.Hide();
+        EndEditing();
+    }
+
+    // Opens a range box's picker under it, without taking the keyboard, so the box can still be typed in.
+    private void OpenPicker(TextBox box)
     {
         if (!IsRange)
-        {
-            Removed?.Invoke(this, EventArgs.Empty);
             return;
-        }
 
-        // The flyout's Remove button empties the range, and closing the flyout with an empty range removes it.
-        ShowRange(new SearchRange(string.Empty, string.Empty));
-        rangeFlyout.Hide();
+        var isDuration = Term!.Label == SearchQuery.DurationLabel;
+        var picker = isDuration ? durationPicker : datePicker;
+        var isAlreadyOpen = picker.IsOpen && _pickedBox == box;
+        if (isAlreadyOpen)
+            return;
+
+        _pickedBox = box;
+        ShowPickedValue();
+        var options = new FlyoutShowOptions { ShowMode = FlyoutShowMode.Transient, Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft };
+        picker.ShowAt(box, options);
     }
 
-    // Leaving the box keeps what was typed, however it was left.
-    private void ValueBox_LostFocus(object sender, RoutedEventArgs args)
+    // Makes the open picker show what is in its box: the hours and minutes, or the day on the calendar.
+    private void ShowPickedValue()
     {
+        var box = _pickedBox;
+        if (box is null || !IsRange)
+            return;
+
+        var length = SearchQuery.ReadLength(box.Text) ?? TimeSpan.Zero;
+        hoursText.Text = $"{(int)length.TotalHours} h";
+        minutesText.Text = $"{length.Minutes} min";
+
+        _isShowingPickedValue = true;
+        var date = SearchQuery.ReadDate(box.Text);
+        calendar.SelectedDates.Clear();
+        if (date is not null)
+            calendar.SelectedDates.Add(date.Value);
+        calendar.SetDisplayDate(date ?? DateTimeOffset.Now);
+        _isShowingPickedValue = false;
+    }
+
+    // Typing in the box moves its picker along with it.
+    private void ValueBox_TextChanged(object sender, TextChangedEventArgs args)
+    {
+        if (sender == _pickedBox)
+            ShowPickedValue();
+    }
+
+    // Steps the duration in the box by the minutes in the pressed button's Tag. It can't go below nothing.
+    private void DurationStep_Click(object sender, RoutedEventArgs args)
+    {
+        var box = _pickedBox;
+        if (box is null)
+            return;
+
+        var step = int.Parse((string)((FrameworkElement)sender).Tag, CultureInfo.InvariantCulture);
+        var length = SearchQuery.ReadLength(box.Text) ?? TimeSpan.Zero;
+        var minutes = Math.Max(0, (int)length.TotalMinutes + step);
+        box.Text = SearchQuery.NormalizeEnd(SearchQuery.DurationLabel, minutes.ToString(CultureInfo.InvariantCulture));
+        box.SelectionStart = box.Text.Length;
+    }
+
+    // Picking a day writes it into the box and closes the calendar, with the keyboard back in the box.
+    private void Calendar_SelectedDatesChanged(CalendarView sender, CalendarViewSelectedDatesChangedEventArgs args)
+    {
+        var box = _pickedBox;
+        if (_isShowingPickedValue || box is null || args.AddedDates.Count == 0)
+            return;
+
+        box.Text = DescribeEnd(SearchQuery.NormalizeEnd(SearchQuery.PublishedLabel, args.AddedDates[0].ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
+        box.Focus(FocusState.Programmatic);
+        box.SelectionStart = box.Text.Length;
+        datePicker.Hide();
+    }
+
+    // Leaving the term keeps what was typed, however it was left.
+    private void EndEditing()
+    {
+        _isEditing = false;
         VisualStateManager.GoToState(this, "Resting", useTransitions: false);
-        Commit(valueBox.Text.Trim());
-    }
+        ShowParts();
 
-    // A preview handler, because a TextBox that accepts Return handles Enter and Backspace itself.
-    private void ValueBox_PreviewKeyDown(object sender, KeyRoutedEventArgs args)
-    {
-        var isEmpty = valueBox.Text.Length == 0;
-        switch (args.Key)
-        {
-            case VirtualKey.Escape:
-                valueBox.Text = Term?.Value ?? string.Empty;
-                EditingEnded?.Invoke(this, EventArgs.Empty);
-                args.Handled = true;
-                break;
-
-            // Ending the editing takes focus away, which is what keeps the value, or removes a term left empty.
-            case VirtualKey.Enter:
-            case VirtualKey.Back when isEmpty:
-                EditingEnded?.Invoke(this, EventArgs.Empty);
-                args.Handled = true;
-                break;
-        }
-    }
-
-    // Reports what the term was left as: gone if it has no value, edited if the value is different.
-    private void Commit(string value)
-    {
         var term = Term;
         if (term is null)
             return;
 
+        var value = ReadValue();
         if (value.Length == 0)
             Removed?.Invoke(this, EventArgs.Empty);
         else if (value != term.Value)
             Edited?.Invoke(this, term with { Value = value });
     }
 
-    private void OpenRangeFlyout()
+    // What was typed, as the term's value. Range ends are normalised, and a range with neither end is no value.
+    private string ReadValue()
     {
-        _isRangeEditCancelled = false;
-        durationEditor.Visibility = VisibleWhen.True(IsDuration);
-        publishedEditor.Visibility = VisibleWhen.True(!IsDuration);
-        ShowRange(SearchRange.Parse(Term!.Value));
-        FlyoutBase.ShowAttachedFlyout(restingButton);
-    }
+        if (!IsRange)
+            return valueBox.Text.Trim();
 
-    // Puts a range into the flyout's boxes or date pickers.
-    private void ShowRange(SearchRange range)
-    {
-        if (IsDuration)
-        {
-            longerBox.Text = range.Lower;
-            shorterBox.Text = range.Upper;
-        }
-        else
-        {
-            afterPicker.Date = SearchQuery.ReadDate(range.Lower);
-            beforePicker.Date = SearchQuery.ReadDate(range.Upper);
-        }
-    }
-
-    // Closing the flyout keeps the range it holds. Escape first puts the term's own range back into it, so
-    // nothing changes, and a term that never had a range is then empty and is removed.
-    private void RangeFlyout_Closed(object? sender, object args)
-    {
-        if (_isRangeEditCancelled)
-            ShowRange(SearchRange.Parse(Term!.Value));
-
-        Commit(ReadRange());
-        EditingEnded?.Invoke(this, EventArgs.Empty);
-    }
-
-    // What the flyout was left holding, as the term's value. A range with neither end is no value at all.
-    private string ReadRange()
-    {
-        var range = IsDuration
-            ? new SearchRange(longerBox.Text.Trim(), shorterBox.Text.Trim())
-            : new SearchRange(Write(afterPicker.Date), Write(beforePicker.Date));
-
+        var label = Term!.Label;
+        var lower = SearchQuery.NormalizeEnd(label, valueBox.Text);
+        var upper = SearchQuery.NormalizeEnd(label, upperBox.Text);
+        var range = new SearchRange(lower, upper);
         return range.IsEmpty ? string.Empty : range.ToString();
     }
 
-    // Enter closes the flyout, which keeps what was set. Escape closes it too, by itself; this only notes that
-    // the changes are to be given up. A preview handler sees Escape before the flyout acts on it.
-    private void RangeEditor_PreviewKeyDown(object sender, KeyRoutedEventArgs args)
+    // Puts the term's value into its box, or its two ends into the two boxes of a range.
+    private void ShowValue()
     {
-        if (args.Key == VirtualKey.Escape)
+        var term = Term;
+        // An empty box shows the term's label as its placeholder, or for a range the label of that end.
+        if (!IsRange)
         {
-            _isRangeEditCancelled = true;
+            valueBox.Text = term?.Value ?? string.Empty;
+            valueBox.PlaceholderText = term?.Label ?? string.Empty;
+            return;
         }
-        else if (args.Key == VirtualKey.Enter)
+
+        var range = SearchRange.Parse(term!.Value);
+        var isDuration = term.Label == SearchQuery.DurationLabel;
+        valueBox.Text = DescribeEnd(range.Lower);
+        upperBox.Text = DescribeEnd(range.Upper);
+        valueBox.PlaceholderText = isDuration ? SearchQuery.LongerLabel : SearchQuery.AfterLabel;
+        upperBox.PlaceholderText = isDuration ? SearchQuery.ShorterLabel : SearchQuery.BeforeLabel;
+    }
+
+    // At rest a term is its value as text. While edited it is a text box, or two with a dash for a range.
+    private void ShowParts()
+    {
+        var showsUpperEnd = _isEditing && IsRange;
+        valueText.Visibility = VisibleWhen.True(!_isEditing);
+        valueBox.Visibility = VisibleWhen.True(_isEditing);
+        rangeDash.Visibility = VisibleWhen.True(showsUpperEnd);
+        upperBox.Visibility = VisibleWhen.True(showsUpperEnd);
+    }
+
+    // A preview handler, because a TextBox that accepts Return handles Enter and Backspace itself.
+    private void ValueBox_PreviewKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        var box = (TextBox)sender;
+        var isEmpty = box.Text.Length == 0;
+        switch (args.Key)
         {
-            rangeFlyout.Hide();
-            args.Handled = true;
+            case VirtualKey.Escape:
+                ShowValue();
+                Select();
+                args.Handled = true;
+                break;
+
+            // Backspace in a range's empty second end goes back to its first end.
+            case VirtualKey.Back when isEmpty && box == upperBox:
+                valueBox.Focus(FocusState.Keyboard);
+                valueBox.SelectionStart = valueBox.Text.Length;
+                args.Handled = true;
+                break;
+
+            // Selecting the term takes focus from its boxes, which keeps the value, or removes a term left empty.
+            case VirtualKey.Enter:
+            case VirtualKey.Back when isEmpty && upperBox.Text.Length == 0:
+                Select();
+                args.Handled = true;
+                break;
         }
     }
 
-    // The Tag of a ready-made duration is the range, as it is written in a term's value.
-    private void DurationPreset_Click(object sender, RoutedEventArgs args)
-    {
-        var button = (Button)sender;
-        ShowRange(SearchRange.Parse((string)button.Tag));
-        rangeFlyout.Hide();
-    }
-
-    // The Tag of a ready-made date range is how many days back it starts. It has no end.
-    private void PublishedPreset_Click(object sender, RoutedEventArgs args)
-    {
-        var button = (Button)sender;
-        var days = int.Parse((string)button.Tag, CultureInfo.InvariantCulture);
-        afterPicker.Date = DateTimeOffset.Now.Date.AddDays(-days);
-        beforePicker.Date = null;
-        rangeFlyout.Hide();
-    }
-
-    // Each picker only offers days that leave something between the two ends.
-    private void PublishedPicker_DateChanged(CalendarDatePicker sender, CalendarDatePickerDateChangedEventArgs args)
-    {
-        var dayAfterStart = afterPicker.Date?.AddDays(1);
-        var dayBeforeEnd = beforePicker.Date?.AddDays(-1);
-        beforePicker.MinDate = dayAfterStart ?? _earliestDate;
-        afterPicker.MaxDate = dayBeforeEnd ?? _latestDate;
-    }
-
-    private static string Write(DateTimeOffset? date) =>
-        date is null ? string.Empty : date.Value.ToString(DateFormat, CultureInfo.InvariantCulture);
-
-    // The value as it reads at rest. A range reads as one piece of text: both ends with a dash between
-    // them, or its one end after a sign for which end it is.
+    // The value at rest. A range reads as both ends around a dash, or one end after a sign for which end it is.
     private static string Describe(SearchTerm? term)
     {
         if (term is null || !SearchQuery.IsRange(term.Label))
             return term?.Value ?? string.Empty;
 
         var range = SearchRange.Parse(term.Value);
-        var isDuration = term.Label == SearchQuery.DurationLabel;
-        var lower = isDuration ? range.Lower : DescribeDate(range.Lower);
-        var upper = isDuration ? range.Upper : DescribeDate(range.Upper);
+        var lower = DescribeEnd(range.Lower);
+        var upper = DescribeEnd(range.Upper);
         if (lower.Length > 0 && upper.Length > 0)
             return $"{lower} \u2013 {upper}";
 
         return lower.Length > 0 ? $"> {lower}" : $"< {upper}";
     }
 
-    // A date reads as day, month and year however it was written: a year alone is its first of January.
-    private static string DescribeDate(string written)
+    // A date reads as day, month and year, a year alone as its first of January. Anything else reads as written.
+    private static string DescribeEnd(string end)
     {
-        var date = SearchQuery.ReadDate(written);
-        return date is null ? written : date.Value.ToString("d MMMM yyyy", CultureInfo.CurrentCulture);
+        var date = SearchQuery.ReadDate(end);
+        return date is null ? end : date.Value.ToString("d MMM yyyy", CultureInfo.CurrentCulture);
     }
 
     // The same icons as the menu the terms are added from, in the Segoe Fluent Icons font.

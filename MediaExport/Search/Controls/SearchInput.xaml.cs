@@ -17,9 +17,7 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using VirtualKey = Windows.System.VirtualKey;
 
@@ -39,11 +37,6 @@ public sealed partial class SearchInput : UserControl
 
     private const double ResultsGap = 2;
 
-    // The Search button's two icons, in the Segoe Fluent Icons font.
-    private const string SearchGlyph = "";
-    private const string OpenInPageGlyph = "";
-
-    private readonly ScalarTransition _fade = new() { Duration = VisibilityTransition.Duration };
     private readonly DispatcherQueueTimer _debounceTimer;
     private bool _isPasting;
     private readonly PointerEventHandler _windowPressed;
@@ -69,12 +62,13 @@ public sealed partial class SearchInput : UserControl
 
         Loaded += (_, _) =>
         {
-            Clipboard.ContentChanged += Clipboard_ContentChanged;
-            UpdateClipboardButton();
+            UpdateFieldButtons();
+            HideQueryBoxDeleteButton();
 
-            VisibilityTransition.SetFade(FindDeleteButton(), true);
+            // Fades added in the XAML would also run on the icons' first opacities, so they are added after.
+            searchIcon.OpacityTransition = new ScalarTransition { Duration = VisibilityTransition.Duration };
+            seeAllIcon.OpacityTransition = new ScalarTransition { Duration = VisibilityTransition.Duration };
         };
-        Unloaded += (_, _) => Clipboard.ContentChanged -= Clipboard_ContentChanged;
     }
 
     public SearchViewModel? ViewModel
@@ -99,37 +93,134 @@ public sealed partial class SearchInput : UserControl
         }
     } = true;
 
-    // TitleBar stops stretching its content once the content's desired width reaches the space available.
-    // Asking only for MinWidth keeps the field stretched across the title bar.
+    // Asking only for MinWidth keeps TitleBar stretching the field, which it stops once content wants all the space.
     protected override Size MeasureOverride(Size availableSize)
     {
         var desired = base.MeasureOverride(availableSize);
         return new Size(MinWidth, desired.Height);
     }
 
-    // A horizontal ScrollViewer gives its content only the width it asks for, so fieldContent is kept at
-    // least as wide as the field and the query box fills the spare room.
+    // A horizontal ScrollViewer gives content only the width it asks for, so fieldContent is kept as wide as the field.
     private void FieldScroll_SizeChanged(object sender, SizeChangedEventArgs args) => fieldContent.MinWidth = args.NewSize.Width;
 
-    // MenuFlyout has no ItemsSource, so the providers are listed as it opens, the selected one in bold.
-    private void ProviderMenu_Opening(object? sender, object args)
+    private void ProviderFlyout_Opening(object? sender, object args) => ShowChosenProviders();
+
+    // A row that is made after the flyout opens is ticked as it loads.
+    private void ProviderBox_Loaded(object sender, RoutedEventArgs args) => ShowChosenProviders();
+
+    // Ticks the rows of the chosen providers, and the header's box while that is all of them.
+    private void ShowChosenProviders()
     {
-        providerMenu.Items.Clear();
         var viewModel = ViewModel;
         if (viewModel is null)
             return;
 
+        var chosen = viewModel.SelectedProviders;
+        allProvidersBox.IsChecked = chosen.Count == viewModel.Providers.Count;
         foreach (var provider in viewModel.Providers)
+        {
+            var row = providerList.ContainerFromItem(provider);
+            var box = row is null ? null : VisualTree.FindDescendant<CheckBox>(row);
+            box?.IsChecked = chosen.Contains(provider);
+        }
+    }
+
+    private void ChooseProviders(IEnumerable<IMediaSearchProvider> providers)
+    {
+        ViewModel?.SelectProviders(providers);
+
+        // A search needs a provider, so choosing none is ignored and the ticks go back to what is chosen.
+        ShowChosenProviders();
+    }
+
+    private void ToggleProvider(IMediaSearchProvider provider)
+    {
+        var chosen = ViewModel?.SelectedProviders.ToList() ?? [];
+        var wasChosen = chosen.Remove(provider);
+        if (!wasChosen)
+            chosen.Add(provider);
+
+        ChooseProviders(chosen);
+    }
+
+    // Choosing one provider alone is done with the flyout, as with a menu. Ticking leaves it open for more.
+    private void ProviderList_ItemClick(object sender, ItemClickEventArgs args)
+    {
+        ChooseProviders([(IMediaSearchProvider)args.ClickedItem]);
+        providerFlyout.Hide();
+    }
+
+    // Also raised when ShowChosenProviders sets a tick, which changes nothing because the tick then matches.
+    private void ProviderBox_Toggled(object sender, RoutedEventArgs args)
+    {
+        var box = (CheckBox)sender;
+        var isTicked = box.IsChecked == true;
+        if (box.Tag is IMediaSearchProvider provider && isTicked != ViewModel?.SelectedProviders.Contains(provider))
+            ToggleProvider(provider);
+    }
+
+    // Space ticks the focused row, as a press on its box does. Enter chooses the row alone.
+    private void ProviderList_PreviewKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        var focused = FocusManager.GetFocusedElement(providerList.XamlRoot);
+        if (args.Key != VirtualKey.Space || focused is not ListViewItem { Content: IMediaSearchProvider provider })
+            return;
+
+        ToggleProvider(provider);
+        args.Handled = true;
+    }
+
+    // Unticked, the first provider is left, since a search needs one.
+    private void AllProvidersBox_Toggled(object sender, RoutedEventArgs args)
+    {
+        var viewModel = ViewModel;
+        var isAll = allProvidersBox.IsChecked == true;
+        var wasAll = viewModel?.SelectedProviders.Count == viewModel?.Providers.Count;
+        if (viewModel is not null && isAll != wasAll)
+            ChooseProviders(isAll ? viewModel.Providers : viewModel.Providers.Take(1));
+    }
+
+    // The ways of ranking, listed as the menu opens with the one in use in bold.
+    private void SortMenu_Opening(object? sender, object args)
+    {
+        sortMenu.Items.Clear();
+        var viewModel = ViewModel;
+        if (viewModel is null)
+            return;
+
+        (SearchSort Sort, string Name)[] choices = [(SearchSort.Relevance, "Most relevant"), (SearchSort.Views, "Most viewed")];
+        foreach (var choice in choices)
         {
             var item = new MenuFlyoutItem
             {
-                Text = provider.DisplayName,
-                Icon = IconView.Create(provider.Icon),
-                FontWeight = provider == viewModel.SelectedProvider ? FontWeights.SemiBold : FontWeights.Normal
+                Text = choice.Name,
+                FontWeight = choice.Sort == viewModel.Sort ? FontWeights.SemiBold : FontWeights.Normal
             };
-            item.Click += (_, _) => viewModel.SelectedProvider = provider;
-            providerMenu.Items.Add(item);
+            item.Click += (_, _) => viewModel.Sort = choice.Sort;
+            sortMenu.Items.Add(item);
         }
+    }
+
+    // The button shows the chosen providers' icons, and its tooltip names them.
+    private void ShowProviderIcons()
+    {
+        var providers = ViewModel?.SelectedProviders.ToList() ?? [];
+        ToolTipService.SetToolTip(providerButton, string.Join(", ", providers.Select(provider => provider.DisplayName)));
+
+        // Each icon lies over the one before it, and its shadow shows where its edge is.
+        providerIcons.Children.Clear();
+        foreach (var provider in providers)
+        {
+            var isOverAnother = providerIcons.Children.Count > 0;
+            providerIcons.Children.Add(new IconView { Width = 17, Height = 17, Icon = provider.Icon, HasShadow = isOverAnother });
+        }
+    }
+
+    private void SelectedProviders_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    {
+        ShowProviderIcons();
+        ShowChosenProviders();
+        RestartDebounce();
     }
 
     private static void OnViewModelChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
@@ -141,6 +232,7 @@ public sealed partial class SearchInput : UserControl
             oldViewModel.Terms.CollectionChanged -= input.Terms_CollectionChanged;
             oldViewModel.PropertyChanged -= input.ViewModel_PropertyChanged;
             oldViewModel.RecentSearches.CollectionChanged -= input.Results_CollectionChanged;
+            oldViewModel.SelectedProviders.CollectionChanged -= input.SelectedProviders_CollectionChanged;
         }
         if (args.NewValue is SearchViewModel newViewModel)
         {
@@ -148,6 +240,13 @@ public sealed partial class SearchInput : UserControl
             newViewModel.Terms.CollectionChanged += input.Terms_CollectionChanged;
             newViewModel.PropertyChanged += input.ViewModel_PropertyChanged;
             newViewModel.RecentSearches.CollectionChanged += input.Results_CollectionChanged;
+            newViewModel.SelectedProviders.CollectionChanged += input.SelectedProviders_CollectionChanged;
+
+            // With no providers there is nothing for the button to show or offer.
+            var hasProviders = VisibleWhen.True(newViewModel.Providers.Count > 0);
+            input.providerButton.Visibility = hasProviders;
+            input.providerDivider.Visibility = hasProviders;
+            input.ShowProviderIcons();
         }
     }
 
@@ -155,6 +254,10 @@ public sealed partial class SearchInput : UserControl
     {
         if (args.PropertyName == nameof(SearchViewModel.IsSearching))
             UpdateResultsPopup();
+
+        // A different ranking is a different search, made after the same pause as a change to the query.
+        if (args.PropertyName == nameof(SearchViewModel.Sort))
+            RestartDebounce();
     }
 
     private void Results_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
@@ -171,9 +274,7 @@ public sealed partial class SearchInput : UserControl
     // Whether the popup under the field is listing results, as opposed to recent searches.
     private bool _isListingResults;
 
-    // The popup under the field lists one of two things while the keyboard is in the field or the popup. With
-    // nothing in the field it lists the recent searches. Otherwise it lists the results, or their skeleton
-    // while they are on the way, unless the page showing lists them itself.
+    // Lists recent searches while the field is empty, otherwise the results, unless the page lists them itself.
     private void UpdateResultsPopup()
     {
         var viewModel = ViewModel;
@@ -181,8 +282,7 @@ public sealed partial class SearchInput : UserControl
         var isLoading = viewModel?.IsSearching == true && !hasResults;
         var hasRecents = viewModel?.RecentSearches.Count > 0;
 
-        // The app puts the keyboard in the field as it opens. Recent searches are for someone who went to
-        // the field themselves, so that first focus doesn't open them.
+        // The app focuses the field as it opens, which shouldn't open recent searches; going to the field does.
         var isFieldChosen = queryBox.FocusState is FocusState.Pointer or FocusState.Keyboard;
         var isInPopup = IsFocusWithin(resultsList) || IsFocusWithin(recentsList);
         var hasFocus = IsFocusWithin(queryBox) || isInPopup;
@@ -191,9 +291,9 @@ public sealed partial class SearchInput : UserControl
         var listsResults = HasSearch && IsResultsListEnabled && (hasResults || isLoading) && hasFocus;
         _isListingResults = listsResults;
 
-        recentsList.Visibility = listsRecents ? Visibility.Visible : Visibility.Collapsed;
-        resultsFade.Visibility = listsResults ? Visibility.Visible : Visibility.Collapsed;
-        resultsSkeleton.Visibility = listsResults && isLoading ? Visibility.Visible : Visibility.Collapsed;
+        recentsList.Visibility = VisibleWhen.True(listsRecents);
+        resultsFade.Visibility = VisibleWhen.True(listsResults);
+        resultsSkeleton.Visibility = VisibleWhen.True(listsResults && isLoading);
 
         resultsPanel.Width = ActualWidth;
         resultsPopup.VerticalOffset = ActualHeight + ResultsGap;
@@ -204,19 +304,7 @@ public sealed partial class SearchInput : UserControl
     private bool IsFocusWithin(DependencyObject ancestor)
     {
         var focused = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
-        return IsWithin(focused, ancestor);
-    }
-
-    private static bool IsWithin(DependencyObject? element, DependencyObject ancestor)
-    {
-        while (element is not null)
-        {
-            if (element == ancestor)
-                return true;
-
-            element = VisualTreeHelper.GetParent(element);
-        }
-        return false;
+        return VisualTree.IsWithin(focused, ancestor);
     }
 
     // Also handles the results list losing focus.
@@ -225,19 +313,18 @@ public sealed partial class SearchInput : UserControl
         var isQueryBoxFocused = queryBox.FocusState != FocusState.Unfocused;
         VisualStateManager.GoToState(this, isQueryBoxFocused ? "Focused" : "Unfocused", useTransitions: false);
         UpdateResultsPopup();
-        UpdateClipboardButton();
+        UpdateFieldButtons();
     }
 
     // Presses on the results never get here, because a popup isn't part of the window's content.
     private void Window_PointerPressed(object sender, PointerRoutedEventArgs args)
     {
-        var isOnThisControl = IsWithin(args.OriginalSource as DependencyObject, this);
+        var isOnThisControl = VisualTree.IsWithin(args.OriginalSource as DependencyObject, this);
         if (!isOnThisControl)
             resultsPopup.IsOpen = false;
     }
 
-    // Pasted text may be a whole search with terms. The text box does the paste, and QueryBox_TextChanged
-    // then resolves the terms.
+    // Pasted text may be a whole search, so the box takes the paste and QueryBox_TextChanged resolves its terms.
     private void QueryBox_Paste(object sender, TextControlPasteEventArgs args) => _isPasting = true;
 
     private void QueryBox_TextChanged(object sender, TextChangedEventArgs args)
@@ -260,6 +347,13 @@ public sealed partial class SearchInput : UserControl
         RestartDebounce();
     }
 
+    // Searches now, as one that was asked for, instead of after the pause that follows typing.
+    private void CommitSearch()
+    {
+        _debounceTimer.Stop();
+        ViewModel?.CommitSearchCommand.Execute(null);
+    }
+
     // Restarting the timer is what debounces the search.
     private void RestartDebounce()
     {
@@ -280,7 +374,7 @@ public sealed partial class SearchInput : UserControl
         }
 
         RestartDebounce();
-        UpdateClipboardButton();
+        UpdateFieldButtons();
     }
 
     // The term that was just added from the menu, whose value is to be typed next.
@@ -336,12 +430,15 @@ public sealed partial class SearchInput : UserControl
 
         if (SearchQuery.IsValid(edited))
         {
+            // Replacing a term makes its box again, so a term that was selected is selected again.
+            var wasSelected = termBox.IsSelected;
             ViewModel?.ReplaceTerm(term, edited);
+            if (wasSelected)
+                DispatcherQueue.TryEnqueue(() => FindTermBox(edited)?.Select());
             return;
         }
 
-        // A value that can't be read, such as a length that isn't one, is given up. The term goes back to the
-        // value it had, or goes altogether if it was new and never had one.
+        // An unreadable value is given up, so the term goes back to its old value, or goes altogether if it was new.
         var isNew = term.Value.Length == 0;
         if (isNew)
             await RemoveTermAsync(term);
@@ -369,14 +466,46 @@ public sealed partial class SearchInput : UserControl
         ViewModel?.Terms.Remove(term);
     }
 
-    private void TermBox_EditingEnded(object? sender, EventArgs args) => FocusQueryBox();
-
-    // Where a term's box's term is in the search, or -1 once it has gone from it.
-    private int IndexOfTerm(object? termBox)
+    // On a selected term the arrows move to what is beside it, and Backspace and Delete remove it.
+    private async void TermsRepeater_KeyDown(object sender, KeyRoutedEventArgs args)
     {
-        var term = ((SearchTermBox)termBox!).Term;
         var terms = ViewModel?.Terms;
-        return term is null || terms is null ? -1 : terms.IndexOf(term);
+        var selected = terms?.FirstOrDefault(term => FindTermBox(term)?.IsSelected == true);
+        if (terms is null || selected is null)
+            return;
+
+        var index = terms.IndexOf(selected);
+        switch (args.Key)
+        {
+            case VirtualKey.Left when index > 0:
+                args.Handled = true;
+                SelectTermOrQueryBox(index - 1);
+                break;
+
+            case VirtualKey.Right:
+                args.Handled = true;
+                SelectTermOrQueryBox(index + 1);
+                break;
+
+            // The term that takes the removed one's place is selected next.
+            case VirtualKey.Back or VirtualKey.Delete:
+                args.Handled = true;
+                await RemoveTermAsync(selected);
+                SelectTermOrQueryBox(index);
+                break;
+        }
+    }
+
+    // The query box comes after the last term.
+    private void SelectTermOrQueryBox(int index)
+    {
+        var terms = ViewModel?.Terms;
+        var isTerm = terms is not null && index < terms.Count;
+        var termBox = isTerm ? FindTermBox(terms![index]) : null;
+        if (termBox is null)
+            FocusQueryBox();
+        else
+            termBox.Select();
     }
 
     private SearchTermBox? FindTermBox(SearchTerm term)
@@ -385,8 +514,7 @@ public sealed partial class SearchInput : UserControl
         return index < 0 ? null : termsRepeater.TryGetElement(index) as SearchTermBox;
     }
 
-    // At the start of the query box, Backspace removes the term before it and Left moves into that term to
-    // edit it. This is a preview handler because TextBox handles both keys itself.
+    // At the query box's start, Backspace removes the last term and Left selects it. Preview, as TextBox handles both.
     private async void QueryBox_PreviewKeyDown(object sender, KeyRoutedEventArgs args)
     {
         var terms = ViewModel?.Terms;
@@ -402,14 +530,13 @@ public sealed partial class SearchInput : UserControl
         }
         else if (args.Key == VirtualKey.Left)
         {
-            FindTermBox(lastTerm)?.StartEditingAtEnd();
+            FindTermBox(lastTerm)?.Select();
             args.Handled = true;
         }
     }
 
-    // TextChanging is raised before the new text is drawn, so the clipboard button appears in the same frame
-    // as the delete button instead of pushing it aside a moment later.
-    private void QueryBox_TextChanging(TextBox sender, TextBoxTextChangingEventArgs args) => UpdateClipboardButton();
+    // TextChanging is raised before the text is drawn, so the clipboard and delete buttons change in the same frame.
+    private void QueryBox_TextChanging(TextBox sender, TextBoxTextChangingEventArgs args) => UpdateFieldButtons();
 
     private void QueryBox_KeyDown(object sender, KeyRoutedEventArgs args)
     {
@@ -418,8 +545,7 @@ public sealed partial class SearchInput : UserControl
             // Enter searches without waiting for the debounce, and completes a term still being typed.
             case VirtualKey.Enter:
                 ViewModel?.ResolveTerms(queryBox.Text);
-                _debounceTimer.Stop();
-                ViewModel?.CommitSearchCommand.Execute(null);
+                CommitSearch();
                 args.Handled = true;
                 break;
 
@@ -453,20 +579,15 @@ public sealed partial class SearchInput : UserControl
     private void ResultsList_ItemClick(object sender, ItemClickEventArgs args)
     {
         // Choosing a result is acting on the search, which makes it one that was carried out.
-        ViewModel?.CommitSearchCommand.Execute(null);
+        CommitSearch();
         resultsPopup.IsOpen = false;
     }
 
     private void RecentsList_ItemClick(object sender, ItemClickEventArgs args)
     {
-        var viewModel = ViewModel;
-        if (viewModel is null)
-            return;
-
         var recent = (RecentSearch)args.ClickedItem;
-        viewModel.Replace(recent.FullText);
-        _debounceTimer.Stop();
-        viewModel.CommitSearchCommand.Execute(null);
+        ViewModel?.Replace(recent.FullText);
+        CommitSearch();
 
         FocusQueryBox();
         queryBox.SelectionStart = queryBox.Text.Length;
@@ -479,112 +600,50 @@ public sealed partial class SearchInput : UserControl
         ViewModel?.RecentSearches.Remove(recent);
     }
 
-    private void Clipboard_ContentChanged(object? sender, object args) => DispatcherQueue.TryEnqueue(UpdateClipboardButton);
-
-    // The clipboard button is hidden when there is neither a query to copy nor text to paste.
-    private void UpdateClipboardButton()
+    // With a search, the delete button empties it and the clipboard button copies it; without, it pastes.
+    private void UpdateFieldButtons()
     {
-        var canCopy = HasSearch;
-        var isUseful = canCopy || HasClipboardText();
-
-        var action = canCopy ? "Copy to clipboard" : "Paste from clipboard";
-        AutomationProperties.SetName(clipboardButton, action);
-        ToolTipService.SetToolTip(clipboardButton, action);
-
-        // The two icons cross-fade when the action changes while the button is showing. A button that is
-        // only now appearing shows the right icon from the start.
-        var wasHidden = clipboardButton.Visibility == Visibility.Collapsed;
-        var iconFade = wasHidden ? null : _fade;
-        copyIcon.OpacityTransition = iconFade;
-        pasteIcon.OpacityTransition = iconFade;
-        copyIcon.Opacity = canCopy ? 1 : 0;
-        pasteIcon.Opacity = canCopy ? 0 : 1;
-
-        clipboardButton.Visibility = isUseful ? Visibility.Visible : Visibility.Collapsed;
+        var hasSearch = HasSearch;
+        deleteButton.Visibility = VisibleWhen.True(hasSearch);
+        clipboardButton.CanCopy = hasSearch;
     }
 
-    // DeleteButton is the name TextBox's template gives the button that clears the box.
-    private Button FindDeleteButton()
+    private void DeleteButton_Click(object sender, RoutedEventArgs args)
+    {
+        ViewModel?.Replace(string.Empty);
+        FocusQueryBox();
+    }
+
+    // TextBox shows its own delete button, so it gets no width and no opacity; either alone leaves part showing.
+    private void HideQueryBoxDeleteButton()
     {
         var templateRoot = (FrameworkElement)VisualTreeHelper.GetChild(queryBox, 0);
-        return (Button)templateRoot.FindName("DeleteButton");
+        var ownDeleteButton = (Button)templateRoot.FindName("DeleteButton");
+        ownDeleteButton.MinWidth = 0;
+        ownDeleteButton.Width = 0;
+        ownDeleteButton.Opacity = 0;
     }
 
-    private static bool HasClipboardText()
-    {
-        try
-        {
-            return Clipboard.GetContent().Contains(StandardDataFormats.Text);
-        }
-        catch (Exception exception) when (IsClipboardUnavailable(exception))
-        {
-            // The clipboard may still hold text, so pasting stays on offer.
-            return true;
-        }
-    }
-
-    // Whether there is anything to copy. The clipboard button copies when there is, and pastes when there isn't.
+    // Whether the field holds a search, which is words in the query box or any terms.
     private bool HasSearch => Is.NotBlank(queryBox.Text) || ViewModel?.Terms.Count > 0;
 
-    private void ClipboardButton_Click(object sender, RoutedEventArgs args)
+    private void ClipboardButton_Pasted(object? sender, string text)
     {
-        if (HasSearch)
-            CopyQuery_Click(sender, args);
-        else
-            PasteQuery_Click(sender, args);
+        ViewModel?.Replace(text);
+        FocusQueryBox();
     }
-
-    private void ClipboardMenu_Opening(object? sender, object args)
-    {
-        copyQueryItem.IsEnabled = HasSearch;
-        pasteQueryItem.IsEnabled = HasClipboardText();
-    }
-
-    // The provider is copied with the query, as a term, so pasting restores both.
-    private void CopyQuery_Click(object sender, RoutedEventArgs args)
-    {
-        var viewModel = ViewModel;
-        if (viewModel is null)
-            return;
-
-        var package = new DataPackage();
-        package.SetText(viewModel.FullText);
-        Clipboard.SetContent(package);
-    }
-
-    private async void PasteQuery_Click(object sender, RoutedEventArgs args)
-    {
-        try
-        {
-            var content = Clipboard.GetContent();
-            if (ViewModel is null || !content.Contains(StandardDataFormats.Text))
-                return;
-
-            var text = await content.GetTextAsync();
-            ViewModel.Replace(text);
-            FocusQueryBox();
-        }
-        catch (Exception exception) when (IsClipboardUnavailable(exception))
-        {
-            // The clipboard changed or was locked before it could be read, so nothing is pasted.
-        }
-    }
-
-    // Thrown when another app has the clipboard locked, or this app is in the background.
-    private static bool IsClipboardUnavailable(Exception exception) =>
-        exception is COMException or UnauthorizedAccessException;
 
     private void Search_Click(object sender, RoutedEventArgs args) => Submitted?.Invoke(this, EventArgs.Empty);
 
     private void ResultsPopup_OpenChanged(object? sender, object args) => UpdateSearchButton();
 
-    // The Search button always opens the Search page. While a few results are listed under the field, that is
-    // the way to the rest of them, so the button shows an open-in-a-page icon and is named for it.
+    // While results are listed under the field, the Search button cross-fades to an icon for seeing them all.
     private void UpdateSearchButton()
     {
         var isListed = resultsPopup.IsOpen && _isListingResults;
         var action = isListed ? "See all results" : "Search";
-        searchIcon.Glyph = isListed ? OpenInPageGlyph : SearchGlyph;
+        searchIcon.Opacity = isListed ? 0 : 1;
+        seeAllIcon.Opacity = isListed ? 1 : 0;
         AutomationProperties.SetName(searchButton, action);
         ToolTipService.SetToolTip(searchButton, action);
     }

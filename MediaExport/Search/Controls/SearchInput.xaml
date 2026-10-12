@@ -14,14 +14,13 @@
     MinWidth="240"
     MaxWidth="840">
 
-    <!-- A single field holding the provider button, the query box, and the clipboard and Search buttons. -->
     <Border
         x:Name="field"
         Background="{ThemeResource ControlFillColorDefaultBrush}"
         BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
         BorderThickness="1"
         CornerRadius="8">
-        <!-- The field looks like a focused text box while the query box has focus. -->
+        <!-- Looks like a focused text box while the query box has focus. -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup>
                 <VisualState x:Name="Unfocused" />
@@ -37,14 +36,9 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!--
-                The provider button, the terms and the query box scroll sideways together when they are longer
-                than the field. The buttons after them stay in place.
-            -->
+            <!-- Everything before the buttons scrolls sideways together when it is longer than the field. -->
             <controls:EdgeFade Orientation="Horizontal">
                 <ScrollViewer
                     x:Name="fieldScroll"
@@ -54,7 +48,10 @@
                     VerticalScrollBarVisibility="Disabled"
                     VerticalScrollMode="Disabled"
                     ZoomMode="Disabled">
-                    <Grid x:Name="fieldContent">
+                    <Grid
+                        x:Name="fieldContent"
+                        Padding="2,2,0,2"
+                        ColumnSpacing="2">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
@@ -62,45 +59,83 @@
                             <ColumnDefinition Width="*" MinWidth="160" />
                         </Grid.ColumnDefinitions>
 
+                        <!-- The chosen providers as overlapping icons. Their names are in the flyout. -->
                         <Button
-                            MaxWidth="180"
-                            AutomationProperties.Name="Search source"
-                            Style="{StaticResource FieldButtonStyle}"
-                            ToolTipService.ToolTip="Choose a search source"
-                            Visibility="{x:Bind converters:VisibleWhen.NotNull(ViewModel.SelectedProvider), Mode=OneWay, FallbackValue=Collapsed}">
+                            x:Name="providerButton"
+                            AutomationProperties.Name="Search sources"
+                            Style="{StaticResource FieldButtonStyle}">
                             <Button.Flyout>
-                                <MenuFlyout
-                                    x:Name="providerMenu"
-                                    Opening="ProviderMenu_Opening"
-                                    Placement="BottomEdgeAlignedLeft" />
+                                <Flyout
+                                    x:Name="providerFlyout"
+                                    Opening="ProviderFlyout_Opening"
+                                    Placement="BottomEdgeAlignedLeft">
+                                    <Flyout.FlyoutPresenterStyle>
+                                        <Style BasedOn="{StaticResource DefaultFlyoutPresenterStyle}" TargetType="FlyoutPresenter">
+                                            <Setter Property="Padding" Value="0,2" />
+                                        </Style>
+                                    </Flyout.FlyoutPresenterStyle>
+                                    <StackPanel>
+                                        <!-- Ticked while every provider is chosen. Unticking it goes back to one. -->
+                                        <CheckBox
+                                            x:Name="allProvidersBox"
+                                            Margin="16,0"
+                                            Checked="AllProvidersBox_Toggled"
+                                            Content="All sources"
+                                            Unchecked="AllProvidersBox_Toggled" />
+                                        <Border
+                                            Height="1"
+                                            Margin="0,2"
+                                            Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                                        <!-- A press on a row chooses that provider alone. Its box adds or removes it. -->
+                                        <ListView
+                                            x:Name="providerList"
+                                            IsItemClickEnabled="True"
+                                            ItemClick="ProviderList_ItemClick"
+                                            ItemsSource="{x:Bind ViewModel.Providers, Mode=OneWay}"
+                                            PreviewKeyDown="ProviderList_PreviewKeyDown"
+                                            SelectionMode="None">
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate x:DataType="providers:IMediaSearchProvider">
+                                                    <StackPanel AutomationProperties.Name="{x:Bind DisplayName}" Orientation="Horizontal">
+                                                        <CheckBox
+                                                            MinWidth="0"
+                                                            AutomationProperties.Name="{x:Bind DisplayName}"
+                                                            Checked="ProviderBox_Toggled"
+                                                            IsTabStop="False"
+                                                            Loaded="ProviderBox_Loaded"
+                                                            Tag="{x:Bind}"
+                                                            Unchecked="ProviderBox_Toggled" />
+                                                        <controls:IconView
+                                                            Width="16"
+                                                            Height="16"
+                                                            Margin="0,0,12,0"
+                                                            Icon="{x:Bind Icon}" />
+                                                        <TextBlock VerticalAlignment="Center" Text="{x:Bind DisplayName}" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </StackPanel>
+                                </Flyout>
                             </Button.Flyout>
                             <StackPanel
+                                x:Name="providerIcons"
                                 VerticalAlignment="Center"
                                 Orientation="Horizontal"
-                                Spacing="7">
-                                <controls:IconView
-                                    Width="17"
-                                    Height="17"
-                                    Icon="{x:Bind ViewModel.SelectedProvider.Icon, Mode=OneWay}" />
-                                <TextBlock
-                                    VerticalAlignment="Center"
-                                    Text="{x:Bind ViewModel.SelectedProvider.DisplayName, Mode=OneWay}"
-                                    TextTrimming="CharacterEllipsis" />
-                            </StackPanel>
+                                Spacing="-6" />
                         </Button>
                         <Border
+                            x:Name="providerDivider"
                             Grid.Column="1"
-                            Style="{StaticResource FieldDividerStyle}"
-                            Visibility="{x:Bind converters:VisibleWhen.NotNull(ViewModel.SelectedProvider), Mode=OneWay, FallbackValue=Collapsed}" />
+                            Style="{StaticResource FieldDividerStyle}" />
 
-                        <!--
-                            The terms that narrow the search. A term comes from the menu beside the clipboard
-                            button, or from label:value typed or pasted into the query box.
-                        -->
+                        <!-- Terms come from the add-term menu, or from label:value typed into the query box. -->
                         <ItemsRepeater
                             x:Name="termsRepeater"
                             Grid.Column="2"
                             ElementPrepared="TermsRepeater_ElementPrepared"
+                            KeyDown="TermsRepeater_KeyDown"
                             ItemsSource="{x:Bind ViewModel.Terms, Mode=OneWay}">
                             <ItemsRepeater.Layout>
                                 <StackLayout Orientation="Horizontal" />
@@ -109,7 +144,6 @@
                                 <DataTemplate x:DataType="providers:SearchTerm">
                                     <local:SearchTermBox
                                         Edited="TermBox_Edited"
-                                        EditingEnded="TermBox_EditingEnded"
                                         Removed="TermBox_Removed"
                                         Term="{x:Bind}" />
                                 </DataTemplate>
@@ -130,35 +164,23 @@
                             Text="{x:Bind ViewModel.Query, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                             TextChanged="QueryBox_TextChanged"
                             TextChanging="QueryBox_TextChanging">
-                            <!--
-                                The field draws the background and border, so the box's own are turned off,
-                                including the ones it shows when focused or hovered.
-                            -->
+                            <!-- The field draws the background and border, so the box's own are turned off. -->
                             <TextBox.Resources>
                                 <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
                                 <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
                                 <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
                                 <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
 
-                                <!-- The box's delete button, made to match FieldIconButtonStyle. -->
-                                <Thickness x:Key="TextBoxInnerButtonMargin">4,2,0,2</Thickness>
-                                <x:Double x:Key="TextBoxIconFontSize">14</x:Double>
-                                <StaticResource x:Key="TextControlButtonForeground" ResourceKey="TextFillColorPrimaryBrush" />
-                                <StaticResource x:Key="TextControlButtonForegroundPointerOver" ResourceKey="TextFillColorPrimaryBrush" />
-                                <StaticResource x:Key="TextControlButtonForegroundPressed" ResourceKey="TextFillColorSecondaryBrush" />
                             </TextBox.Resources>
                         </TextBox>
                     </Grid>
                 </ScrollViewer>
             </controls:EdgeFade>
 
-            <!--
-                The focused text box's accent underline, drawn over the field's border. Thickening the
-                border itself would move everything inside the field.
-            -->
+            <!-- The focus underline, drawn over the border so that nothing inside the field moves. -->
             <Border
                 x:Name="focusBorder"
-                Grid.ColumnSpan="4"
+                Grid.ColumnSpan="2"
                 Margin="-1"
                 BorderBrush="{ThemeResource TextControlBorderBrushFocused}"
                 BorderThickness="{ThemeResource TextControlBorderThemeThicknessFocused}"
@@ -167,28 +189,20 @@
                 Visibility="Collapsed" />
 
             <ProgressBar
-                Grid.ColumnSpan="4"
-                Margin="0,0"
+                Grid.ColumnSpan="2"
                 VerticalAlignment="Bottom"
                 IsHitTestVisible="False"
                 IsIndeterminate="True"
                 Visibility="{x:Bind ViewModel.IsSearching, Mode=OneWay, FallbackValue=Collapsed}" />
 
-            <!--
-                The results are in a popup so that they lie over the page instead of taking room in the
-                title bar.
-            -->
+            <!-- A popup, so the results lie over the page instead of taking room in the title bar. -->
             <Popup
                 x:Name="resultsPopup"
                 Closed="ResultsPopup_OpenChanged"
                 Opened="ResultsPopup_OpenChanged"
-                Grid.ColumnSpan="4"
+                Grid.ColumnSpan="2"
                 HorizontalOffset="-1">
-                <!--
-                    The panel slides down from above its place as it opens, the way a menu does. The grid
-                    cuts off whatever is above the popup's top edge, so the panel comes out from under the
-                    field instead of passing over it.
-                -->
+                <!-- The panel slides down like a menu, clipped by the grid so it comes out from under the field. -->
                 <Grid>
                     <Grid.Clip>
                         <RectangleGeometry Rect="0,0,4000,4000" />
@@ -206,10 +220,7 @@
                             </TransitionCollection>
                         </Border.Transitions>
                         <Grid>
-                        <!--
-                            The searches carried out before, offered while the field is empty. Choosing one
-                            does it again; its button takes it off the list.
-                        -->
+                        <!-- Recent searches, offered while the field is empty. -->
                         <ListView
                             x:Name="recentsList"
                             Padding="0,4,8,4"
@@ -257,7 +268,7 @@
                             </ListView.ItemTemplate>
                         </ListView>
 
-                        <!-- Rows with no media, standing in for the results while the first page is searched for. -->
+                        <!-- Skeleton rows while the first page loads. -->
                         <StackPanel
                             x:Name="resultsSkeleton"
                             Padding="16,2"
@@ -268,7 +279,7 @@
                             <media:RowMediaView />
                         </StackPanel>
                         <controls:EdgeFade x:Name="resultsFade">
-                            <!-- The padding keeps the rows, and their highlight, clear of the scroll bar. -->
+                            <!-- The padding keeps the rows clear of the scroll bar. -->
                             <ListView
                                 x:Name="resultsList"
                                 Padding="0,0,8,0"
@@ -290,107 +301,103 @@
                 </Grid>
             </Popup>
 
-            <!-- Lists the kinds of term. Choosing one adds it to the field with its value ready to type. -->
-            <Button
+            <StackPanel
                 Grid.Column="1"
-                Margin="2,2,0,2"
-                AutomationProperties.Name="Add a search term"
-                Style="{StaticResource FieldIconButtonStyle}"
-                ToolTipService.ToolTip="Add a search term">
-                <FontIcon Glyph="&#xE71C;" Style="{StaticResource FieldIconStyle}" />
-                <Button.Flyout>
-                    <MenuFlyout Placement="BottomEdgeAlignedRight">
-                        <MenuFlyoutItem Click="AddTerm_Click" Tag="exact" Text="Exact">
-                            <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE718;" />
-                            </MenuFlyoutItem.Icon>
-                        </MenuFlyoutItem>
-                        <MenuFlyoutItem Click="AddTerm_Click" Tag="exclude" Text="Exclude">
-                            <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE733;" />
-                            </MenuFlyoutItem.Icon>
-                        </MenuFlyoutItem>
-                        <MenuFlyoutItem Click="AddTerm_Click" Tag="author" Text="Author">
-                            <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE77B;" />
-                            </MenuFlyoutItem.Icon>
-                        </MenuFlyoutItem>
-                        <MenuFlyoutSeparator />
-                        <MenuFlyoutItem Click="AddTerm_Click" Tag="duration" Text="Duration">
-                            <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE916;" />
-                            </MenuFlyoutItem.Icon>
-                        </MenuFlyoutItem>
-                        <MenuFlyoutItem Click="AddTerm_Click" Tag="published" Text="Published">
-                            <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE787;" />
-                            </MenuFlyoutItem.Icon>
-                        </MenuFlyoutItem>
-                    </MenuFlyout>
-                </Button.Flyout>
-            </Button>
+                Margin="2"
+                Orientation="Horizontal"
+                Spacing="2">
+                <!-- Empties the query box and every term, in place of the query box's own hidden delete button. -->
+                <Button
+                    x:Name="deleteButton"
+                    controls:VisibilityTransition.Fade="True"
+                    AutomationProperties.Name="Clear search"
+                    Click="DeleteButton_Click"
+                    Style="{StaticResource FieldIconButtonStyle}"
+                    ToolTipService.ToolTip="Clear search"
+                    Visibility="Collapsed">
+                    <FontIcon Glyph="&#xE711;" Style="{StaticResource FieldIconStyle}" />
+                </Button>
 
-            <!--
-                Copies the search, or pastes one when the box is empty. Right-clicking offers both.
-            -->
-            <Button
-                x:Name="clipboardButton"
-                Grid.Column="2"
-                Margin="2,2,0,2"
-                controls:VisibilityTransition.Fade="True"
-                Click="ClipboardButton_Click"
-                Style="{StaticResource FieldIconButtonStyle}"
-                Visibility="Collapsed">
-                <!-- The two icons overlap. UpdateClipboardButton shows one and cross-fades between them. -->
-                <Grid>
-                    <FontIcon
-                        x:Name="copyIcon"
-                        Glyph="&#xE8C8;"
-                        Style="{StaticResource FieldIconStyle}" />
-                    <FontIcon
-                        x:Name="pasteIcon"
-                        Glyph="&#xE77F;"
-                        Style="{StaticResource FieldIconStyle}" />
-                </Grid>
-                <Button.ContextFlyout>
-                    <MenuFlyout Opening="ClipboardMenu_Opening" Placement="BottomEdgeAlignedRight">
-                        <MenuFlyoutItem
-                            x:Name="copyQueryItem"
-                            Click="CopyQuery_Click"
-                            Text="Copy to clipboard">
-                            <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE8C8;" />
-                            </MenuFlyoutItem.Icon>
-                        </MenuFlyoutItem>
-                        <MenuFlyoutItem
-                            x:Name="pasteQueryItem"
-                            Click="PasteQuery_Click"
-                            Text="Paste from clipboard">
-                            <MenuFlyoutItem.Icon>
-                                <FontIcon Glyph="&#xE77F;" />
-                            </MenuFlyoutItem.Icon>
-                        </MenuFlyoutItem>
-                    </MenuFlyout>
-                </Button.ContextFlyout>
-            </Button>
+                <Button
+                    x:Name="sortButton"
+                    AutomationProperties.Name="Sort results"
+                    Style="{StaticResource FieldIconButtonStyle}"
+                    ToolTipService.ToolTip="Sort results">
+                    <FontIcon Glyph="&#xE8CB;" Style="{StaticResource FieldIconStyle}" />
+                    <Button.Flyout>
+                        <MenuFlyout
+                            x:Name="sortMenu"
+                            Opening="SortMenu_Opening"
+                            Placement="BottomEdgeAlignedRight" />
+                    </Button.Flyout>
+                </Button>
 
-            <!--
-                Opens the Search page with the results. While some are listed under the field it does the same
-                thing, but that now means going from a few results to all of them, so ResultsPopup_OpenChanged
-                changes its icon and name to say so.
-            -->
-            <Button
-                x:Name="searchButton"
-                Grid.Column="3"
-                AutomationProperties.Name="Search"
-                Click="Search_Click"
-                Style="{StaticResource FieldIconButtonStyle}"
-                ToolTipService.ToolTip="Search">
-                <FontIcon
-                    x:Name="searchIcon"
-                    Glyph="&#xE721;"
-                    Style="{StaticResource FieldIconStyle}" />
-            </Button>
+                <!-- Adds a term to the field with its value ready to type. -->
+                <Button
+                    AutomationProperties.Name="Add a search term"
+                    Style="{StaticResource FieldIconButtonStyle}"
+                    ToolTipService.ToolTip="Add a search term">
+                    <FontIcon Glyph="&#xE71C;" Style="{StaticResource FieldIconStyle}" />
+                    <Button.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <MenuFlyoutItem Click="AddTerm_Click" Tag="exact" Text="Exact">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE718;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Click="AddTerm_Click" Tag="exclude" Text="Exclude">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE733;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Click="AddTerm_Click" Tag="author" Text="Author">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE77B;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem Click="AddTerm_Click" Tag="duration" Text="Duration">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE916;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem Click="AddTerm_Click" Tag="published" Text="Published">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE787;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+
+                <!-- Copies the whole search, or pastes one when there is nothing to copy. -->
+                <controls:ClipboardButton
+                    x:Name="clipboardButton"
+                    controls:VisibilityTransition.Fade="True"
+                    Pasted="ClipboardButton_Pasted"
+                    Text="{x:Bind ViewModel.FullText, Mode=OneWay}" />
+
+                <!-- Opens the Search page, and reads "See all results" while results are listed under the field. -->
+                <Button
+                    x:Name="searchButton"
+                    AutomationProperties.Name="Search"
+                    Click="Search_Click"
+                    Style="{StaticResource FieldIconButtonStyle}"
+                    ToolTipService.ToolTip="Search">
+                    <!-- Two overlapping icons that cross-fade. -->
+                    <Grid>
+                        <FontIcon
+                            x:Name="searchIcon"
+                            Glyph="&#xE721;"
+                            Style="{StaticResource FieldIconStyle}" />
+                        <FontIcon
+                            x:Name="seeAllIcon"
+                            Glyph="&#xE8A7;"
+                            Opacity="0"
+                            Style="{StaticResource FieldIconStyle}" />
+                    </Grid>
+                </Button>
+            </StackPanel>
         </Grid>
     </Border>
 </UserControl>
