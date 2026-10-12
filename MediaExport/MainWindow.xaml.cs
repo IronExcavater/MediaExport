@@ -7,6 +7,7 @@ using MediaExport.Core.Media.Models;
 using MediaExport.Core.Media.Providers;
 using MediaExport.Core.Settings;
 using MediaExport.Export;
+using MediaExport.Export.Controls;
 using MediaExport.Search;
 using MediaExport.Settings;
 using MediaExport.Shell;
@@ -129,7 +130,7 @@ public sealed partial class MainWindow : Window
         var pinned = settings.PinnedViewed.Select(media => new ViewedMedia(media));
         _export.RecentlyViewed.Load(unpinned, pinned);
         ShowRecentlyViewed();
-        navView.IsCompactChanged += (_, _) => ShowViewedSection();
+        navView.IsCompactChanged += (_, _) => ShowPaneText();
 
         _export.RecentlyViewed.CollectionChanged += (_, _) =>
         {
@@ -159,16 +160,40 @@ public sealed partial class MainWindow : Window
         if (viewed.Count == 0)
             items.Add(CreateViewedItem(content: "Nothing viewed yet", ViewedTag.Empty, isEnabled: false));
 
-        ShowViewedSection();
+        ShowPaneText();
     }
 
-    // A compact pane has no room for the section, which fades and slides away with its heading.
-    private void ShowViewedSection()
+    // A compact pane has room for icons only. The pages' labels and the recently viewed section fade and slide
+    // away as it narrows, and back as it widens.
+    private void ShowPaneText()
     {
         var visibility = navView.IsCompact ? Visibility.Collapsed : Visibility.Visible;
+        foreach (var label in _paneLabels)
+            label.Visibility = visibility;
+
         viewedHeader.Visibility = visibility;
         foreach (var row in GetViewedRows())
             row.Visibility = visibility;
+    }
+
+    // The pages' labels, which are text blocks of the window's own so that they can be given a transition.
+    private readonly List<TextBlock> _paneLabels = [];
+
+    private void AddPaneLabels()
+    {
+        var pageItems = navView.MenuItems.Append(navView.SettingsItem).OfType<NavigationViewItem>();
+        foreach (var item in pageItems)
+        {
+            if (item.Content is not string name)
+                continue;
+
+            // The name is still what a screen reader says, and what the item's tooltip is in a compact pane.
+            var label = new TextBlock { Text = name };
+            VisibilityTransition.SetSlide(label, true);
+            AutomationProperties.SetName(item, name);
+            item.Content = label;
+            _paneLabels.Add(label);
+        }
     }
 
     private List<NavigationViewItem> GetViewedRows()
@@ -176,8 +201,6 @@ public sealed partial class MainWindow : Window
         var items = navView.MenuItems.OfType<NavigationViewItem>();
         return items.Where(item => item.Tag is ViewedTag or ViewedMedia).ToList();
     }
-
-    private const double RowEndInset = -8;
 
     // What marks the row that stands in for the list while it is empty.
     private enum ViewedTag
@@ -205,45 +228,8 @@ public sealed partial class MainWindow : Window
     private NavigationViewItem CreateViewedItem(ViewedMedia viewed)
     {
         var provider = Search.Providers.FirstOrDefault(candidate => candidate.Id == viewed.Media.ProviderId);
-        var icon = new IconView { Width = 16, Height = 16, Icon = provider?.Icon };
-        var title = new TextBlock
-        {
-            Text = viewed.Media.Title,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-
-        // A pinned one keeps a pin at its end. The remove button takes that place while the pointer is over the
-        // row, and takes no room otherwise, so the title has the row's width.
-        var pinMark = new FontIcon
-        {
-            Glyph = "\uE840",
-            FontSize = 12,
-            Margin = new Thickness(0, 0, 6, 0),
-            Visibility = viewed.IsPinned ? Visibility.Visible : Visibility.Collapsed
-        };
-        var removeButton = new Button
-        {
-            Content = new FontIcon { Glyph = "\uE711", FontSize = 10 },
-            Style = (Style)Application.Current.Resources["RowIconButtonStyle"],
-            Visibility = Visibility.Collapsed
-        };
-        AutomationProperties.SetName(removeButton, "Remove");
-        ToolTipService.SetToolTip(removeButton, "Remove");
-        removeButton.Click += (_, _) => _export.RecentlyViewed.Remove(viewed);
-
-        // The negative margin puts the button in the row's corner, past the padding a pane item has on its right.
-        var row = new Grid { ColumnSpacing = 8, Margin = new Thickness(0, 0, RowEndInset, 0) };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetColumn(title, 1);
-        Grid.SetColumn(pinMark, 2);
-        Grid.SetColumn(removeButton, 2);
-        row.Children.Add(icon);
-        row.Children.Add(title);
-        row.Children.Add(pinMark);
-        row.Children.Add(removeButton);
+        var row = new ViewedMediaRow(viewed, provider?.Icon);
+        row.RemoveRequested += (_, _) => _export.RecentlyViewed.Remove(viewed);
 
         var pin = new MenuFlyoutItem
         {
@@ -257,18 +243,11 @@ public sealed partial class MainWindow : Window
 
         var item = CreateViewedItem(row, viewed);
         item.ContextFlyout = new MenuFlyout { Items = { pin, remove } };
-        item.PointerEntered += (_, _) => ShowRemoveButton(isShown: true);
-        item.PointerExited += (_, _) => ShowRemoveButton(isShown: false);
+        item.PointerEntered += (_, _) => row.IsPointerOver = true;
+        item.PointerExited += (_, _) => row.IsPointerOver = false;
         AutomationProperties.SetName(item, viewed.Media.Title);
         ToolTipService.SetToolTip(item, viewed.Media.Title);
         return item;
-
-        void ShowRemoveButton(bool isShown)
-        {
-            var showsPin = viewed.IsPinned && !isShown;
-            removeButton.Visibility = isShown ? Visibility.Visible : Visibility.Collapsed;
-            pinMark.Visibility = showsPin ? Visibility.Visible : Visibility.Collapsed;
-        }
     }
 
     private void NavView_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
@@ -363,7 +342,12 @@ public sealed partial class MainWindow : Window
         slide.Begin();
     }
 
-    private void NavView_Loaded(object sender, RoutedEventArgs args) => GoTo("Search");
+    private void NavView_Loaded(object sender, RoutedEventArgs args)
+    {
+        AddPaneLabels();
+        ShowPaneText();
+        GoTo("Search");
+    }
 
     private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
