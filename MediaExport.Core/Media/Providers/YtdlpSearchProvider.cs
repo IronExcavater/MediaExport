@@ -16,8 +16,7 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
     /// <summary>The sites whose links are to this source, such as <c>youtube.com</c>. Their subdomains count too.</summary>
     protected abstract IReadOnlyList<string> Hosts { get; }
 
-    /// <summary>Whether the provider's results are video or audio.</summary>
-    protected virtual MediaKind Kind => MediaKind.Video;
+    public virtual MediaKind Kind => MediaKind.Video;
 
     /// <summary>What yt-dlp reads for a query, such as <c>ytsearch10:cats</c> or a search page's URL.</summary>
     /// <param name="count">How many results the search must reach, counting the ones that are skipped.</param>
@@ -27,13 +26,26 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
     protected virtual string? PopularTarget => null;
 
     /// <summary>Reads what is popular on the source. It is nothing unless there is a <see cref="PopularTarget"/> to read.</summary>
-    protected virtual async Task<IReadOnlyList<YtdlpSearchResult>> ReadPopularAsync(int skip, int limit, CancellationToken cancellationToken) =>
-        PopularTarget is null ? [] : await ytdlp.SearchAsync(PopularTarget, skip, limit, cancellationToken);
+    protected virtual async Task<IReadOnlyList<YtdlpSearchResult>> ReadPopularAsync(
+        int skip,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        if (PopularTarget is null)
+            return [];
+
+        return await ytdlp.SearchAsync(PopularTarget, skip, limit, cancellationToken);
+    }
 
     /// <summary>The page of a result. Override it for a provider whose results don't carry their own URL.</summary>
     protected virtual string? GetSourceUrl(YtdlpSearchResult result) => result.SourceUrl;
 
-    public async Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, int skip = 0, int limit = 10, SearchSort sort = SearchSort.Relevance, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<MediaSearchResult>> SearchAsync(
+        string query,
+        int skip = 0,
+        int limit = 10,
+        SearchSort sort = SearchSort.Relevance,
+        CancellationToken cancellationToken = default)
     {
         var isSearch = !string.IsNullOrWhiteSpace(query);
         var found = isSearch
@@ -45,7 +57,8 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
 
     public async Task<MediaSearchResult?> FindByLinkAsync(Uri link, CancellationToken cancellationToken = default)
     {
-        var isToThisSource = Hosts.Any(host => link.Host == host || link.Host.EndsWith("." + host, StringComparison.OrdinalIgnoreCase));
+        var isToThisSource = Hosts.Any(host =>
+            link.Host == host || link.Host.EndsWith("." + host, StringComparison.OrdinalIgnoreCase));
         if (!isToThisSource)
             return null;
 

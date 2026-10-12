@@ -21,7 +21,8 @@ internal static class JsonFile
             var json = File.ReadAllText(path);
             return JsonSerializer.Deserialize(json, type);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
+        catch (Exception exception)
+            when (exception is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
         {
             return null;
         }

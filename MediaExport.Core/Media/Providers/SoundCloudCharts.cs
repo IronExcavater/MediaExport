@@ -16,7 +16,10 @@ public sealed partial class SoundCloudCharts(HttpClient http)
     private string? _clientId;
 
     /// <exception cref="InvalidOperationException">SoundCloud refused, or its website has changed.</exception>
-    public async Task<IReadOnlyList<YtdlpSearchResult>> ReadAsync(int skip, int limit, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<YtdlpSearchResult>> ReadAsync(
+        int skip,
+        int limit,
+        CancellationToken cancellationToken = default)
     {
         var response = await GetChartAsync(skip, limit, cancellationToken);
         var isRefused = response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden;
@@ -31,7 +34,10 @@ public sealed partial class SoundCloudCharts(HttpClient http)
         using (response)
         {
             if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException($"SoundCloud's chart couldn't be read ({(int)response.StatusCode}).");
+            {
+                var status = (int)response.StatusCode;
+                throw new InvalidOperationException($"SoundCloud's chart couldn't be read ({status}).");
+            }
 
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
             return ReadTracks(json);
@@ -68,7 +74,8 @@ public sealed partial class SoundCloudCharts(HttpClient http)
     internal static IReadOnlyList<YtdlpSearchResult> ReadTracks(string json)
     {
         using var document = JsonDocument.Parse(json);
-        var hasTracks = document.RootElement.TryGetProperty("collection", out var collection) && collection.ValueKind == JsonValueKind.Array;
+        var hasCollection = document.RootElement.TryGetProperty("collection", out var collection);
+        var hasTracks = hasCollection && collection.ValueKind == JsonValueKind.Array;
         if (!hasTracks)
             return [];
 
@@ -95,8 +102,12 @@ public sealed partial class SoundCloudCharts(HttpClient http)
 
             var milliseconds = YtdlpService.GetNumber(track, "duration");
             var plays = YtdlpService.GetNumber(track, "playback_count");
+            var shownDate = YtdlpService.GetString(track, "display_date");
             var hasDate = DateTimeOffset.TryParse(
-                YtdlpService.GetString(track, "display_date"), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var published);
+                shownDate,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out var published);
 
             results.Add(new YtdlpSearchResult(
                 track.GetProperty("id").GetRawText(),

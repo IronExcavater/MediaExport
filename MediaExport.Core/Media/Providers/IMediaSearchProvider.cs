@@ -24,6 +24,9 @@ public interface IMediaSearchProvider
     /// <summary>The name shown to the user, e.g. <c>YouTube</c>.</summary>
     string DisplayName { get; }
 
+    /// <summary>Whether what it finds is video or audio.</summary>
+    MediaKind Kind { get; }
+
     /// <summary>The resource key of its icon in the app's Resources/Icons.xaml, e.g. <c>YouTubeIcon</c>.</summary>
     string Icon { get; }
 
@@ -33,7 +36,12 @@ public interface IMediaSearchProvider
     /// </summary>
     /// <param name="skip">How many results to pass over first. Page 3 of 20 a page skips 40.</param>
     /// <param name="limit">The most results wanted. The source may have fewer.</param>
-    Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, int skip = 0, int limit = 10, SearchSort sort = SearchSort.Relevance, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<MediaSearchResult>> SearchAsync(
+        string query,
+        int skip = 0,
+        int limit = 10,
+        SearchSort sort = SearchSort.Relevance,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Reads the media a link is to. A failure is thrown.</summary>
     /// <returns>The media, or <c>null</c> if the link isn't to this source or isn't to one item.</returns>
