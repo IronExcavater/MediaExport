@@ -46,16 +46,23 @@
                 Height="24"
                 Padding="8,0"
                 HorizontalAlignment="Stretch"
-                HorizontalContentAlignment="Right"
+                HorizontalContentAlignment="Stretch"
                 Click="AllProvidersButton_Click"
                 CornerRadius="6"
                 FontSize="12"
                 Style="{StaticResource SubtleButtonStyle}">
                 <!-- The box is ticked while every provider is chosen, and the words say what a press will do. -->
-                <StackPanel Orientation="Horizontal" Spacing="6">
+                <Grid ColumnSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
                     <FontIcon x:Name="allProvidersIcon" FontSize="14" />
-                    <TextBlock x:Name="allProvidersText" />
-                </StackPanel>
+                    <TextBlock
+                        x:Name="allProvidersText"
+                        Grid.Column="1"
+                        HorizontalAlignment="Right" />
+                </Grid>
             </Button>
         </Grid>
         <Border
