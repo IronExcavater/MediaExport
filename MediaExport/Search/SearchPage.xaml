@@ -111,7 +111,7 @@
                     <!-- Skeleton cards in the same grid while a page loads, so the results fill in without a jump. -->
                     <ItemsRepeater x:Name="skeletons" Visibility="{x:Bind ViewModel.IsSearching, Mode=OneWay}">
                         <ItemsRepeater.Layout>
-                            <controls:JustifiedLayout ItemPadding="16" RowHeight="150" RowSpacing="4" />
+                            <controls:JustifiedLayout ItemPadding="16" RowHeight="150" />
                         </ItemsRepeater.Layout>
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="x:Double">
@@ -123,10 +123,11 @@
                         </ItemsRepeater.ItemTemplate>
                     </ItemsRepeater>
 
-                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.Results}">
-                        <!-- The spacing is small because each card's button has padding of its own, which ItemPadding is. -->
+                    <!-- The arrow keys move between the cards, to whichever is nearest in that direction. -->
+                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.Results}" XYFocusKeyboardNavigation="Enabled">
+                        <!-- The cards need no spacing, because each one's button has padding of its own, which ItemPadding is. -->
                         <ItemsRepeater.Layout>
-                            <controls:JustifiedLayout ItemPadding="16" RowHeight="150" RowSpacing="4" />
+                            <controls:JustifiedLayout ItemPadding="16" RowHeight="150" />
                         </ItemsRepeater.Layout>
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="models:MediaSearchResult">

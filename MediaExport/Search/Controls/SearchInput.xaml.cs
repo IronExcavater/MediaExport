@@ -90,6 +90,18 @@ public sealed partial class SearchInput : UserControl
 
     public void FocusQueryBox() => queryBox.Focus(FocusState.Keyboard);
 
+    /// <summary>Something to tell the user under the field, such as why a link couldn't be opened. Typing clears it.</summary>
+    public string? Message
+    {
+        get;
+        set
+        {
+            field = value;
+            messageText.Text = value ?? string.Empty;
+            UpdateResultsPopup();
+        }
+    }
+
     /// <summary>Whether the results may be listed under the field. A page that shows them itself turns this off.</summary>
     public bool IsResultsListEnabled
     {
@@ -234,17 +246,22 @@ public sealed partial class SearchInput : UserControl
         var isInPopup = IsFocusWithin(resultsList) || IsFocusWithin(recentsList);
         var hasFocus = IsFocusWithin(queryBox) || isInPopup;
 
-        var listsRecents = !HasSearch && hasRecents && (isFieldChosen || isInPopup);
-        var listsResults = HasSearch && IsResultsListEnabled && (hasResults || isLoading) && hasFocus;
+        // A message takes the place of whatever would be listed. It shows wherever the focus is, because the
+        // button that led to it may have taken the focus from the field.
+        var showsMessage = Message is not null;
+        var isListing = !showsMessage;
+        var listsRecents = isListing && !HasSearch && hasRecents && (isFieldChosen || isInPopup);
+        var listsResults = isListing && HasSearch && IsResultsListEnabled && (hasResults || isLoading) && hasFocus;
         _isListingResults = listsResults;
 
+        messageRow.Visibility = VisibleWhen.True(showsMessage);
         recentsList.Visibility = VisibleWhen.True(listsRecents);
         resultsFade.Visibility = VisibleWhen.True(listsResults);
         resultsSkeleton.Visibility = VisibleWhen.True(listsResults && isLoading);
 
         resultsPanel.Width = ActualWidth;
         resultsPopup.VerticalOffset = ActualHeight + ResultsGap;
-        resultsPopup.IsOpen = listsRecents || listsResults;
+        resultsPopup.IsOpen = showsMessage || listsRecents || listsResults;
         UpdateSearchButton();
     }
 
@@ -272,8 +289,12 @@ public sealed partial class SearchInput : UserControl
     private void Window_PointerPressed(object sender, PointerRoutedEventArgs args)
     {
         var isOnThisControl = VisualTree.IsWithin(args.OriginalSource as DependencyObject, this);
-        if (!isOnThisControl)
-            resultsPopup.IsOpen = false;
+        if (isOnThisControl)
+            return;
+
+        // A press elsewhere is also what dismisses a message.
+        Message = null;
+        resultsPopup.IsOpen = false;
     }
 
     // Pasted text may be a whole search with terms. The box would show them as text for a moment before they
@@ -299,6 +320,9 @@ public sealed partial class SearchInput : UserControl
 
     private void QueryBox_TextChanged(object sender, TextChangedEventArgs args)
     {
+        if (Message is not null)
+            Message = null;
+
         // A space ends a word, which is when a term typed as label:value is complete.
         var text = queryBox.Text;
         var hadTerms = text.EndsWith(' ') && ViewModel?.ResolveTerms(text) == true;
@@ -320,8 +344,10 @@ public sealed partial class SearchInput : UserControl
     // A link is opened instead of being searched for. Returns whether the text was one.
     private bool TryOpenLink(string text)
     {
+        // A link to a list is searched like any words, for what the list holds.
         var link = SearchQuery.ReadLink(text);
-        if (link is null)
+        var isList = link is not null && ViewModel?.GetLinkKind(link) == LinkKind.List;
+        if (link is null || isList)
             return false;
 
         resultsPopup.IsOpen = false;
@@ -567,6 +593,17 @@ public sealed partial class SearchInput : UserControl
         FocusQueryBox();
         queryBox.SelectionStart = queryBox.Text.Length;
     }
+
+    private void PinRecent_Click(object sender, RoutedEventArgs args)
+    {
+        var button = (Button)sender;
+        ViewModel?.RecentSearches.TogglePin((RecentSearch)button.Tag);
+    }
+
+    /// <summary>The pin button's icon, which is filled in on a search that is pinned.</summary>
+    public static string PinGlyph(bool isPinned) => isPinned ? "\uE840" : "\uE718";
+
+    public static string PinAction(bool isPinned) => isPinned ? "Unpin" : "Pin";
 
     private void RemoveRecent_Click(object sender, RoutedEventArgs args)
     {

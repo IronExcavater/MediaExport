@@ -181,9 +181,31 @@
                             </TransitionCollection>
                         </Border.Transitions>
                         <Grid>
+                        <!-- Something that went wrong, such as a link that couldn't be opened. -->
+                        <Grid
+                            x:Name="messageRow"
+                            Padding="16,10"
+                            ColumnSpacing="10"
+                            Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon
+                                VerticalAlignment="Top"
+                                FontSize="16"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                Glyph="&#xE783;" />
+                            <TextBlock
+                                x:Name="messageText"
+                                Grid.Column="1"
+                                TextWrapping="Wrap" />
+                        </Grid>
+
                         <!-- Recent searches, offered while the field is empty. Each reads as it would in the field. -->
                         <ListView
                             x:Name="recentsList"
+                            AutomationProperties.Name="Recently searched"
                             Padding="0,4"
                             controls:ScrollBarGutter.Mode="Auto"
                             IsItemClickEnabled="True"
@@ -195,11 +217,12 @@
                             Visibility="Collapsed">
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="search:RecentSearch">
-                                    <Grid>
+                                    <Grid ColumnSpacing="2">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <controls:IconStack
@@ -228,11 +251,21 @@
                                             VerticalAlignment="Center"
                                             Text="{x:Bind Words}"
                                             TextTrimming="CharacterEllipsis" />
+                                        <!-- A pinned search stays at the top of the list. -->
                                         <Button
                                             Grid.Column="3"
+                                            AutomationProperties.Name="{x:Bind local:SearchInput.PinAction(IsPinned)}"
+                                            Click="PinRecent_Click"
+                                            Style="{StaticResource RowIconButtonStyle}"
+                                            Tag="{x:Bind}"
+                                            ToolTipService.ToolTip="{x:Bind local:SearchInput.PinAction(IsPinned)}">
+                                            <FontIcon FontSize="12" Glyph="{x:Bind local:SearchInput.PinGlyph(IsPinned)}" />
+                                        </Button>
+                                        <Button
+                                            Grid.Column="4"
                                             AutomationProperties.Name="Remove"
                                             Click="RemoveRecent_Click"
-                                            Style="{StaticResource FieldIconButtonStyle}"
+                                            Style="{StaticResource RowIconButtonStyle}"
                                             Tag="{x:Bind}"
                                             ToolTipService.ToolTip="Remove">
                                             <FontIcon FontSize="10" Glyph="&#xE711;" />
