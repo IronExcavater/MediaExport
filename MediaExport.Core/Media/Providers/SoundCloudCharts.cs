@@ -36,7 +36,7 @@ public sealed partial class SoundCloudCharts(HttpClient http)
             if (!response.IsSuccessStatusCode)
             {
                 var status = (int)response.StatusCode;
-                throw new InvalidOperationException($"SoundCloud's chart couldn't be read ({status}).");
+                throw new InvalidOperationException($"SoundCloud's trending chart isn't available right now (error {status}).");
             }
 
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -68,7 +68,7 @@ public sealed partial class SoundCloudCharts(HttpClient http)
                 return _clientId = id.Groups[1].Value;
         }
 
-        throw new InvalidOperationException("SoundCloud's website didn't say how to read its chart.");
+        throw new InvalidOperationException("SoundCloud's trending chart isn't available right now.");
     }
 
     internal static IReadOnlyList<YtdlpSearchResult> ReadTracks(string json)

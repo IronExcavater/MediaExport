@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
+using MediaExport.Core.Media.Models;
 using MediaExport.Core.Storage;
 using System.Text.Json.Serialization;
 
@@ -41,6 +42,13 @@ public sealed class AppSettings
 
     /// <summary>The searches that were carried out, newest first, each written as text like <see cref="LastSearch"/>.</summary>
     public List<string> RecentSearches { get; set; } = [];
+
+    /// <summary>The searches that were pinned, which are kept however many are carried out after them.</summary>
+    public List<string> PinnedSearches { get; set; } = [];
+
+    /// <summary>The media that was opened, newest first, and the media that was pinned.</summary>
+    public List<MediaSearchResult> RecentlyViewed { get; set; } = [];
+    public List<MediaSearchResult> PinnedViewed { get; set; } = [];
 
     /// <summary>
     /// This defaults to the system theme 0.

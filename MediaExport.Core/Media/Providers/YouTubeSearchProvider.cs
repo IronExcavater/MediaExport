@@ -22,6 +22,17 @@ public sealed class YouTubeSearchProvider(YtdlpService ytdlp) : YtdlpSearchProvi
         ? $"https://www.youtube.com/results?search_query={Uri.EscapeDataString(query)}&sp=CAM%3D"
         : $"ytsearch{count}:{query}";
 
+    protected override LinkKind ClassifyLink(Uri link)
+    {
+        var path = link.AbsolutePath;
+        string[] creatorPaths = ["/@", "/channel/", "/c/", "/user/"];
+        if (creatorPaths.Any(path.StartsWith))
+            return LinkKind.Creator;
+
+        // A video that is also in a playlist has both in its address, and is the video.
+        return path.StartsWith("/playlist") ? LinkKind.List : LinkKind.Item;
+    }
+
     protected override string GetSourceUrl(YtdlpSearchResult result) =>
         result.SourceUrl ?? $"https://www.youtube.com/watch?v={Uri.EscapeDataString(result.Identity)}";
 }
