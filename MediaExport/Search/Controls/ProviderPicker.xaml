@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="MediaExport.Search.Controls.ProviderPicker"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:MediaExport.Controls"
+    xmlns:providers="using:MediaExport.Core.Media.Providers">
+
+    <StackPanel PreviewKeyDown="Root_CtrlChanged" PreviewKeyUp="Root_CtrlChanged">
+        <StackPanel.Resources>
+            <!-- The rows are the size and rounding of the items in the menus beside this one. -->
+            <x:Double x:Key="ListViewItemMinHeight">32</x:Double>
+            <StaticResource x:Key="ListViewItemCornerRadius" ResourceKey="ControlCornerRadius" />
+
+            <!-- The toggle has no fill or outline until it is on, like the buttons in the field. -->
+            <StaticResource x:Key="ToggleButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
+            <StaticResource x:Key="ToggleButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+            <StaticResource x:Key="ToggleButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+            <StaticResource x:Key="ToggleButtonBorderBrush" ResourceKey="SubtleFillColorTransparentBrush" />
+            <StaticResource x:Key="ToggleButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+            <StaticResource x:Key="ToggleButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+        </StackPanel.Resources>
+
+        <Grid Margin="4,2" ColumnSpacing="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- While on, a press adds or removes a provider. It is on while Ctrl is held. -->
+            <ToggleButton
+                x:Name="severalButton"
+                TabIndex="1"
+                Width="24"
+                Height="24"
+                Padding="0"
+                AutomationProperties.Name="Select several"
+                CornerRadius="6"
+                Click="SeveralButton_Click"
+                ToolTipService.ToolTip="Select several (Ctrl)">
+                <FontIcon FontSize="12" Glyph="&#xE762;" />
+            </ToggleButton>
+            <Button
+                x:Name="allProvidersButton"
+                TabIndex="1"
+                Grid.Column="1"
+                Height="24"
+                Padding="8,0"
+                HorizontalAlignment="Stretch"
+                Click="AllProvidersButton_Click"
+                Content="Select all"
+                FontSize="12"
+                Style="{StaticResource SubtleButtonStyle}" />
+        </Grid>
+        <Border
+            Height="1"
+            Margin="0,2"
+            Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+        <!--
+            A press chooses one provider, unless several are being chosen. The list comes first in tab order, so
+            that opening the flyout doesn't put the focus, and with it a ring and a tooltip, on the toggle above it.
+        -->
+        <ListView
+            x:Name="providerList"
+            TabIndex="0"
+            IsItemClickEnabled="True"
+            ItemClick="ProviderList_ItemClick"
+            SelectionChanged="ProviderList_SelectionChanged"
+            SelectionMode="Extended">
+            <ListView.ItemContainerStyle>
+                <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                    <Setter Property="Padding" Value="15,0" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="providers:IMediaSearchProvider">
+                    <StackPanel
+                        AutomationProperties.Name="{x:Bind DisplayName}"
+                        Orientation="Horizontal"
+                        Spacing="12">
+                        <controls:IconView
+                            Width="16"
+                            Height="16"
+                            Icon="{x:Bind Icon}" />
+                        <TextBlock VerticalAlignment="Center" Text="{x:Bind DisplayName}" />
+                    </StackPanel>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </StackPanel>
+</UserControl>
