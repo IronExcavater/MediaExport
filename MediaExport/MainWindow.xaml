@@ -87,6 +87,7 @@
             <search:SearchInput
                 x:Name="searchInput"
                 Margin="4,0"
+                KeyboardAcceleratorPlacementMode="Hidden"
                 LinkSubmitted="SearchInput_LinkSubmitted"
                 ResultChosen="SearchInput_ResultChosen"
                 Submitted="SearchInput_Submitted"

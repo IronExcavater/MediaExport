@@ -115,119 +115,15 @@ public sealed partial class SearchInput : UserControl
     {
         // The pointer is still on the button, so its tooltip would come up over the open flyout.
         ToolTipService.SetToolTip(providerButton, null);
-        IsChoosingSeveral = ViewModel?.SelectedProviders.Count > 1;
-        ShowChosenProviders();
+        providerPicker.Refresh();
     }
+
+    private void ProviderFlyout_Opened(object? sender, object args) => providerPicker.FocusChosenRow();
 
     private void ProviderFlyout_Closed(object? sender, object args) => ShowProviderIcons();
 
-    // A flyout gives its first control the focus as it opens, and draws the focus ring on it if the keyboard was
-    // last used in the field, which it usually was. The chosen row is focused instead, as if by the pointer, so that
-    // no ring shows until a key is pressed.
-    private void ProviderFlyout_Opened(object? sender, object args)
-    {
-        var chosen = ViewModel?.SelectedProviders.FirstOrDefault();
-        var row = chosen is null ? null : providerList.ContainerFromItem(chosen) as Control;
-        row?.Focus(FocusState.Pointer);
-    }
-
-    // Whether a press adds or removes a provider instead of choosing it alone.
-    private bool IsChoosingSeveral
-    {
-        get => severalButton.IsChecked == true;
-        set => severalButton.IsChecked = value;
-    }
-
-    private static bool IsCtrlHeld => InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down);
-
-    // Holding Ctrl chooses several for as long as it is held. Letting go ends that, unless several are chosen by then.
-    private void ProviderFlyout_CtrlChanged(object sender, KeyRoutedEventArgs args)
-    {
-        if (args.Key == VirtualKey.Control)
-            IsChoosingSeveral = IsCtrlHeld || ViewModel?.SelectedProviders.Count > 1;
-    }
-
-    // Set while the rows are being selected to match the chosen providers.
-    private bool _isShowingProviders;
-
-    // Selects the chosen providers' rows, and says what the button beside the toggle now does.
-    private void ShowChosenProviders()
-    {
-        var viewModel = ViewModel;
-        if (viewModel is null)
-            return;
-
-        var chosen = viewModel.SelectedProviders.ToList();
-        var selected = providerList.SelectedItems.Cast<IMediaSearchProvider>().ToList();
-        var isShown = chosen.Count == selected.Count && chosen.All(selected.Contains);
-        if (!isShown)
-        {
-            _isShowingProviders = true;
-            providerList.SelectedItems.Clear();
-            foreach (var provider in chosen)
-                providerList.SelectedItems.Add(provider);
-            _isShowingProviders = false;
-        }
-
-        var isAll = chosen.Count == viewModel.Providers.Count;
-        allProvidersButton.Content = isAll ? "Deselect all" : "Select all";
-    }
-
-    // The list only shows what is chosen. Its own idea of what a press or an arrow key selects is put back, so the
-    // rows look the same whether one or several are being chosen, and ProviderList_ItemClick decides what a press does.
-    private void ProviderList_SelectionChanged(object sender, SelectionChangedEventArgs args)
-    {
-        if (!_isShowingProviders)
-            ShowChosenProviders();
-    }
-
-    // Choosing one provider closes the flyout as a menu would. Choosing several adds or removes the pressed one.
-    private void ProviderList_ItemClick(object sender, ItemClickEventArgs args)
-    {
-        var viewModel = ViewModel;
-        if (viewModel is null)
-            return;
-
-        var provider = (IMediaSearchProvider)args.ClickedItem;
-        if (!IsChoosingSeveral && !IsCtrlHeld)
-        {
-            viewModel.SelectProviders([provider]);
-            providerFlyout.Hide();
-            return;
-        }
-
-        // A search needs a provider, so removing the last one is ignored.
-        var chosen = viewModel.SelectedProviders.ToList();
-        var wasChosen = chosen.Remove(provider);
-        if (!wasChosen)
-            chosen.Add(provider);
-
-        viewModel.SelectProviders(chosen);
-
-        // Once several are chosen, the list carries on that way without Ctrl.
-        if (viewModel.SelectedProviders.Count > 1)
-            IsChoosingSeveral = true;
-    }
-
-    // Turned off, the first of the chosen providers is kept.
-    private void SeveralButton_Click(object sender, RoutedEventArgs args)
-    {
-        var viewModel = ViewModel;
-        if (viewModel is not null && !IsChoosingSeveral)
-            viewModel.SelectProviders(viewModel.SelectedProviders.Take(1).ToList());
-    }
-
-    // Deselecting leaves the first provider, since a search needs one.
-    private void AllProvidersButton_Click(object sender, RoutedEventArgs args)
-    {
-        var viewModel = ViewModel;
-        if (viewModel is null)
-            return;
-
-        var isAll = viewModel.SelectedProviders.Count == viewModel.Providers.Count;
-        IsChoosingSeveral = !isAll;
-        viewModel.SelectProviders(isAll ? viewModel.Providers.Take(1) : viewModel.Providers);
-    }
+    // Choosing one provider closes the flyout, as choosing from a menu does.
+    private void ProviderPicker_OneChosen(object? sender, EventArgs args) => providerFlyout.Hide();
 
     // The ways of ranking, listed as the menu opens with the one in use in bold.
     private void SortMenu_Opening(object? sender, object args)
@@ -270,7 +166,6 @@ public sealed partial class SearchInput : UserControl
     private void SelectedProviders_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
         ShowProviderIcons();
-        ShowChosenProviders();
         RestartDebounce();
     }
 
