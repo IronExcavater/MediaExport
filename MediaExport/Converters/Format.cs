@@ -17,7 +17,7 @@ public static class Format
         return time.ToString(format, CultureInfo.InvariantCulture);
     }
 
-    /// <summary>A count written short: <c>812</c>, <c>4.2K</c>, <c>1.9M</c>, <c>2.8B</c>.</summary>
+    /// <summary>Writes a count short, such as <c>812</c>, <c>4.2K</c>, <c>1.9M</c>, <c>2.8B</c>.</summary>
     public static string Count(long count) => count switch
     {
         >= 1_000_000_000 => $"{count / 1e9:0.#}B",
@@ -26,7 +26,7 @@ public static class Format
         _ => count.ToString(CultureInfo.InvariantCulture)
     };
 
-    /// <summary>How long ago, in the largest unit that fits: <c>today</c>, <c>3 days ago</c>, <c>2 years ago</c>.</summary>
+    /// <summary>How long ago in the largest unit that fits, such as <c>3 days ago</c> or <c>2 years ago</c>.</summary>
     public static string Age(DateTimeOffset then, DateTimeOffset now)
     {
         var days = (now - then).TotalDays;
@@ -48,7 +48,7 @@ public static class Format
     /// <summary><see cref="Age(DateTimeOffset, DateTimeOffset)"/> as of now; empty when the date isn't known.</summary>
     public static string Age(DateTimeOffset? then) => then is null ? string.Empty : Age(then.Value, DateTimeOffset.Now);
 
-    /// <summary>How often something was viewed: <c>1 view</c>, <c>1.9M views</c>; empty when it isn't known.</summary>
+    /// <summary>How often something was viewed, such as <c>1.9M views</c>. Empty when it isn't known.</summary>
     public static string Views(long? views)
     {
         if (views is null)
