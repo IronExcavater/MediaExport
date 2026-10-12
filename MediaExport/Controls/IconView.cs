@@ -79,12 +79,11 @@ public sealed partial class IconView : Grid
         drawnIcon.SourceVisual = ElementCompositionPreview.GetElementVisual(_icon);
         drawnIcon.SourceSize = _icon.ActualSize;
 
-        // It falls to the left, onto the icon underneath.
+        // It is tight around the icon, so it reads as the icon's edge where it lies over another.
         var shadow = compositor.CreateDropShadow();
         shadow.Mask = compositor.CreateSurfaceBrush(drawnIcon);
         shadow.BlurRadius = 2;
-        shadow.Opacity = 0.8f;
-        shadow.Offset = new Vector3(-1, 0, 0);
+        shadow.Opacity = 0.85f;
 
         var shadowVisual = compositor.CreateSpriteVisual();
         shadowVisual.Size = _icon.ActualSize;
