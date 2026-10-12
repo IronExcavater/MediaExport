@@ -14,6 +14,7 @@ public enum MediaKind
 /// <param name="ProviderId">The <see cref="Providers.IMediaSearchProvider.Id"/> of the provider it came from.</param>
 /// <param name="Views">How often it has been viewed, where the provider says.</param>
 /// <param name="Published">When it was published, where the provider says.</param>
+/// <param name="CreatorUri">The creator's page on the source, such as their channel, where the provider says.</param>
 public sealed record MediaSearchResult(
     string Identity,
     string SourceUrl,
@@ -24,7 +25,8 @@ public sealed record MediaSearchResult(
     MediaKind Kind = MediaKind.Video,
     string? ProviderId = null,
     long? Views = null,
-    DateTimeOffset? Published = null)
+    DateTimeOffset? Published = null,
+    Uri? CreatorUri = null)
 {
     // Screen readers announce list items by their ToString.
     public override string ToString() => Creator is null ? Title : $"{Title}, {Creator}";

@@ -13,6 +13,9 @@ public sealed class YouTubeSearchProvider(YtdlpService ytdlp) : YtdlpSearchProvi
 
     protected override IReadOnlyList<string> Hosts => ["youtube.com", "youtu.be"];
 
+    // YouTube's chart of the most watched music videos worldwide. Its general Trending page no longer exists.
+    protected override string PopularTarget => "https://www.youtube.com/playlist?list=PL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i";
+
     // yt-dlp's own search can't be ranked, so a search by views reads YouTube's results page, sorted by views.
     // YouTube no longer sorts by upload date, which is why there is no ranking for the newest.
     protected override string GetSearchTarget(string query, int count, SearchSort sort) => sort == SearchSort.Views

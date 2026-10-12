@@ -23,15 +23,18 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
     /// <param name="count">How many results the search must reach, counting the ones that are skipped.</param>
     protected abstract string GetSearchTarget(string query, int count, SearchSort sort);
 
+    /// <summary>A page listing what is popular on the source, for a search with nothing to search for.</summary>
+    protected virtual string? PopularTarget => null;
+
     /// <summary>The page of a result. Override it for a provider whose results don't carry their own URL.</summary>
     protected virtual string? GetSourceUrl(YtdlpSearchResult result) => result.SourceUrl;
 
     public async Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, int skip = 0, int limit = 10, SearchSort sort = SearchSort.Relevance, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(query))
+        var target = string.IsNullOrWhiteSpace(query) ? PopularTarget : GetSearchTarget(query.Trim(), skip + limit, sort);
+        if (target is null)
             return [];
 
-        var target = GetSearchTarget(query.Trim(), skip + limit, sort);
         var found = await ytdlp.SearchAsync(target, skip, limit, cancellationToken);
 
         return found.Select(ToMedia).OfType<MediaSearchResult>().ToList();
@@ -64,6 +67,7 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
             Kind,
             Id,
             result.Views,
-            result.Published);
+            result.Published,
+            result.CreatorUri);
     }
 }
