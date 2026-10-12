@@ -37,9 +37,12 @@ public sealed partial class SmoothNavigationView : NavigationView
     // Whether the pane is open over the page. Only possible while the control is too narrow.
     private bool _isOverlayOpen;
 
-    // Whether the page is being held in place under the pane. True from an overlay opening until it has
-    // finished closing, so the page doesn't move while the pane shrinks back.
-    private bool _isPaneOverPage;
+    // How much of the pane's extra width the page is held back by, so that it lies under the pane instead of
+    // beside it: 1 from an overlay opening until it has finished closing, and 0 beside an expanded pane. It is
+    // animated between the two when an overlay becomes an expanded pane, which slides the page out from under it.
+    private double _hold;
+    private double _startHold;
+    private double _targetHold;
 
     public SmoothNavigationView()
     {
@@ -144,9 +147,14 @@ public sealed partial class SmoothNavigationView : NavigationView
     // Called whenever a property or the control's size changes.
     private void UpdatePane()
     {
-        // With room for the pane beside the page, an overlay is no longer needed.
-        if (!IsTooNarrow)
+        // With room for the pane beside the page, an open overlay becomes the expanded pane that it looks like,
+        // instead of closing. Setting IsExpanded runs this method again.
+        if (!IsTooNarrow && _isOverlayOpen)
+        {
             _isOverlayOpen = false;
+            IsExpanded = true;
+            return;
+        }
 
         var isCollapsed = !IsExpanded || IsTooNarrow;
         var isCompact = isCollapsed && !_isOverlayOpen;
@@ -159,33 +167,39 @@ public sealed partial class SmoothNavigationView : NavigationView
 
         // An overlay holds the page in place from the moment it opens. An expanded pane must not: the page
         // belongs beside it. A closing overlay keeps holding the page until OnRendering has finished.
+        var targetHold = _targetHold;
         if (_isOverlayOpen)
-            _isPaneOverPage = true;
+            targetHold = _hold = 1;
         else if (!isCompact)
-            _isPaneOverPage = false;
+            targetHold = 0;
 
         var targetLength = isCompact ? CollapsedPaneLength : ExpandedPaneLength;
-        if (targetLength == _targetLength)
+        if (targetLength == _targetLength && targetHold == _targetHold)
         {
             PlacePage();
             return;
         }
 
+        var isLettingGo = targetHold < _hold;
         _targetLength = targetLength;
+        _targetHold = targetHold;
         if (!IsLoaded)
         {
             // Not on screen yet, so there is nothing to animate.
             OpenPaneLength = targetLength;
+            _hold = targetHold;
             PlacePage();
             return;
         }
 
-        // An animation interrupted partway has less distance left, so it gets the same share of the time.
+        // An animation interrupted partway has less distance left, so it gets the same share of the time. A page
+        // being let go of has the pane's whole extra width to slide, whether or not the pane itself moves.
         var fullDistance = Math.Abs(ExpandedPaneLength - CollapsedPaneLength);
-        var distance = Math.Abs(targetLength - OpenPaneLength);
+        var distance = isLettingGo ? fullDistance : Math.Abs(targetLength - OpenPaneLength);
         var fullDuration = isCompact ? CollapseDuration : ExpandDuration;
         _duration = fullDistance > 0 ? fullDuration * Math.Min(1, distance / fullDistance) : TimeSpan.Zero;
         _startLength = OpenPaneLength;
+        _startHold = _hold;
         _startTime = null;
 
         CompositionTarget.Rendering -= OnRendering;
@@ -203,13 +217,14 @@ public sealed partial class SmoothNavigationView : NavigationView
         // Eases out, so the pane moves fast at first and slows to a stop.
         var eased = 1 - Math.Pow(1 - progress, 4);
         OpenPaneLength = _startLength + (_targetLength - _startLength) * eased;
+        _hold = _startHold + (_targetHold - _startHold) * eased;
 
         var isFinished = progress >= 1;
         if (isFinished)
         {
             CompositionTarget.Rendering -= OnRendering;
             if (!_isOverlayOpen)
-                _isPaneOverPage = false;
+                _hold = _targetHold = 0;
         }
 
         PlacePage();
@@ -224,7 +239,7 @@ public sealed partial class SmoothNavigationView : NavigationView
         if (Content is not FrameworkElement page)
             return;
 
-        var extraWidth = _isPaneOverPage ? OpenPaneLength - CollapsedPaneLength : 0;
+        var extraWidth = _hold * (OpenPaneLength - CollapsedPaneLength);
         page.Margin = new Thickness(-Math.Max(0, extraWidth), 0, 0, 0);
     }
 
