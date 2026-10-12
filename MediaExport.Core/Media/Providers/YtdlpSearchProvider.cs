@@ -26,16 +26,19 @@ public abstract class YtdlpSearchProvider(YtdlpService ytdlp) : IMediaSearchProv
     /// <summary>A page listing what is popular on the source, for a search with nothing to search for.</summary>
     protected virtual string? PopularTarget => null;
 
+    /// <summary>Reads what is popular on the source. It is nothing unless there is a <see cref="PopularTarget"/> to read.</summary>
+    protected virtual async Task<IReadOnlyList<YtdlpSearchResult>> ReadPopularAsync(int skip, int limit, CancellationToken cancellationToken) =>
+        PopularTarget is null ? [] : await ytdlp.SearchAsync(PopularTarget, skip, limit, cancellationToken);
+
     /// <summary>The page of a result. Override it for a provider whose results don't carry their own URL.</summary>
     protected virtual string? GetSourceUrl(YtdlpSearchResult result) => result.SourceUrl;
 
     public async Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, int skip = 0, int limit = 10, SearchSort sort = SearchSort.Relevance, CancellationToken cancellationToken = default)
     {
-        var target = string.IsNullOrWhiteSpace(query) ? PopularTarget : GetSearchTarget(query.Trim(), skip + limit, sort);
-        if (target is null)
-            return [];
-
-        var found = await ytdlp.SearchAsync(target, skip, limit, cancellationToken);
+        var isSearch = !string.IsNullOrWhiteSpace(query);
+        var found = isSearch
+            ? await ytdlp.SearchAsync(GetSearchTarget(query.Trim(), skip + limit, sort), skip, limit, cancellationToken)
+            : await ReadPopularAsync(skip, limit, cancellationToken);
 
         return found.Select(ToMedia).OfType<MediaSearchResult>().ToList();
     }

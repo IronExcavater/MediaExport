@@ -179,7 +179,7 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
     }
 
     // yt-dlp often writes a missing value as null or an empty string rather than leaving it out.
-    private static string? GetString(JsonElement entry, string name)
+    internal static string? GetString(JsonElement entry, string name)
     {
         var isString = entry.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String;
         if (!isString)
@@ -189,7 +189,7 @@ public sealed class YtdlpService(ToolchainService tools) : IMediaDownloader
         return string.IsNullOrWhiteSpace(text) ? null : text;
     }
 
-    private static double? GetNumber(JsonElement entry, string name)
+    internal static double? GetNumber(JsonElement entry, string name)
     {
         var isNumber = entry.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number;
         return isNumber ? value.GetDouble() : null;
