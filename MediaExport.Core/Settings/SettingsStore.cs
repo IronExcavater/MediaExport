@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
+using MediaExport.Core.Exporting;
 using MediaExport.Core.Media.Models;
 using MediaExport.Core.Storage;
 using System.Text.Json.Serialization;
@@ -26,6 +27,24 @@ public sealed class ToolSettings
     public bool IsInstalled { get; set; }
     public DateTimeOffset? LastCheckedUtc { get; set; }
 }
+public enum ExportOutcome
+{
+    Completed,
+    Failed,
+    Cancelled
+}
+
+/// <summary>An export that has finished, as it is kept between runs for the Activity page.</summary>
+/// <param name="Files">The full paths of the exported files. Empty unless it completed.</param>
+/// <param name="Message">How it ended, in words, such as why it failed.</param>
+public sealed record ExportRecord(
+    MediaSearchResult Media,
+    ExportOptions Options,
+    ExportOutcome Outcome,
+    IReadOnlyList<string> Files,
+    string Message,
+    DateTimeOffset FinishedAt);
+
 /// <summary>Application settings persisted between runs.</summary>
 public sealed class AppSettings
 {
@@ -49,6 +68,9 @@ public sealed class AppSettings
     /// <summary>The media that was opened, newest first, and the media that was pinned.</summary>
     public List<MediaSearchResult> RecentlyViewed { get; set; } = [];
     public List<MediaSearchResult> PinnedViewed { get; set; } = [];
+
+    /// <summary>The exports that finished, newest first.</summary>
+    public List<ExportRecord> History { get; set; } = [];
 
     public Dictionary<string, ToolSettings> Tools { get; set; } = new()
     {

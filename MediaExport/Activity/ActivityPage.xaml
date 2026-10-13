@@ -3,10 +3,192 @@
     x:Class="MediaExport.Activity.ActivityPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:MediaExport.Controls"
+    xmlns:converters="using:MediaExport.Converters"
+    xmlns:local="using:MediaExport.Activity"
+    xmlns:media="using:MediaExport.Media.Controls"
     Background="Transparent"
     NavigationCacheMode="Required">
 
-    <Grid MaxWidth="{StaticResource PageMaxWidth}" Padding="{StaticResource PagePadding}">
-        <TextBlock Style="{StaticResource PageTitleStyle}" Text="Activity" />
+    <Page.Resources>
+        <!-- The exports under their headings: what is exporting, what is up next, then by the day they finished. -->
+        <CollectionViewSource
+            x:Name="groupedJobs"
+            IsSourceGrouped="True"
+            Source="{x:Bind ViewModel.Groups}" />
+
+        <!-- The icon that says how an export stands, at the start of its status. -->
+        <Style x:Key="StateIconStyle" TargetType="FontIcon">
+            <Setter Property="FontSize" Value="14" />
+        </Style>
+    </Page.Resources>
+
+    <!-- 12 less side padding and a 12 heading inset leave room for the rows' focus ring, as on the Search page. -->
+    <Grid MaxWidth="{StaticResource PageMaxWidth}" Padding="12,12,12,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid Margin="12,0,12,4">
+            <TextBlock Style="{StaticResource PageTitleStyle}" Text="Activity" />
+            <Button
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                Command="{x:Bind ViewModel.ClearFinishedCommand}"
+                ToolTipService.ToolTip="Take every finished export off this list. The exported files are kept."
+                Visibility="{x:Bind ViewModel.HasJobs, Mode=OneWay}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE894;" Style="{StaticResource FieldIconStyle}" />
+                    <TextBlock Text="Clear finished" />
+                </StackPanel>
+            </Button>
+        </Grid>
+
+        <controls:EmptyStateView
+            Title="No exports yet"
+            Grid.Row="1"
+            Glyph="&#xE81C;"
+            Visibility="{x:Bind converters:VisibleWhen.False(ViewModel.HasJobs), Mode=OneWay}" />
+
+        <controls:EdgeFade Grid.Row="1">
+            <ListView
+                Padding="0,0,0,24"
+                controls:ScrollBarGutter.Mode="Auto"
+                ItemsSource="{x:Bind groupedJobs.View}"
+                SelectionMode="None">
+                <ListView.GroupStyle>
+                    <GroupStyle HidesIfEmpty="True">
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate x:DataType="local:JobGroup">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="{x:Bind Title}" />
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Style="{StaticResource SecondaryTextStyle}"
+                                        Text="{x:Bind Count}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </ListView.GroupStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="local:ExportJob">
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <media:RowMediaView Media="{x:Bind Media}" />
+
+                            <!-- How the export stands, then what was made and when it finished. -->
+                            <StackPanel
+                                Grid.Column="1"
+                                MaxWidth="280"
+                                VerticalAlignment="Center"
+                                Spacing="2">
+                                <Grid HorizontalAlignment="Right" ColumnSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- One of these shows, for the state the export is in. -->
+                                    <ProgressRing
+                                        Width="14"
+                                        Height="14"
+                                        MinWidth="0"
+                                        MinHeight="0"
+                                        IsActive="{x:Bind IsRunning, Mode=OneWay}"
+                                        Visibility="{x:Bind IsRunning, Mode=OneWay}" />
+                                    <FontIcon
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Glyph="&#xE823;"
+                                        Style="{StaticResource StateIconStyle}"
+                                        Visibility="{x:Bind IsQueued, Mode=OneWay}" />
+                                    <FontIcon
+                                        Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                        Glyph="&#xEC61;"
+                                        Style="{StaticResource StateIconStyle}"
+                                        Visibility="{x:Bind IsCompleted, Mode=OneWay}" />
+                                    <FontIcon
+                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                        Glyph="&#xEA39;"
+                                        Style="{StaticResource StateIconStyle}"
+                                        Visibility="{x:Bind IsFailed, Mode=OneWay}" />
+                                    <FontIcon
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Glyph="&#xE711;"
+                                        Style="{StaticResource StateIconStyle}"
+                                        Visibility="{x:Bind IsCancelled, Mode=OneWay}" />
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        MaxLines="2"
+                                        Text="{x:Bind Status, Mode=OneWay}"
+                                        TextAlignment="Right"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="Wrap"
+                                        ToolTipService.ToolTip="{x:Bind Status, Mode=OneWay}" />
+                                </Grid>
+                                <TextBlock
+                                    HorizontalAlignment="Right"
+                                    Style="{StaticResource SecondaryTextStyle}"
+                                    Text="{x:Bind Detail, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <StackPanel
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="2">
+                                <Button
+                                    AutomationProperties.Name="Show in folder"
+                                    Command="{x:Bind ShowInFolderCommand}"
+                                    Style="{StaticResource RowIconButtonStyle}"
+                                    ToolTipService.ToolTip="Show in folder"
+                                    Visibility="{x:Bind IsCompleted, Mode=OneWay}">
+                                    <FontIcon FontSize="12" Glyph="&#xE838;" />
+                                </Button>
+                                <Button
+                                    AutomationProperties.Name="Open on the Export page"
+                                    Click="Open_Click"
+                                    Style="{StaticResource RowIconButtonStyle}"
+                                    Tag="{x:Bind}"
+                                    ToolTipService.ToolTip="Open on the Export page">
+                                    <FontIcon FontSize="12" Glyph="&#xE896;" />
+                                </Button>
+                                <Button
+                                    AutomationProperties.Name="Cancel"
+                                    Command="{x:Bind CancelCommand}"
+                                    Style="{StaticResource RowIconButtonStyle}"
+                                    ToolTipService.ToolTip="Cancel"
+                                    Visibility="{x:Bind IsActive, Mode=OneWay}">
+                                    <FontIcon FontSize="12" Glyph="&#xE71A;" />
+                                </Button>
+                                <Button
+                                    AutomationProperties.Name="Remove from the list"
+                                    Click="Remove_Click"
+                                    Style="{StaticResource RowIconButtonStyle}"
+                                    Tag="{x:Bind}"
+                                    ToolTipService.ToolTip="Remove from the list"
+                                    Visibility="{x:Bind IsFinished, Mode=OneWay}">
+                                    <FontIcon FontSize="10" Glyph="&#xE711;" />
+                                </Button>
+                            </StackPanel>
+
+                            <!-- Along the row's bottom edge, so progress doesn't make the row taller. -->
+                            <ProgressBar
+                                Grid.ColumnSpan="3"
+                                VerticalAlignment="Bottom"
+                                IsIndeterminate="{x:Bind IsIndeterminate, Mode=OneWay}"
+                                Visibility="{x:Bind IsActive, Mode=OneWay}"
+                                Value="{x:Bind Progress, Mode=OneWay}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </controls:EdgeFade>
     </Grid>
 </Page>
