@@ -18,6 +18,8 @@
   <ItemGroup>
     <Content Include="Assets\App\*" />
     <Content Include="Assets\Icons\**" />
+    <!-- The player's page is read from the app's folder by WebView2, so it has to be copied there. -->
+    <Content Include="Assets\Player\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
