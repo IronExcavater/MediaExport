@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: MPL-2.0
 
 using MediaExport.Core.Settings;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace MediaExport.Core.Tooling;
 
-public sealed class ToolchainService(SettingsStore settings)
+public sealed partial class ToolchainService(SettingsStore settings)
 {
     public string Folder { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -90,4 +93,58 @@ public sealed class ToolchainService(SettingsStore settings)
 
         return Task.CompletedTask;
     }
+
+    /// <summary>Where a tool runs from: the copy the app installed if there is one, or else the one on PATH.</summary>
+    /// <returns>The program's full path, or <c>null</c> if the tool isn't installed.</returns>
+    public string? Find(string id)
+    {
+        var tool = GetTool(id);
+        var installPath = tool?.InstallPath;
+        if (File.Exists(installPath))
+            return installPath;
+
+        return Locate(tool?.Executable ?? id);
+    }
+
+    /// <summary>Whether a program is a copy the app installed, which is in its own folder.</summary>
+    public bool IsManaged(string path) => path.StartsWith(Folder, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Asks a program for its version by running it.</summary>
+    /// <param name="argument">What makes it print its version, such as <c>--version</c>.</param>
+    /// <returns>The version, or <c>null</c> if the program wouldn't run or didn't say.</returns>
+    public async Task<string?> ReadVersionAsync(string path, string argument, CancellationToken cancellationToken = default)
+    {
+        var startInfo = new ProcessStartInfo(path, argument)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true
+        };
+
+        try
+        {
+            using var process = Process.Start(startInfo);
+            if (process is null)
+                return null;
+
+            var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken);
+            return ParseVersion(output);
+        }
+        catch (Win32Exception)
+        {
+            // The file is there but isn't a program that can be run.
+            return null;
+        }
+    }
+
+    /// <summary>Picks the version out of a line such as <c>ffmpeg version 7.1-full_build</c> or <c>2026.09.01</c>.</summary>
+    internal static string? ParseVersion(string output)
+    {
+        var match = VersionPattern().Match(output);
+        return match.Success ? match.Value : null;
+    }
+
+    [GeneratedRegex(@"\d+(\.\d+)+")]
+    private static partial Regex VersionPattern();
 }
