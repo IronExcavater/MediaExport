@@ -44,7 +44,7 @@
         <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="CornerRadius" Value="12" />
         <Setter Property="Padding" Value="16" />
     </Style>
 
@@ -128,21 +128,29 @@
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
-    <!-- Style for each settings item card. -->
-    <Style x:Key="SettingsItemStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
-        <Setter Property="Margin" Value="0,0,0,0"/>
-        <Setter Property="MinHeight" Value="70" />
+    <!-- The panel a group of settings is in. Its rows reach its sides, and bring their own padding. -->
+    <Style x:Key="SettingsGroupStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
     </Style>
 
-    <Style x:Key="SettingsGroupTitleStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="14"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Margin" Value="0,20,0,5"/>
+    <!-- One setting in a group. It draws the line between it and the row above, which a group's first row takes off. -->
+    <Style x:Key="SettingsRowStyle" TargetType="Border">
+        <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="16,10" />
     </Style>
 
-    <Style x:Key="SettingsItemDescriptionStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="14"/>
-        <Setter Property="FontWeight" Value="Normal"/>
-        <Setter Property="Margin" Value="0,4,0,0"/>
+    <!-- The heading over a group of settings. -->
+    <Style x:Key="SettingsHeaderStyle" BasedOn="{StaticResource BodyStrongTextBlockStyle}" TargetType="TextBlock">
+        <Setter Property="Margin" Value="0,24,0,8" />
+    </Style>
+
+    <!-- The icon at the start of a setting. Its width is fixed so that every setting's name starts in line. -->
+    <Style x:Key="SettingsIconStyle" TargetType="FontIcon">
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="Width" Value="20" />
     </Style>
 </ResourceDictionary>
