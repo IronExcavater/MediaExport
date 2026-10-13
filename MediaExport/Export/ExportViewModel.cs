@@ -2,13 +2,16 @@
 // SPDX-License-Identifier: MPL-2.0
 
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using MediaExport.Activity;
+using MediaExport.Core.Exporting;
 using MediaExport.Core.Media.Models;
 using MediaExport.Core.Media.Providers;
 using MediaExport.Core.Settings;
 using MediaExport.Core.Storage;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -46,6 +49,7 @@ public sealed partial class ExportViewModel : ObservableObject
     /// <summary>The media that is open, or <c>null</c> when there is none or it is still being read from a link.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsOpen))]
+    [NotifyCanExecuteChangedFor(nameof(ExportCommand))]
     public partial MediaSearchResult? Media { get; private set; }
 
     /// <summary>The media that was opened, newest first after the pinned ones.</summary>
@@ -63,6 +67,19 @@ public sealed partial class ExportViewModel : ObservableObject
 
     /// <summary>Raised when media is opened or a link starts being read, for the window to show the Export page.</summary>
     public event EventHandler? Opened;
+
+    private bool CanExport() => Media is not null;
+
+    /// <summary>Queues an export of the open media. How it gets on is shown on the Activity page.</summary>
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private void Export()
+    {
+        // The format and folder are fixed until the page has options to choose them with.
+        var format = Media!.Kind == MediaKind.Audio ? "mp3" : "mp4";
+        var userFolder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var options = new ExportOptions(format, Path.Combine(userFolder, "Downloads"));
+        _activity.Start(Media, options);
+    }
 
     public void Open(MediaSearchResult media)
     {
