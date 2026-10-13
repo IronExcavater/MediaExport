@@ -249,7 +249,7 @@
                                         </ItemsRepeater>
                                         <TextBlock
                                             Grid.Column="2"
-                                            Margin="6,0"
+                                            Margin="6,0,2,0"
                                             VerticalAlignment="Center"
                                             Text="{x:Bind Words}"
                                             TextTrimming="CharacterEllipsis" />
