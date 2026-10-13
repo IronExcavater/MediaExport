@@ -1,7 +1,7 @@
 ﻿// Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 using MediaExport.Core.Settings;
-using Microsoft.UI;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 
 namespace MediaExport.Settings;
@@ -19,8 +19,11 @@ public sealed class ThemeService(SettingsStore settings) : IThemeService
 
     public void Apply(AppTheme theme)
     {
-        settings.Current.Theme = theme;
-        settings.Save();
+        if (settings.Current.Theme != theme)
+        {
+            settings.Current.Theme = theme;
+            settings.Save();
+        }
 
         var elementTheme = theme switch
         {
@@ -29,24 +32,17 @@ public sealed class ThemeService(SettingsStore settings) : IThemeService
             _ => ElementTheme.Default
         };
 
-        if (App.Current.MainWindow is MainWindow mainWindow)
-            mainWindow.ApplyTheme(elementTheme);
-        ApplyTitleBarColors(theme);
-    }
-    private static void ApplyTitleBarColors(AppTheme theme)
-    {
-        var titleBar = App.Current.MainWindow.AppWindow.TitleBar;
-
-        if (theme == AppTheme.Light)
+        // The caption buttons are drawn by Windows, not by XAML, so they are given the theme separately. On the
+        // system theme they follow Windows, which a fixed colour for them did not.
+        var titleBarTheme = theme switch
         {
-            titleBar.ButtonBackgroundColor = Colors.Transparent;
-            titleBar.ButtonForegroundColor = Colors.Black;
-        }
-        else
-        {
-            titleBar.ButtonBackgroundColor = Colors.Transparent;
-            titleBar.ButtonForegroundColor = Colors.White;
-        }
-    }
+            AppTheme.Dark => TitleBarTheme.Dark,
+            AppTheme.Light => TitleBarTheme.Light,
+            _ => TitleBarTheme.UseDefaultAppMode
+        };
 
+        var mainWindow = (MainWindow)App.Current.MainWindow;
+        mainWindow.ApplyTheme(elementTheme);
+        mainWindow.AppWindow.TitleBar.PreferredTheme = titleBarTheme;
+    }
 }

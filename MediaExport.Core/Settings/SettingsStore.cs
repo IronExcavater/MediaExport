@@ -50,11 +50,6 @@ public sealed class AppSettings
     public List<MediaSearchResult> RecentlyViewed { get; set; } = [];
     public List<MediaSearchResult> PinnedViewed { get; set; } = [];
 
-    /// <summary>
-    /// This defaults to the system theme 0.
-    /// </summary>
-    public int ThemeIndex { get; set; } = 0; // 0 = System, 1 = Dark, 2 = Light
-
     public Dictionary<string, ToolSettings> Tools { get; set; } = new()
     {
         ["yt-dlp"] = new ToolSettings
