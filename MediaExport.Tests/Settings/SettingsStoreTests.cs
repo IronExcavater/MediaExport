@@ -10,7 +10,7 @@ public class SettingsStoreTests
     [Test]
     public void SavedSettingsAreReadBack()
     {
-        string path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "settings.json");
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "settings.json");
         try
         {
             var store = new SettingsStore(path);
@@ -28,7 +28,7 @@ public class SettingsStoreTests
     [Test]
     public void AnUnreadableFileGivesTheDefaults()
     {
-        string path = Path.GetTempFileName();
+        var path = Path.GetTempFileName();
         try
         {
             File.WriteAllText(path, "not json");
