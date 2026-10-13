@@ -7,4 +7,7 @@ public sealed class ThemeOption
 {
     public string Name { get; set; } = "";
     public string Glyph { get; set; } = "";
+
+    // Screen readers announce a list item by its ToString.
+    public override string ToString() => Name;
 }
