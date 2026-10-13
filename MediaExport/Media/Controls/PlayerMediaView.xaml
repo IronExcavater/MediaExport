@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<local:MediaView
+    x:Class="MediaExport.Media.Controls.PlayerMediaView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:MediaExport.Media.Controls"
+    Loaded="PlayerMediaView_Loaded"
+    Unloaded="PlayerMediaView_Unloaded">
+
+    <!-- The source's own player. The background shows until it loads, and is the skeleton with no media. -->
+    <Grid
+        x:Name="frame"
+        Background="{ThemeResource ControlFillColorSecondaryBrush}"
+        CornerRadius="8">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup>
+                <VisualState x:Name="Loaded" />
+                <VisualState x:Name="Skeleton" />
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <WebView2
+            x:Name="webView"
+            SizeChanged="WebView_SizeChanged"
+            WebMessageReceived="WebView_WebMessageReceived" />
+    </Grid>
+</local:MediaView>
