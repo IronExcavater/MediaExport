@@ -14,7 +14,62 @@
     </Window.SystemBackdrop>
 
     <!-- The app shell has the title bar on top, the navigation pane on the left, and the selected page beside it. -->
-    <Grid x:Name="root" Loaded="Root_Loaded">
+    <Grid
+        x:Name="root"
+        KeyboardAcceleratorPlacementMode="Hidden"
+        Loaded="Root_Loaded">
+        <Grid.Resources>
+            <!--
+                A badge that counts the exports waiting and running, inside a ring that fills as they get on. It
+                reads both from its DataContext, the ActivityViewModel, as a template cannot use x:Bind on the window.
+            -->
+            <Style x:Key="ProgressBadgeStyle" TargetType="InfoBadge">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="Height" Value="24" />
+                <!-- An InfoBadge is at most 16 high unless told otherwise, which cut the ring off. -->
+                <Setter Property="MaxHeight" Value="24" />
+                <Setter Property="Width" Value="24" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="InfoBadge">
+                            <Grid Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
+                                <ProgressRing
+                                    Width="{TemplateBinding Width}"
+                                    Height="{TemplateBinding Height}"
+                                    MinWidth="0"
+                                    MinHeight="0"
+                                    Background="{ThemeResource ControlStrongStrokeColorDisabledBrush}"
+                                    IsIndeterminate="{Binding IsActiveProgressUnknown}"
+                                    Value="{Binding ActiveProgress}" />
+                                <TextBlock
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    FontSize="{TemplateBinding FontSize}"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                    Text="{Binding ActiveCount}"
+                                    TextLineBounds="Tight" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!--
+                The badge on a compact pane, where an item is only as wide as its icon and whatever is laid out
+                beside the icon is cut off. The negative margin puts the badge where the icon is instead, and
+                ShowPaneText hides the icon, so the item shows the count in its place while exports are running.
+            -->
+            <Style x:Key="CompactProgressBadgeStyle" BasedOn="{StaticResource ProgressBadgeStyle}" TargetType="InfoBadge">
+                <Setter Property="Background" Value="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="FontSize" Value="9" />
+                <Setter Property="Height" Value="16" />
+                <Setter Property="Margin" Value="-39,0,0,0" />
+                <Setter Property="Width" Value="16" />
+            </Style>
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -116,8 +171,15 @@
                 <!-- The History glyph isn't in the Symbol enum, so it's given by its code in the icon font. -->
                 <NavigationViewItem Content="Activity" Tag="Activity">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE81C;" />
+                        <FontIcon x:Name="activityIcon" Glyph="&#xE81C;" />
                     </NavigationViewItem.Icon>
+                    <NavigationViewItem.InfoBadge>
+                        <InfoBadge
+                            x:Name="activityBadge"
+                            DataContext="{x:Bind Activity}"
+                            Style="{StaticResource ProgressBadgeStyle}"
+                            Visibility="{x:Bind Activity.HasActive, Mode=OneWay}" />
+                    </NavigationViewItem.InfoBadge>
                 </NavigationViewItem>
 
                 <!-- The media opened lately is listed after this, by ShowRecentlyViewed. -->

@@ -23,6 +23,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Windows.Graphics;
+using VirtualKey = Windows.System.VirtualKey;
+using VirtualKeyModifiers = Windows.System.VirtualKeyModifiers;
 
 namespace MediaExport;
 
@@ -48,6 +50,9 @@ public sealed partial class MainWindow : Window
 
     private readonly ExportViewModel _export = App.Current.Services.GetRequiredService<ExportViewModel>();
 
+    /// <summary>The exports that are waiting and running, which the Activity item's badge counts.</summary>
+    public ActivityViewModel Activity { get; } = App.Current.Services.GetRequiredService<ActivityViewModel>();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -60,12 +65,18 @@ public sealed partial class MainWindow : Window
         // The window icon has to be given as a file path; it can't come from Icons.xaml.
         AppWindow.SetIcon("Assets/App/Square44x44Logo.ico");
 
+        // Ctrl+, opens and closes the pane. The comma key has no name among the virtual keys, only its code.
+        var togglePane = new KeyboardAccelerator { Key = (VirtualKey)0xBC, Modifiers = VirtualKeyModifiers.Control };
+        togglePane.Invoked += TogglePane_Invoked;
+        root.KeyboardAccelerators.Add(togglePane);
+
         RestoreWindowSize();
         RestoreSearch();
 
         // Whatever opens media, the Export page is where it shows.
         _export.Opened += (_, _) => GoTo("Export");
         RestoreRecentlyViewed();
+        Activity.PropertyChanged += Activity_PropertyChanged;
         Closed += (_, _) =>
         {
             _settings.Current.LastSearch = Search.FullText;
@@ -121,139 +132,6 @@ public sealed partial class MainWindow : Window
             Search.Replace(lastSearch);
 
         Search.SearchCommand.Execute(null);
-    }
-
-    private void RestoreRecentlyViewed()
-    {
-        var settings = _settings.Current;
-        var unpinned = settings.RecentlyViewed.Select(media => new ViewedMedia(media));
-        var pinned = settings.PinnedViewed.Select(media => new ViewedMedia(media));
-        _export.RecentlyViewed.Load(unpinned, pinned);
-        ShowRecentlyViewed();
-        navView.IsCompactChanged += (_, _) => ShowPaneText();
-
-        _export.RecentlyViewed.CollectionChanged += (_, _) =>
-        {
-            var viewed = _export.RecentlyViewed;
-            settings.PinnedViewed = viewed.Where(item => item.IsPinned).Select(item => item.Media).ToList();
-            settings.RecentlyViewed = viewed.Where(item => !item.IsPinned).Select(item => item.Media).ToList();
-            _settings.Save();
-
-            // The list may be changing because one of its items in the pane was chosen, so the pane's items are
-            // replaced once that has been dealt with.
-            DispatcherQueue.TryEnqueue(ShowRecentlyViewed);
-        };
-    }
-
-    // Lists the recently viewed media in the pane, under their heading. Each is opened again when it is chosen,
-    // and is pinned or removed from its right-click menu.
-    private void ShowRecentlyViewed()
-    {
-        var items = navView.MenuItems;
-        foreach (var row in GetViewedRows())
-            items.Remove(row);
-
-        var viewed = _export.RecentlyViewed;
-        foreach (var media in viewed)
-            items.Add(CreateViewedItem(media));
-
-        if (viewed.Count == 0)
-            items.Add(CreateViewedItem(content: "Nothing viewed yet", ViewedTag.Empty, isEnabled: false));
-
-        ShowPaneText();
-    }
-
-    // A compact pane has room for icons only. The pages' labels and the recently viewed section fade and slide
-    // away as it narrows, and back as it widens.
-    private void ShowPaneText()
-    {
-        var visibility = navView.IsCompact ? Visibility.Collapsed : Visibility.Visible;
-        foreach (var label in _paneLabels)
-            label.Visibility = visibility;
-
-        viewedHeader.Visibility = visibility;
-        foreach (var row in GetViewedRows())
-            row.Visibility = visibility;
-    }
-
-    // The pages' labels, which are text blocks of the window's own so that they can be given a transition.
-    private readonly List<TextBlock> _paneLabels = [];
-
-    private void AddPaneLabels()
-    {
-        var pageItems = navView.MenuItems.Append(navView.SettingsItem).OfType<NavigationViewItem>();
-        foreach (var item in pageItems)
-        {
-            if (item.Content is not string name)
-                continue;
-
-            // The name is still what a screen reader says, and what the item's tooltip is in a compact pane.
-            var label = new TextBlock { Text = name };
-            VisibilityTransition.SetSlide(label, true);
-            AutomationProperties.SetName(item, name);
-            item.Content = label;
-            _paneLabels.Add(label);
-        }
-    }
-
-    private List<NavigationViewItem> GetViewedRows()
-    {
-        var items = navView.MenuItems.OfType<NavigationViewItem>();
-        return items.Where(item => item.Tag is ViewedTag or ViewedMedia).ToList();
-    }
-
-    // What marks the row that stands in for the list while it is empty.
-    private enum ViewedTag
-    {
-        Empty
-    }
-
-    // A row in the recently viewed list, which is a little shorter than the pane's other items.
-    private static NavigationViewItem CreateViewedItem(object content, object tag, bool isEnabled = true)
-    {
-        var item = new NavigationViewItem
-        {
-            Content = content,
-            Tag = tag,
-            IsEnabled = isEnabled,
-            HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            // Choosing it opens the media on the Export page, which is the item that then shows as selected.
-            SelectsOnInvoked = false
-        };
-        item.Resources["NavigationViewItemOnLeftMinHeight"] = 30.0;
-        VisibilityTransition.SetSlide(item, true);
-        return item;
-    }
-
-    private NavigationViewItem CreateViewedItem(ViewedMedia viewed)
-    {
-        var provider = Search.Providers.FirstOrDefault(candidate => candidate.Id == viewed.Media.ProviderId);
-        var row = new ViewedMediaRow(viewed, provider?.Icon);
-        row.RemoveRequested += (_, _) => _export.RecentlyViewed.Remove(viewed);
-
-        var pin = new MenuFlyoutItem
-        {
-            Text = viewed.IsPinned ? "Unpin" : "Pin",
-            Icon = new FontIcon { Glyph = viewed.IsPinned ? "\uE77A" : "\uE718" }
-        };
-        pin.Click += (_, _) => _export.RecentlyViewed.TogglePin(viewed);
-
-        var remove = new MenuFlyoutItem { Text = "Remove", Icon = new FontIcon { Glyph = "\uE711" } };
-        remove.Click += (_, _) => _export.RecentlyViewed.Remove(viewed);
-
-        var item = CreateViewedItem(row, viewed);
-        item.ContextFlyout = new MenuFlyout { Items = { pin, remove } };
-        item.PointerEntered += (_, _) => row.IsPointerOver = true;
-        item.PointerExited += (_, _) => row.IsPointerOver = false;
-        AutomationProperties.SetName(item, viewed.Media.Title);
-        ToolTipService.SetToolTip(item, viewed.Media.Title);
-        return item;
-    }
-
-    private void NavView_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
-    {
-        if (args.InvokedItemContainer?.Tag is ViewedMedia viewed)
-            _export.Open(viewed.Media);
     }
 
     // Windows doesn't remember the size of a WinUI window between runs, so the app does.
@@ -317,7 +195,15 @@ public sealed partial class MainWindow : Window
         args.Handled = true;
     }
 
-    private void TitleBar_PaneToggleRequested(TitleBar sender, object args)
+    private void TitleBar_PaneToggleRequested(TitleBar sender, object args) => TogglePane();
+
+    private void TogglePane_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        TogglePane();
+        args.Handled = true;
+    }
+
+    private void TogglePane()
     {
         navView.TogglePane();
         _settings.Current.IsPaneOpen = navView.IsExpanded;
