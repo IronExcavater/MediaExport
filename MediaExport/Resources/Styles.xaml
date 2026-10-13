@@ -23,17 +23,14 @@
     <Style TargetType="SplitButton">
         <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
     </Style>
-    <Style TargetType="ComboBox">
+    <!-- Based on the WinUI styles, without which a ComboBox falls back to its older look: a square list and a filled selection. -->
+    <Style BasedOn="{StaticResource DefaultComboBoxStyle}" TargetType="ComboBox">
         <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
         <Setter Property="MinHeight" Value="36" />
     </Style>
-    <Style TargetType="ComboBoxItem">
-        <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        <Setter Property="Margin" Value="4,2" />
+    <Style BasedOn="{StaticResource DefaultComboBoxItemStyle}" TargetType="ComboBoxItem">
+        <Setter Property="CornerRadius" Value="6" />
         <Setter Property="MinHeight" Value="36" />
-        <Setter Property="Padding" Value="8,6" />
-        <Setter Property="BackgroundSizing" Value="OuterBorderEdge" />
     </Style>
     <Style TargetType="TextBox">
         <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
