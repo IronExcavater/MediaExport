@@ -7,7 +7,8 @@ namespace MediaExport.Settings;
 public sealed record ToolInfo(
     string Id,
     string Name,
+    string Executable,
     string VersionArgument,
     Uri Website,
     Uri SourceCode,
-    string? DownloadUrl);
+    Uri? DownloadUri);

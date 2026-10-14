@@ -9,29 +9,29 @@
     NavigationCacheMode="Required">
 
     <Page.Resources>
-        <!-- A small button beside a group's heading, for something done to the whole group. -->
         <Style x:Key="GroupActionStyle" BasedOn="{StaticResource SubtleButtonStyle}" TargetType="Button">
             <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="10,0" />
+        </Style>
+        <Style x:Key="ToolActionButtonStyle" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="MinWidth" Value="76" />
+            <Setter Property="Padding" Value="12,0" />
+        </Style>
+        <Style x:Key="ToolIconButtonStyle" BasedOn="{StaticResource SubtleButtonStyle}" TargetType="Button">
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Width" Value="32" />
         </Style>
     </Page.Resources>
 
-    <!--
-        The settings scroll when the window is too short for them. The page's width is capped out here, not on the
-        panel in the scroller: a ScrollViewer centres content narrower than itself by the width the content asks
-        for, not the width it is given, which put the settings off to one side on a wide window.
-    -->
-    <Grid MaxWidth="{StaticResource PageMaxWidth}">
+    <!-- Keeping the gutter at all times stops the centred settings from shifting when the scroll bar appears. -->
+    <Grid MaxWidth="1000">
         <controls:EdgeFade>
-            <ScrollViewer controls:ScrollBarGutter.Mode="Auto">
-                <!--
-                    Each group is one panel under its heading, and each setting a row in it: an icon, a name with a line
-                    saying what it is for, and its control at the end. A row draws the line above it, so the first row
-                    of a panel has its border taken off.
-                -->
-                <StackPanel Padding="{StaticResource PagePadding}">
-                    <TextBlock Style="{StaticResource PageTitleStyle}" Text="Settings" />
-
+            <ScrollViewer controls:ScrollBarGutter.Mode="Stable">
+                <StackPanel Padding="24,0,24,32" Spacing="4">
                     <TextBlock Style="{StaticResource SettingsHeaderStyle}" Text="Appearance" />
                     <Border Style="{StaticResource SettingsGroupStyle}">
                         <Border BorderThickness="0" Style="{StaticResource SettingsRowStyle}">
@@ -43,22 +43,19 @@
                                 </Grid.ColumnDefinitions>
 
                                 <FontIcon Glyph="&#xE790;" Style="{StaticResource SettingsIconStyle}" />
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="Theme" />
-                                    <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="Light, dark, or whichever Windows is using" />
-                                </StackPanel>
+                                <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="Theme" />
                                 <ComboBox
                                     Grid.Column="2"
-                                    MinWidth="160"
+                                    MinWidth="200"
                                     VerticalAlignment="Center"
                                     AutomationProperties.Name="Theme"
                                     ItemsSource="{x:Bind ViewModel.ThemeOptions}"
                                     SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="settings:ThemeOption">
-                                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <FontIcon FontSize="14" Glyph="{x:Bind Glyph}" />
-                                                <TextBlock Text="{x:Bind Name}" />
+                                            <StackPanel VerticalAlignment="Center" Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Width="18" VerticalAlignment="Center" FontSize="14" Glyph="{x:Bind Glyph}" />
+                                                <TextBlock VerticalAlignment="Center" Text="{x:Bind Name}" />
                                             </StackPanel>
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
@@ -67,34 +64,7 @@
                         </Border>
                     </Border>
 
-                    <!-- What is done to all the tools is beside their heading, and what is done to one is in its row. -->
-                    <Grid>
-                        <TextBlock Style="{StaticResource SettingsHeaderStyle}" Text="Tools" />
-                        <StackPanel
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Bottom"
-                            Orientation="Horizontal"
-                            Spacing="4">
-                            <Button
-                                Command="{x:Bind ViewModel.RefreshToolsCommand}"
-                                Style="{StaticResource GroupActionStyle}"
-                                ToolTipService.ToolTip="Look for each tool again">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <FontIcon FontSize="12" Glyph="&#xE72C;" />
-                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Check again" />
-                                </StackPanel>
-                            </Button>
-                            <Button
-                                Command="{x:Bind ViewModel.OpenToolsFolderCommand}"
-                                Style="{StaticResource GroupActionStyle}"
-                                ToolTipService.ToolTip="Open the folder MediaExport installs tools into">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <FontIcon FontSize="12" Glyph="&#xE838;" />
-                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Open folder" />
-                                </StackPanel>
-                            </Button>
-                        </StackPanel>
-                    </Grid>
+                    <TextBlock Style="{StaticResource SettingsHeaderStyle}" Text="Tools" />
                     <Border Style="{StaticResource SettingsGroupStyle}">
                         <Border BorderThickness="0" Style="{StaticResource SettingsRowStyle}">
                             <Grid ColumnSpacing="16">
@@ -105,15 +75,14 @@
                                 </Grid.ColumnDefinitions>
 
                                 <FontIcon Glyph="&#xE895;" Style="{StaticResource SettingsIconStyle}" />
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="Auto update" />
-                                    <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="Keep the tools MediaExport installed up to date" />
-                                </StackPanel>
-                                <!-- The switch's own On and Off labels are dropped, and with them the room it keeps for them. -->
+                                <TextBlock
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Text="Automatically update tools installed by MediaExport" />
                                 <ToggleSwitch
                                     Grid.Column="2"
                                     MinWidth="0"
-                                    AutomationProperties.Name="Auto update"
+                                    AutomationProperties.Name="Automatically update tools installed by MediaExport"
                                     IsOn="{x:Bind ViewModel.AutoUpdate, Mode=TwoWay}"
                                     OffContent=""
                                     OnContent="" />
@@ -121,11 +90,7 @@
                         </Border>
                     </Border>
 
-                    <!--
-                        The tools the app runs: whether each is installed, its version, and where it was found. The rows
-                        bring their own padding, so the expander's is taken off, and the first row's line is tucked under
-                        the one the expander draws below its header.
-                    -->
+                    <!-- The group actions live with the tool list, rather than beside the section heading. -->
                     <Expander
                         Margin="0,4,0,0"
                         Padding="0"
@@ -142,14 +107,31 @@
                                 </Grid.ColumnDefinitions>
 
                                 <FontIcon Glyph="&#xE74C;" Style="{StaticResource SettingsIconStyle}" />
-                                <TextBlock
-                                    Grid.Column="1"
-                                    VerticalAlignment="Center"
-                                    Text="Installed tools" />
-                                <Button
+                                <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="Installed tools" />
+                                <StackPanel
                                     Grid.Column="2"
-                                    Command="{x:Bind ViewModel.UpdateAllCommand}"
-                                    Content="Update all" />
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Spacing="4">
+                                    <Button
+                                        Command="{x:Bind ViewModel.RefreshToolsCommand}"
+                                        Style="{StaticResource GroupActionStyle}"
+                                        ToolTipService.ToolTip="Look for each tool again">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon FontSize="12" Glyph="&#xE72C;" />
+                                            <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Refresh" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button
+                                        Command="{x:Bind ViewModel.OpenToolsFolderCommand}"
+                                        Style="{StaticResource GroupActionStyle}"
+                                        ToolTipService.ToolTip="Open the folder where MediaExport installs tools">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon FontSize="12" Glyph="&#xE838;" />
+                                            <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="Open folder" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
                             </Grid>
                         </Expander.Header>
 
@@ -164,12 +146,12 @@
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
 
-                                            <!-- One of these shows: looking for it, installed, missing, or something went wrong. -->
                                             <Grid Width="20">
                                                 <ProgressRing
                                                     Width="16"
                                                     Height="16"
-                                                    IsActive="{x:Bind IsChecking, Mode=OneWay}" />
+                                                    IsActive="{x:Bind IsBusy, Mode=OneWay}"
+                                                    Visibility="{x:Bind IsBusy, Mode=OneWay}" />
                                                 <FontIcon
                                                     Foreground="{ThemeResource SystemFillColorSuccessBrush}"
                                                     Glyph="&#xEC61;"
@@ -187,10 +169,13 @@
                                                     Visibility="{x:Bind HasError, Mode=OneWay}" />
                                             </Grid>
 
-                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <StackPanel Grid.Column="1" MinHeight="38" VerticalAlignment="Center">
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <TextBlock Text="{x:Bind Name}" />
-                                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind VersionText, Mode=OneWay}" />
+                                                    <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="{x:Bind Name}" />
+                                                    <TextBlock
+                                                        VerticalAlignment="Center"
+                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                        Text="{x:Bind VersionText, Mode=OneWay}" />
                                                 </StackPanel>
                                                 <TextBlock
                                                     Style="{StaticResource SecondaryTextStyle}"
@@ -200,48 +185,49 @@
                                                     ToolTipService.ToolTip="{x:Bind SourceText, Mode=OneWay}" />
                                             </StackPanel>
 
-                                            <!-- The one thing most worth doing is a button. The rest is in the menu beside it. -->
+                                            <!-- The same direct actions as the MVP: there is no overflow menu. -->
                                             <StackPanel
                                                 Grid.Column="2"
                                                 VerticalAlignment="Center"
                                                 Orientation="Horizontal"
-                                                Spacing="8">
+                                                Spacing="4">
                                                 <Button
+                                                    Margin="0,0,4,0"
                                                     Command="{x:Bind InstallCommand}"
-                                                    Content="Install"
-                                                    Style="{StaticResource AccentButtonStyle}"
+                                                    Content="{x:Bind InstallActionText, Mode=OneWay}"
+                                                    Style="{StaticResource ToolActionButtonStyle}"
                                                     Visibility="{x:Bind CanInstall, Mode=OneWay}" />
                                                 <Button
-                                                    AutomationProperties.Name="More"
-                                                    Style="{StaticResource RowIconButtonStyle}"
-                                                    ToolTipService.ToolTip="More">
-                                                    <FontIcon FontSize="14" Glyph="&#xE712;" />
-                                                    <Button.Flyout>
-                                                        <MenuFlyout Placement="BottomEdgeAlignedRight">
-                                                            <MenuFlyoutItem Command="{x:Bind OpenWebsiteCommand}" Text="Website">
-                                                                <MenuFlyoutItem.Icon>
-                                                                    <FontIcon Glyph="&#xE774;" />
-                                                                </MenuFlyoutItem.Icon>
-                                                            </MenuFlyoutItem>
-                                                            <MenuFlyoutItem Command="{x:Bind OpenSourceCodeCommand}" Text="Source code">
-                                                                <MenuFlyoutItem.Icon>
-                                                                    <FontIcon Glyph="&#xE943;" />
-                                                                </MenuFlyoutItem.Icon>
-                                                            </MenuFlyoutItem>
-                                                            <MenuFlyoutItem Command="{x:Bind ShowInFolderCommand}" Text="Show in folder">
-                                                                <MenuFlyoutItem.Icon>
-                                                                    <FontIcon Glyph="&#xE838;" />
-                                                                </MenuFlyoutItem.Icon>
-                                                            </MenuFlyoutItem>
-                                                            <MenuFlyoutSeparator />
-                                                            <!-- Only a copy the app installed is its to delete, so this is off for any other. -->
-                                                            <MenuFlyoutItem Command="{x:Bind RemoveCommand}" Text="Remove">
-                                                                <MenuFlyoutItem.Icon>
-                                                                    <FontIcon Glyph="&#xE74D;" />
-                                                                </MenuFlyoutItem.Icon>
-                                                            </MenuFlyoutItem>
-                                                        </MenuFlyout>
-                                                    </Button.Flyout>
+                                                    Margin="0,0,4,0"
+                                                    Command="{x:Bind UpdateCommand}"
+                                                    Content="Update"
+                                                    Style="{StaticResource ToolActionButtonStyle}"
+                                                    ToolTipService.ToolTip="Update the copy MediaExport installed"
+                                                    Visibility="{x:Bind CanUpdate, Mode=OneWay}" />
+                                                <Button
+                                                    AutomationProperties.Name="Website"
+                                                    Click="Link_Click"
+                                                    Style="{StaticResource ToolIconButtonStyle}"
+                                                    Tag="{x:Bind Website}"
+                                                    ToolTipService.ToolTip="Website">
+                                                    <FontIcon FontSize="14" Glyph="&#xE774;" />
+                                                </Button>
+                                                <Button
+                                                    AutomationProperties.Name="Source code"
+                                                    Click="Link_Click"
+                                                    Style="{StaticResource ToolIconButtonStyle}"
+                                                    Tag="{x:Bind SourceCode}"
+                                                    ToolTipService.ToolTip="Source code">
+                                                    <FontIcon FontSize="14" Glyph="&#xE943;" />
+                                                </Button>
+                                                <Button
+                                                    AutomationProperties.HelpText="{x:Bind RemoveTip, Mode=OneWay}"
+                                                    AutomationProperties.Name="Remove"
+                                                    Command="{x:Bind RemoveCommand}"
+                                                    Style="{StaticResource ToolIconButtonStyle}"
+                                                    ToolTipService.ToolTip="{x:Bind RemoveTip, Mode=OneWay}"
+                                                    Visibility="{x:Bind CanRemove, Mode=OneWay}">
+                                                    <FontIcon FontSize="14" Glyph="&#xE74D;" />
                                                 </Button>
                                             </StackPanel>
                                         </Grid>
@@ -250,99 +236,6 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </Expander>
-
-                    <!-- What the app remembers, each with how much there is, so it is clear what clearing clears. -->
-                    <TextBlock Style="{StaticResource SettingsHeaderStyle}" Text="History" />
-                    <Border Style="{StaticResource SettingsGroupStyle}">
-                        <StackPanel>
-                            <Border BorderThickness="0" Style="{StaticResource SettingsRowStyle}">
-                                <Grid ColumnSpacing="16">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <FontIcon Glyph="&#xE721;" Style="{StaticResource SettingsIconStyle}" />
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Text="Recent searches" />
-                                        <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind ViewModel.RecentSearchesText, Mode=OneWay}" />
-                                    </StackPanel>
-                                    <Button
-                                        Grid.Column="2"
-                                        AutomationProperties.Name="Clear recent searches"
-                                        Command="{x:Bind ViewModel.ClearRecentSearchesCommand}"
-                                        Content="Clear" />
-                                </Grid>
-                            </Border>
-                            <Border Style="{StaticResource SettingsRowStyle}">
-                                <Grid ColumnSpacing="16">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <FontIcon Glyph="&#xE7B3;" Style="{StaticResource SettingsIconStyle}" />
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Text="Recently viewed" />
-                                        <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind ViewModel.RecentlyViewedText, Mode=OneWay}" />
-                                    </StackPanel>
-                                    <Button
-                                        Grid.Column="2"
-                                        AutomationProperties.Name="Clear recently viewed"
-                                        Command="{x:Bind ViewModel.ClearRecentlyViewedCommand}"
-                                        Content="Clear" />
-                                </Grid>
-                            </Border>
-                            <Border Style="{StaticResource SettingsRowStyle}">
-                                <Grid ColumnSpacing="16">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <FontIcon Glyph="&#xE81C;" Style="{StaticResource SettingsIconStyle}" />
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Text="Export history" />
-                                        <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind ViewModel.ExportHistoryText, Mode=OneWay}" />
-                                    </StackPanel>
-                                    <Button
-                                        Grid.Column="2"
-                                        AutomationProperties.Name="Clear export history"
-                                        Command="{x:Bind ViewModel.ClearExportHistoryCommand}"
-                                        Content="Clear" />
-                                </Grid>
-                            </Border>
-                        </StackPanel>
-                    </Border>
-
-                    <TextBlock Style="{StaticResource SettingsHeaderStyle}" Text="About" />
-                    <Border Style="{StaticResource SettingsGroupStyle}">
-                        <Border BorderThickness="0" Style="{StaticResource SettingsRowStyle}">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <Image
-                                    Width="20"
-                                    Height="20"
-                                    Source="{StaticResource AppLogo}" />
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="MediaExport" />
-                                    <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind ViewModel.VersionText}" />
-                                </StackPanel>
-                                <HyperlinkButton
-                                    Grid.Column="2"
-                                    Content="Source code"
-                                    NavigateUri="https://github.com/IronExcavater/MediaExport" />
-                            </Grid>
-                        </Border>
-                    </Border>
                 </StackPanel>
             </ScrollViewer>
         </controls:EdgeFade>

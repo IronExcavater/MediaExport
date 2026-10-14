@@ -11,7 +11,9 @@ using MediaExport.Export;
 using MediaExport.Search;
 using MediaExport.Settings;
 using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 
 namespace MediaExport.Services;
