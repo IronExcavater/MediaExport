@@ -30,6 +30,24 @@ public class ActivityViewModelTests
         }
     }
 
+    private sealed class CancelAwareDownloader : IMediaDownloader
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public CancellationToken Token { get; private set; }
+
+        public async Task<IReadOnlyList<string>> DownloadAsync(
+            string sourceUrl,
+            ExportOptions options,
+            IProgress<ExportProgress>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            Token = cancellationToken;
+            Started.SetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return [];
+        }
+    }
+
     [Test]
     public void TwoExportsRunAtOnceAndTheNextStartsWhenOneFinishes()
     {
@@ -66,6 +84,33 @@ public class ActivityViewModelTests
         Assert.That(queued.State, Is.EqualTo(ExportJobState.Cancelled));
         Assert.That(downloader.Downloads, Has.Count.EqualTo(2));
         Assert.That(activity.ActiveCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Cancelling_a_running_export_reaches_the_downloader_and_is_saved_to_history()
+    {
+        var settings = new SettingsStore(null);
+        var downloader = new CancelAwareDownloader();
+        var activity = new ActivityViewModel(downloader, settings);
+        var job = activity.Start(Media, Options);
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        job.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ExportJob.State) && job.IsCancelled)
+                cancelled.TrySetResult();
+        };
+        await downloader.Started.Task;
+
+        job.CancelCommand.Execute(null);
+        await cancelled.Task;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(downloader.Token.IsCancellationRequested, Is.True);
+            Assert.That(job.State, Is.EqualTo(ExportJobState.Cancelled));
+            Assert.That(settings.Current.History, Has.Count.EqualTo(1));
+            Assert.That(settings.Current.History[0].Outcome, Is.EqualTo(ExportOutcome.Cancelled));
+        });
     }
 
     [Test]
