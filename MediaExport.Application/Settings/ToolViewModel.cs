@@ -4,148 +4,153 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MediaExport.Core.Tooling;
-using System;
-using System.IO;
-using System.Net.Http;
-using System.Threading.Tasks;
 
 namespace MediaExport.Settings;
 
-/// <summary>One tool's row on the Settings page: whether it is installed, which version, and by whom.</summary>
+/// <summary>One tool's installation, version, ownership, and available actions.</summary>
 public sealed partial class ToolViewModel(ToolInfo tool, ToolchainService toolchain) : ObservableObject
 {
+    public string Id => tool.Id;
     public string Name => tool.Name;
     public Uri Website => tool.Website;
     public Uri SourceCode => tool.SourceCode;
+    public bool SupportsManagedInstall => tool.DownloadUri is not null;
 
-    /// <summary>Whether the tool is being looked for, which it is until the page first shows.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsHealthy), nameof(IsMissing), nameof(CanInstall))]
-    [NotifyPropertyChangedFor(nameof(CanUpdate))]
-    [NotifyCanExecuteChangedFor(nameof(UpdateCommand))]
-    public partial bool IsChecking { get; private set; } = true;
-
-    /// <summary>The program's full path, or <c>null</c> if it isn't installed.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsInstalled), nameof(IsManaged), nameof(IsHealthy), nameof(IsMissing))]
-    [NotifyPropertyChangedFor(nameof(CanInstall), nameof(CanUpdate), nameof(VersionText), nameof(SourceText), nameof(RemoveTip))]
-    [NotifyCanExecuteChangedFor(nameof(RemoveCommand), nameof(UpdateCommand))]
-    public partial string? ProgramPath { get; private set; }
+    [NotifyPropertyChangedFor(nameof(IsInstalled), nameof(IsExternal), nameof(IsManaged))]
+    [NotifyPropertyChangedFor(nameof(IsHealthy), nameof(IsMissing), nameof(CanInstall), nameof(CanUpdate), nameof(CanRemove))]
+    [NotifyPropertyChangedFor(nameof(InstallActionText), nameof(VersionText), nameof(SourceText), nameof(RemoveTip))]
+    [NotifyCanExecuteChangedFor(nameof(InstallCommand), nameof(UpdateCommand), nameof(RemoveCommand))]
+    public partial ToolInstallation? Installation { get; private set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(VersionText))]
     public partial string? Version { get; private set; }
 
-    /// <summary>Why installing or removing it failed, or <c>null</c> if neither has.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasError), nameof(IsHealthy), nameof(IsMissing), nameof(SourceText))]
     public partial string? Error { get; private set; }
 
-    public bool IsInstalled => ProgramPath is not null;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsHealthy), nameof(IsMissing), nameof(CanInstall), nameof(CanUpdate), nameof(CanRemove))]
+    [NotifyCanExecuteChangedFor(nameof(InstallCommand), nameof(UpdateCommand), nameof(RemoveCommand))]
+    public partial bool IsChecking { get; private set; } = true;
 
-    /// <summary>
-    /// Whether the copy in use is one the app installed. Only that copy is the app's to update or remove; one
-    /// installed outside the app is looked after by whatever installed it.
-    /// </summary>
-    public bool IsManaged => ProgramPath is not null && toolchain.IsManaged(ProgramPath);
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsHealthy), nameof(IsMissing), nameof(CanInstall), nameof(CanUpdate), nameof(CanRemove))]
+    [NotifyCanExecuteChangedFor(nameof(RefreshCommand), nameof(InstallCommand), nameof(UpdateCommand), nameof(RemoveCommand))]
+    public partial bool IsBusy { get; private set; }
 
+    public bool IsInstalled => Installation is not null;
+    public bool IsExternal => Installation?.Origin == ToolOrigin.External;
+    public bool IsManaged => Installation?.Origin == ToolOrigin.Managed;
     public bool HasError => Error is not null;
-    public bool IsHealthy => !IsChecking && !HasError && IsInstalled;
-    public bool IsMissing => !IsChecking && !HasError && !IsInstalled;
+    public bool IsHealthy => !IsBusy && !IsChecking && !HasError && IsInstalled;
+    public bool IsMissing => !IsBusy && !IsChecking && !HasError && !IsInstalled;
+    public bool CanInstall => !IsBusy && !IsChecking && !IsManaged && tool.DownloadUri is not null;
+    public bool CanUpdate => !IsBusy && !IsChecking && IsManaged && tool.DownloadUri is not null;
+    public bool CanRemove => !IsBusy && !IsChecking && IsManaged;
+    public string InstallActionText => IsExternal ? "Install managed copy" : "Install";
 
-    /// <summary>Whether there is an Install button: the tool is missing and can be downloaded as one file.</summary>
-    public bool CanInstall => !IsChecking && !IsInstalled && tool.DownloadUrl is not null;
+    public string VersionText => IsInstalled ? Version ?? "Installed" : "Not installed";
 
-    /// <summary>Whether Update all does anything for this tool.</summary>
-    public bool CanUpdate => !IsChecking && IsManaged && tool.DownloadUrl is not null;
-
-    /// <summary>Shown beside the name: the version, or that the tool is missing.</summary>
-    public string VersionText
-    {
-        get
-        {
-            if (!IsInstalled)
-                return "Not installed";
-
-            return Version ?? "Installed";
-        }
-    }
-
-    /// <summary>Shown under the name: who installed the tool and where, or what went wrong.</summary>
     public string SourceText
     {
         get
         {
             if (Error is not null)
                 return Error;
-
-            if (!IsInstalled)
+            if (Installation is null)
                 return "Not found in MediaExport's tools or on PATH";
+            if (IsManaged)
+                return $"Installed by MediaExport at {Installation.Path}";
 
-            return IsManaged ? "Installed by MediaExport" : $"Installed outside MediaExport, at {ProgramPath}";
+            return $"Using a tool installed outside MediaExport at {Installation.Path}. "
+                + "Updates and removal are handled where it was installed.";
         }
     }
 
-    /// <summary>What the remove button says when the pointer is over it, which is why it can or can't be used.</summary>
     public string RemoveTip => IsManaged
         ? "Remove the copy MediaExport installed"
-        : "Installed outside MediaExport, so it is updated and removed where it was installed";
+        : "Only tools installed by MediaExport can be removed here";
 
-    /// <summary>Looks for the tool again and asks the copy that is found for its version.</summary>
-    public async Task RefreshAsync()
+    private bool CanStartOperation() => !IsBusy;
+
+    [RelayCommand(CanExecute = nameof(CanStartOperation), IncludeCancelCommand = true)]
+    private Task RefreshAsync(CancellationToken cancellationToken) =>
+        RunOperationAsync("inspect", RefreshCoreAsync, cancellationToken);
+
+    [RelayCommand(CanExecute = nameof(CanInstall), IncludeCancelCommand = true)]
+    private Task InstallAsync(CancellationToken cancellationToken) =>
+        RunOperationAsync("install", async token =>
+        {
+            await toolchain.InstallAsync(tool.Id, tool.DownloadUri!, token);
+            await RefreshCoreAsync(token);
+        }, cancellationToken);
+
+    [RelayCommand(CanExecute = nameof(CanUpdate), IncludeCancelCommand = true)]
+    private Task UpdateAsync(CancellationToken cancellationToken) =>
+        RunOperationAsync("update", async token =>
+        {
+            await toolchain.UpdateAsync(tool.Id, tool.DownloadUri!, token);
+            await RefreshCoreAsync(token);
+        }, cancellationToken);
+
+    [RelayCommand(CanExecute = nameof(CanRemove), IncludeCancelCommand = true)]
+    private Task RemoveAsync(CancellationToken cancellationToken) =>
+        RunOperationAsync("remove", async token =>
+        {
+            await toolchain.RemoveAsync(tool.Id, token);
+            await RefreshCoreAsync(token);
+        }, cancellationToken);
+
+    private async Task RefreshCoreAsync(CancellationToken cancellationToken)
     {
         IsChecking = true;
-        var installation = toolchain.Find(tool.Id);
-        ProgramPath = installation?.Path;
-        Version = installation is null ? null : await toolchain.ReadVersionAsync(installation, tool.VersionArgument);
-        IsChecking = false;
+        try
+        {
+            Installation = toolchain.Find(tool.Id);
+            Version = Installation is null
+                ? null
+                : await toolchain.ReadVersionAsync(Installation, tool.VersionArgument, cancellationToken);
+        }
+        finally
+        {
+            IsChecking = false;
+        }
     }
 
-    /// <summary>Updates this tool when it is a copy MediaExport installed.</summary>
-    [RelayCommand(CanExecute = nameof(CanUpdate))]
-    private async Task UpdateAsync()
+    private async Task RunOperationAsync(
+        string action,
+        Func<CancellationToken, Task> operation,
+        CancellationToken cancellationToken)
     {
-        if (!CanUpdate)
+        if (IsBusy)
             return;
 
-        await toolchain.UpdateAsync(tool.Id, new Uri(tool.DownloadUrl!));
-        await RefreshAsync();
-    }
-
-    [RelayCommand]
-    private async Task InstallAsync()
-    {
-        if (tool.DownloadUrl is null)
-            return;
-
-        IsChecking = true;
+        IsBusy = true;
         Error = null;
         try
         {
-            await toolchain.InstallAsync(tool.Id, new Uri(tool.DownloadUrl));
+            await operation(cancellationToken);
         }
-        catch (Exception exception) when (exception is HttpRequestException or IOException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            Error = $"Couldn't install {Name}. {exception.Message}";
         }
-
-        await RefreshAsync();
+        catch (Exception exception) when (IsExpectedFailure(exception))
+        {
+            Error = $"Couldn't {action} {Name}. {exception.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
-    /// <summary>Deletes the copy of the tool that the app installed.</summary>
-    [RelayCommand(CanExecute = nameof(IsManaged))]
-    private async Task RemoveAsync()
-    {
-        Error = null;
-        try
-        {
-            await toolchain.RemoveAsync(tool.Id);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            Error = $"Couldn't remove {Name}. {exception.Message}";
-        }
-
-        await RefreshAsync();
-    }
+    private static bool IsExpectedFailure(Exception exception) => exception is
+        ToolInspectionException or
+        HttpRequestException or
+        IOException or
+        UnauthorizedAccessException or
+        InvalidOperationException;
 }

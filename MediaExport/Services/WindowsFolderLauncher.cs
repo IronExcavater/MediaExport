@@ -3,6 +3,7 @@
 
 using MediaExport.Settings;
 using System.Diagnostics;
+using System.IO;
 
 namespace MediaExport.Services;
 

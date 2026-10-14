@@ -19,6 +19,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly SettingsStore _settings;
     private readonly IThemeService _themeService;
     private readonly IFolderLauncher _folderLauncher;
+    private bool _checkedAutoUpdates;
 
     public SettingsViewModel(
         ToolchainService toolchain,
@@ -38,14 +39,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         // a file to install from.
         ToolInfo[] tools =
         [
-            new("yt-dlp", "yt-dlp", "--version", new Uri("https://github.com/yt-dlp/yt-dlp#readme"),
+            new("yt-dlp", "yt-dlp", "yt-dlp", "--version", new Uri("https://github.com/yt-dlp/yt-dlp#readme"),
                 new Uri("https://github.com/yt-dlp/yt-dlp"),
-                "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"),
-            new("ffmpeg", "FFmpeg", "-version", new Uri("https://ffmpeg.org"),
-                new Uri("https://github.com/FFmpeg/FFmpeg"), DownloadUrl: null),
-            new("ffprobe", "FFprobe", "-version", new Uri("https://ffmpeg.org/ffprobe.html"),
-                new Uri("https://github.com/FFmpeg/FFmpeg"), DownloadUrl: null)
+                new Uri("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe")),
+            new("ffmpeg", "FFmpeg", "ffmpeg", "-version", new Uri("https://ffmpeg.org"),
+                new Uri("https://github.com/FFmpeg/FFmpeg"), DownloadUri: null),
+            new("ffprobe", "FFprobe", "ffprobe", "-version", new Uri("https://ffmpeg.org/ffprobe.html"),
+                new Uri("https://github.com/FFmpeg/FFmpeg"), DownloadUri: null)
         ];
+        foreach (var tool in tools)
+            EnsureToolSettings(tool);
         Tools = tools.Select(tool => new ToolViewModel(tool, toolchain)).ToList();
     }
 
@@ -94,31 +97,36 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    public bool YtDlpInstalled => _toolchain.IsInstalled("yt-dlp");
-    public bool FfmpegInstalled => _toolchain.IsInstalled("ffmpeg");
-
     /// <summary>Looks for every tool again, which the page also asks for when it is shown.</summary>
     [RelayCommand]
-    public Task RefreshToolsAsync() => Task.WhenAll(Tools.Select(tool => tool.RefreshAsync()));
+    public async Task RefreshToolsAsync()
+    {
+        await Task.WhenAll(Tools.Select(tool => tool.RefreshCommand.ExecuteAsync(null)));
+        if (_checkedAutoUpdates)
+            return;
+
+        _checkedAutoUpdates = true;
+        var updates = Tools.Where(tool =>
+            tool.CanUpdate &&
+            _settings.Current.Tools.TryGetValue(tool.Id, out var settings) &&
+            settings.AutoUpdate);
+        foreach (var tool in updates)
+            await tool.UpdateCommand.ExecuteAsync(null);
+    }
 
     /// <summary>Opens the folder the app installs tools into, which is made first if nothing is installed yet.</summary>
     [RelayCommand]
     private void OpenToolsFolder() => _folderLauncher.Open(_toolchain.Folder);
 
-    [RelayCommand]
-    public async Task InstallYtDlpAsync()
+    private void EnsureToolSettings(ToolInfo tool)
     {
-        await _toolchain.InstallAsync(
-            "yt-dlp",
-            new Uri("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"));
-    }
+        if (!_settings.Current.Tools.TryGetValue(tool.Id, out var settings))
+        {
+            settings = new ToolSettings { Id = tool.Id, AutoUpdate = true };
+            _settings.Current.Tools[tool.Id] = settings;
+        }
 
-    [RelayCommand]
-    public async Task InstallFfmpegAsync()
-    {
-        // ffmpeg usually requires a zip/extract workflow rather than a direct exe
-        await _toolchain.InstallAsync(
-            "ffmpeg",
-            new Uri("https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip"));
+        settings.Name = tool.Name;
+        settings.Executable = tool.Executable;
     }
 }
