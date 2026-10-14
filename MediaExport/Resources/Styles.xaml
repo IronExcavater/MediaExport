@@ -134,6 +134,7 @@
         <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="MinHeight" Value="65" />
     </Style>
 
     <!-- One setting in a group. It draws the line between it and the row above, which a group's first row takes off. -->
