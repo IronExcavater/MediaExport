@@ -68,14 +68,227 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         return ReadCreator(json);
     }
 
-    public Task<IReadOnlyList<string>> DownloadAsync(
+
+    public async Task<IReadOnlyList<string>> DownloadAsync(
         string sourceUrl,
         ExportOptions options,
         IProgress<ExportProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        if (string.IsNullOrWhiteSpace(sourceUrl))
+            throw new ArgumentException("A media URL is required.", nameof(sourceUrl));
+
+        ArgumentNullException.ThrowIfNull(options);
+
+        var format = options.Format.Trim().ToLowerInvariant();
+
+        if (format is not ("mp3" or "mp4"))
+            throw new ArgumentException(
+                $"The format '{options.Format}' is not supported. Use mp3 or mp4.",
+                nameof(options));
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Find() checks both the app-managed installation path and PATH.
+        var path = tools.Find(Executable)
+            ?? throw new InvalidOperationException(
+                "yt-dlp isn't installed. Install it in Settings.");
+
+        var outputFolder = Path.GetFullPath(options.OutputFolder);
+        Directory.CreateDirectory(outputFolder);
+
+        var startInfo = new ProcessStartInfo(path)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+
+        // Keep each argument separate. ArgumentList handles quoting safely.
+        string[] commonArguments =
+        [
+            "--ignore-config",
+        "--no-playlist",
+        "--no-warnings",
+        "--encoding", "utf-8",
+        "--newline",
+        "--progress",
+        "--paths", outputFolder,
+        "--output", "%(title)s [%(id)s].%(ext)s",
+        "--print", "after_move:filepath"
+        ];
+
+        foreach (var argument in commonArguments)
+            startInfo.ArgumentList.Add(argument);
+
+        if (format == "mp3")
+        {
+            // Requires FFmpeg and FFprobe for conversion.
+            startInfo.ArgumentList.Add("--extract-audio");
+            startInfo.ArgumentList.Add("--audio-format");
+            startInfo.ArgumentList.Add("mp3");
+            startInfo.ArgumentList.Add("--audio-quality");
+            startInfo.ArgumentList.Add("0");
+        }
+        else
+        {
+            // Prefer the best video and audio streams, then combine them.
+            // Recode when needed so the final file uses the MP4 container.
+            startInfo.ArgumentList.Add("--format");
+            startInfo.ArgumentList.Add("bestvideo*+bestaudio/best");
+            startInfo.ArgumentList.Add("--recode-video");
+            startInfo.ArgumentList.Add("mp4");
+        }
+
+        // Tell yt-dlp where FFmpeg lives when MediaExport manages its installation.
+        var ffmpegPath = tools.Find("ffmpeg");
+
+        if (ffmpegPath is not null)
+        {
+            startInfo.ArgumentList.Add("--ffmpeg-location");
+            startInfo.ArgumentList.Add(Path.GetDirectoryName(ffmpegPath)!);
+        }
+
+        startInfo.ArgumentList.Add(sourceUrl);
+
+        using var process = Start(startInfo);
+
+        var exportedFiles = new List<string>();
+        var errors = new List<string>();
+
+        // yt-dlp writes progress to stderr and the final filepath to stdout.
+        // Read both streams concurrently to prevent the process from blocking.
+        var readOutput = ReadOutputAsync(
+            process.StandardOutput,
+            exportedFiles,
+            cancellationToken);
+
+        var readErrors = ReadErrorsAsync(
+            process.StandardError,
+            errors,
+            progress,
+            cancellationToken);
+
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken);
+            await Task.WhenAll(readOutput, readErrors);
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+                // The process already exited.
+            }
+
+            throw;
+        }
+
+        if (process.ExitCode != 0)
+        {
+            var reason = errors.LastOrDefault(line =>
+                line.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase));
+
+            reason ??= errors.LastOrDefault(line =>
+                !string.IsNullOrWhiteSpace(line));
+
+            if (reason is not null)
+                reason = ErrorPrefix().Replace(reason, string.Empty).Trim();
+
+            throw new InvalidOperationException(
+                string.IsNullOrWhiteSpace(reason)
+                    ? $"yt-dlp exited with code {process.ExitCode}."
+                    : reason);
+        }
+
+        // Only return files yt-dlp actually reported and which now exist.
+        var existingFiles = exportedFiles
+            .Select(file => file.Trim().Trim('"'))
+            .Where(file => !string.IsNullOrWhiteSpace(file))
+            .Select(file => Path.GetFullPath(file))
+            .Where(File.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (existingFiles.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "yt-dlp finished without reporting an exported file.");
+        }
+
+        progress?.Report(new ExportProgress(100, null, null));
+
+        return existingFiles;
     }
+
+    private static async Task ReadOutputAsync(
+        StreamReader reader,
+        List<string> exportedFiles,
+        CancellationToken cancellationToken)
+    {
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (!string.IsNullOrWhiteSpace(line))
+                exportedFiles.Add(line.Trim());
+        }
+    }
+
+    private static async Task ReadErrorsAsync(
+        StreamReader reader,
+        List<string> errors,
+        IProgress<ExportProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            errors.Add(line);
+
+            // Typical yt-dlp output:
+            // [download]  42.5% of ... at 1.2MiB/s ETA 00:10
+            var match = DownloadProgressPattern().Match(line);
+
+            if (!match.Success)
+                continue;
+
+            if (!double.TryParse(
+                    match.Groups["percent"].Value,
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out var percent))
+            {
+                continue;
+            }
+
+            var speed = match.Groups["speed"].Success
+                ? match.Groups["speed"].Value.Trim()
+                : null;
+
+            var eta = match.Groups["eta"].Success
+                ? match.Groups["eta"].Value.Trim()
+                : null;
+
+            progress?.Report(new ExportProgress(
+                Math.Clamp(percent, 0, 100),
+                speed,
+                eta));
+        }
+    }
+
+    [GeneratedRegex(
+        @"\[download\]\s+(?<percent>\d+(?:\.\d+)?)%.*?(?:\bat\s+(?<speed>.+?)\s+ETA\s+(?<eta>\S+))?")]
+    private static partial Regex DownloadProgressPattern();
+
 
     internal static IReadOnlyList<string> GetSearchArguments(string target, int skip, int limit) =>
     [
