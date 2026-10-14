@@ -14,7 +14,7 @@
         <!-- With no media, the view is a skeleton of itself. -->
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup>
-                <VisualState x:Name="Loaded" />
+                <VisualState x:Name="ContentLoaded" />
                 <VisualState x:Name="Skeleton">
                     <VisualState.Setters>
                         <Setter Target="words.Visibility" Value="Collapsed" />

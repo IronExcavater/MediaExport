@@ -132,9 +132,6 @@ public sealed partial class ToolchainService(
         return null;
     }
 
-    /// <summary>Whether a program is a copy the app installed, which is in its own folder.</summary>
-    public bool IsManaged(string path) => IsManagedPath(path);
-
     private bool IsManagedPath(string path)
     {
         var relative = Path.GetRelativePath(Folder, Path.GetFullPath(path));

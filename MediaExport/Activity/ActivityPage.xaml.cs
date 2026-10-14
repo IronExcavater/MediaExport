@@ -22,6 +22,12 @@ public sealed partial class ActivityPage : Page
 
     private void Remove_Click(object sender, RoutedEventArgs args) => ViewModel.Remove(GetJob(sender));
 
+    private void Search_Click(object sender, RoutedEventArgs args)
+    {
+        var mainWindow = (MainWindow)App.Current.MainWindow;
+        mainWindow.GoTo("Search");
+    }
+
     // Opening media shows the Export page, where it can be exported again.
     private void Open_Click(object sender, RoutedEventArgs args)
     {
