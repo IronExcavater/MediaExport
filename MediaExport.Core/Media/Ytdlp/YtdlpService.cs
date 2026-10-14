@@ -155,7 +155,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
     // Runs yt-dlp and returns what it wrote to standard output.
     private async Task<string> RunAsync(IEnumerable<string> arguments, CancellationToken cancellationToken)
     {
-        var path = tools.Locate(Executable)
+        var path = tools.Find(Executable)?.Path
             ?? throw new InvalidOperationException("yt-dlp isn't installed. Install it in Settings.");
 
         var startInfo = new ProcessStartInfo(path)

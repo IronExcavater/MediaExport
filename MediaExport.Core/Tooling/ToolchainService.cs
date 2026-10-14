@@ -8,46 +8,14 @@ using System.Text.RegularExpressions;
 
 namespace MediaExport.Core.Tooling;
 
-public sealed partial class ToolchainService(SettingsStore settings)
+public sealed partial class ToolchainService(SettingsStore settings, ToolchainOptions options)
 {
-    public string Folder { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "MediaExport",
-        "Tools");
+    public string Folder { get; } = Path.GetFullPath(options.ManagedFolder);
 
     public ToolSettings? GetTool(string id) =>
         settings.Current.Tools.TryGetValue(id, out var tool) ? tool : null;
 
-    public string? Locate(string executable)
-    {
-        var fileName = executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
-            ? executable
-            : executable + ".exe";
-
-        var paths = (Environment.GetEnvironmentVariable("PATH") ?? "")
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        foreach (var folder in paths.Prepend(Folder))
-        {
-            var candidate = Path.Combine(folder, fileName);
-            if (File.Exists(candidate))
-                return candidate;
-        }
-
-        return null;
-    }
-
-    public bool IsInstalled(string id)
-    {
-        var tool = GetTool(id);
-        if (tool is null)
-            return false;
-
-        if (!string.IsNullOrWhiteSpace(tool.InstallPath))
-            return File.Exists(tool.InstallPath);
-
-        return Locate(tool.Executable) is not null;
-    }
+    public bool IsInstalled(string id) => Find(id) is not null;
 
     public async Task EnsureInstalledAsync(string id, string downloadUrl, CancellationToken cancellationToken = default)
     {
@@ -96,18 +64,39 @@ public sealed partial class ToolchainService(SettingsStore settings)
 
     /// <summary>Where a tool runs from: the copy the app installed if there is one, or else the one on PATH.</summary>
     /// <returns>The program's full path, or <c>null</c> if the tool isn't installed.</returns>
-    public string? Find(string id)
+    public ToolInstallation? Find(string id)
     {
         var tool = GetTool(id);
         var installPath = tool?.InstallPath;
-        if (File.Exists(installPath))
-            return installPath;
+        if (File.Exists(installPath) && IsManagedPath(installPath))
+            return new ToolInstallation(Path.GetFullPath(installPath), ToolOrigin.Managed);
 
-        return Locate(tool?.Executable ?? id);
+        var executable = tool?.Executable ?? id;
+        var fileName = executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? executable
+            : executable + ".exe";
+
+        foreach (var folder in options.SearchPath)
+        {
+            var candidate = Path.GetFullPath(Path.Combine(folder, fileName));
+            if (File.Exists(candidate))
+                return new ToolInstallation(candidate, ToolOrigin.External);
+        }
+
+        return null;
     }
 
     /// <summary>Whether a program is a copy the app installed, which is in its own folder.</summary>
-    public bool IsManaged(string path) => path.StartsWith(Folder, StringComparison.OrdinalIgnoreCase);
+    public bool IsManaged(string path) => IsManagedPath(path);
+
+    private bool IsManagedPath(string path)
+    {
+        var relative = Path.GetRelativePath(Folder, Path.GetFullPath(path));
+        return !Path.IsPathRooted(relative)
+            && relative != ".."
+            && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+            && !relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal);
+    }
 
     /// <summary>Asks a program for its version by running it.</summary>
     /// <param name="argument">What makes it print its version, such as <c>--version</c>.</param>
