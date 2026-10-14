@@ -68,27 +68,42 @@
                     Media="{x:Bind ViewModel.Media, Mode=OneWay}" />
 
                 <!-- FallbackValue empties the title while there is no media, or the last one's would stay. -->
-                <StackPanel
+                <Grid
                     x:Name="words"
                     Grid.Row="1"
                     Grid.ColumnSpan="2"
                     VerticalAlignment="Center"
-                    SizeChanged="Editor_SizeChanged"
-                    Spacing="2">
-                    <TextBlock
-                        IsTextSelectionEnabled="True"
-                        MaxLines="2"
-                        Style="{StaticResource SubtitleTextBlockStyle}"
-                        Text="{x:Bind ViewModel.Media.Title, Mode=OneWay, FallbackValue=''}"
-                        TextTrimming="CharacterEllipsis"
-                        TextWrapping="Wrap" />
-                    <media:MediaByline Media="{x:Bind ViewModel.Media, Mode=OneWay}" />
-                </StackPanel>
+                    ColumnSpacing="8"
+                    SizeChanged="Editor_SizeChanged">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock
+                            IsTextSelectionEnabled="True"
+                            MaxLines="2"
+                            Style="{StaticResource SubtitleTextBlockStyle}"
+                            Text="{x:Bind ViewModel.Media.Title, Mode=OneWay, FallbackValue=''}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="Wrap" />
+                        <media:MediaByline Media="{x:Bind ViewModel.Media, Mode=OneWay}" />
+                    </StackPanel>
+                    <Button
+                        Grid.Column="1"
+                        AutomationProperties.Name="Remove selected media"
+                        Click="Close_Click"
+                        Style="{StaticResource RowIconButtonStyle}"
+                        ToolTipService.ToolTip="Remove from the Export page">
+                        <FontIcon FontSize="12" Glyph="&#xE711;" />
+                    </Button>
+                </Grid>
             </Grid>
 
             <Grid
                 x:Name="panel"
                 Grid.Column="1"
+                Grid.Row="0"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"

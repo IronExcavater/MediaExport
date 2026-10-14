@@ -34,4 +34,6 @@ public sealed partial class ExportPage : Page
         var mainWindow = (MainWindow)App.Current.MainWindow;
         mainWindow.GoTo("Search");
     }
+
+    private void Close_Click(object sender, RoutedEventArgs args) => ViewModel.Close();
 }

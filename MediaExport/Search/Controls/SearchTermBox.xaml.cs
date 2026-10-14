@@ -216,7 +216,7 @@ public sealed partial class SearchTermBox : UserControl
     // Typing in the box moves its picker along with it.
     private void ValueBox_TextChanged(object sender, TextChangedEventArgs args)
     {
-        if (sender == _pickedBox)
+        if (sender is TextBox box && ReferenceEquals(box, _pickedBox))
             ShowPickedValue();
     }
 
