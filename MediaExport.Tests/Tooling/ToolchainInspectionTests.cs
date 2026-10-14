@@ -79,5 +79,6 @@ public class ToolchainInspectionTests
     private static ToolchainService CreateService(IProcessRunner runner) => new(
         new SettingsStore(null),
         new ToolchainOptions(Path.GetTempPath(), []),
+        new HttpClient(),
         runner);
 }

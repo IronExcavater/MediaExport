@@ -9,6 +9,7 @@ namespace MediaExport.Core.Tooling;
 public sealed partial class ToolchainService(
     SettingsStore settings,
     ToolchainOptions options,
+    HttpClient httpClient,
     IProcessRunner processRunner)
 {
     public string Folder { get; } = Path.GetFullPath(options.ManagedFolder);
@@ -18,49 +19,93 @@ public sealed partial class ToolchainService(
 
     public bool IsInstalled(string id) => Find(id) is not null;
 
-    public async Task EnsureInstalledAsync(string id, string downloadUrl, CancellationToken cancellationToken = default)
+    public Task<ToolInstallation> InstallAsync(
+        string id,
+        Uri downloadUri,
+        CancellationToken cancellationToken = default) =>
+        WriteManagedAsync(id, downloadUri, cancellationToken);
+
+    public async Task<ToolInstallation> UpdateAsync(
+        string id,
+        Uri downloadUri,
+        CancellationToken cancellationToken = default)
     {
-        var tool = GetTool(id) ?? new ToolSettings { Id = id, Executable = id };
-        var installDir = Path.Combine(Folder, id);
-        Directory.CreateDirectory(installDir);
+        var installation = Find(id);
+        if (installation?.Origin != ToolOrigin.Managed || !IsManagedPath(installation.Path))
+            throw new InvalidOperationException($"{id} is not installed by MediaExport.");
 
-        var targetFile = Path.Combine(
-            installDir,
-            tool.Executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
-                ? tool.Executable
-                : tool.Executable + ".exe");
-
-        if (!File.Exists(targetFile))
-        {
-            using var client = new HttpClient();
-            var data = await client.GetByteArrayAsync(downloadUrl, cancellationToken);
-            await File.WriteAllBytesAsync(targetFile, data, cancellationToken);
-        }
-
-        tool.InstallPath = targetFile;
-        tool.IsInstalled = true;
-        tool.Version = "latest";
-        tool.LastCheckedUtc = DateTimeOffset.UtcNow;
-
-        settings.Current.Tools[id] = tool;
-        settings.Save();
+        return await WriteManagedAsync(id, downloadUri, cancellationToken);
     }
 
-    public async Task UpdateAsync(string id, string downloadUrl, CancellationToken cancellationToken = default)
+    public Task RemoveAsync(string id, CancellationToken cancellationToken = default)
     {
-        await EnsureInstalledAsync(id, downloadUrl, cancellationToken);
-    }
+        cancellationToken.ThrowIfCancellationRequested();
+        var installation = Find(id);
+        if (installation?.Origin != ToolOrigin.Managed || !IsManagedPath(installation.Path))
+            throw new InvalidOperationException($"{id} is not installed by MediaExport.");
 
-    public Task RemoveAsync(string id)
-    {
-        var tool = GetTool(id);
-        if (tool is not null && !string.IsNullOrWhiteSpace(tool.InstallPath) && File.Exists(tool.InstallPath))
-            File.Delete(tool.InstallPath);
+        File.Delete(installation.Path);
 
-        settings.Current.Tools.Remove(id);
+        var tool = GetTool(id)!;
+        tool.InstallPath = null;
+        tool.IsInstalled = false;
+        tool.Version = null;
+        tool.LastCheckedUtc = null;
         settings.Save();
 
         return Task.CompletedTask;
+    }
+
+    private async Task<ToolInstallation> WriteManagedAsync(
+        string id,
+        Uri downloadUri,
+        CancellationToken cancellationToken)
+    {
+        var tool = GetTool(id) ?? new ToolSettings { Id = id, Executable = id };
+        var installDirectory = Path.Combine(Folder, id);
+        Directory.CreateDirectory(installDirectory);
+
+        var executable = tool.Executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? tool.Executable
+            : tool.Executable + ".exe";
+        var target = Path.GetFullPath(Path.Combine(installDirectory, executable));
+        var temporary = Path.Combine(installDirectory, $"{Guid.NewGuid():N}.tmp");
+
+        try
+        {
+            using var response = await httpClient.GetAsync(
+                downloadUri,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+            response.EnsureSuccessStatusCode();
+            await using (var source = await response.Content.ReadAsStreamAsync(cancellationToken))
+            await using (var destination = new FileStream(
+                temporary,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 81920,
+                useAsync: true))
+            {
+                await source.CopyToAsync(destination, cancellationToken);
+            }
+
+            File.Move(temporary, target, overwrite: true);
+
+            tool.InstallPath = target;
+            tool.IsInstalled = true;
+            tool.Version = "latest";
+            tool.LastCheckedUtc = DateTimeOffset.UtcNow;
+            settings.Current.Tools[id] = tool;
+            settings.Save();
+
+            return new ToolInstallation(target, ToolOrigin.Managed);
+        }
+        finally
+        {
+            if (File.Exists(temporary))
+                File.Delete(temporary);
+        }
     }
 
     /// <summary>Where a tool runs from: the copy the app installed if there is one, or else the one on PATH.</summary>

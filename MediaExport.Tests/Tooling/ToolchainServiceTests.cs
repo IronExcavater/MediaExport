@@ -15,6 +15,7 @@ public class ToolchainServiceTests
         var tools = new ToolchainService(
             new SettingsStore(null),
             new ToolchainOptions(Path.GetTempPath(), []),
+            new HttpClient(),
             new FakeProcessRunner());
 
         Assert.That(tools.Find("a-tool-nobody-has-installed"), Is.Null);

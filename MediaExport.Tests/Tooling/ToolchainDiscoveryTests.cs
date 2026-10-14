@@ -82,5 +82,6 @@ public class ToolchainDiscoveryTests
     private ToolchainService CreateService(params string[]? searchPath) => new(
         _settings,
         new ToolchainOptions(_managedFolder, searchPath is { Length: > 0 } ? searchPath : [_externalFolder]),
+        new HttpClient(),
         new FakeProcessRunner());
 }
