@@ -97,7 +97,8 @@
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Stretch"
                         CornerRadius="8"
-                        IsExpanded="True">
+                        IsExpanded="True"
+                        MinHeight="65">                      
                         <Expander.Header>
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>
