@@ -108,17 +108,17 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     public async Task InstallYtDlpAsync()
     {
-        await _toolchain.EnsureInstalledAsync(
+        await _toolchain.InstallAsync(
             "yt-dlp",
-            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe");
+            new Uri("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"));
     }
 
     [RelayCommand]
     public async Task InstallFfmpegAsync()
     {
         // ffmpeg usually requires a zip/extract workflow rather than a direct exe
-        await _toolchain.EnsureInstalledAsync(
+        await _toolchain.InstallAsync(
             "ffmpeg",
-            "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip");
+            new Uri("https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip"));
     }
 }

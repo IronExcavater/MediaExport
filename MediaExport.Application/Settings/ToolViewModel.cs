@@ -108,7 +108,7 @@ public sealed partial class ToolViewModel(ToolInfo tool, ToolchainService toolch
         if (!CanUpdate)
             return;
 
-        await toolchain.UpdateAsync(tool.Id, tool.DownloadUrl!);
+        await toolchain.UpdateAsync(tool.Id, new Uri(tool.DownloadUrl!));
         await RefreshAsync();
     }
 
@@ -122,7 +122,7 @@ public sealed partial class ToolViewModel(ToolInfo tool, ToolchainService toolch
         Error = null;
         try
         {
-            await toolchain.EnsureInstalledAsync(tool.Id, tool.DownloadUrl);
+            await toolchain.InstallAsync(tool.Id, new Uri(tool.DownloadUrl));
         }
         catch (Exception exception) when (exception is HttpRequestException or IOException)
         {

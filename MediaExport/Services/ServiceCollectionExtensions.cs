@@ -29,6 +29,7 @@ public static class ServiceCollectionExtensions
             .Where(folder => folder.Length > 0)
             .ToList();
         services.AddSingleton(new ToolchainOptions(Path.Combine(dataFolder, "Tools"), searchPath));
+        services.AddSingleton(new HttpClient());
         services.AddSingleton<IProcessRunner, SystemProcessRunner>();
         services.AddSingleton<ToolchainService>();
         services.AddSingleton<YtdlpService>();
