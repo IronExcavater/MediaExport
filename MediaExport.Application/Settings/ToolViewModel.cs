@@ -110,6 +110,7 @@ public sealed partial class ToolViewModel(ToolInfo tool, ToolchainService toolch
         try
         {
             Installation = toolchain.Find(tool.Id);
+            Version = null;
             Version = Installation is null
                 ? null
                 : await toolchain.ReadVersionAsync(Installation, tool.VersionArgument, cancellationToken);

@@ -122,6 +122,24 @@ public class ToolViewModelTests
     }
 
     [Test]
+    public async Task Failed_refresh_clears_the_previous_version()
+    {
+        _temporary.CreateFile(_externalFolder, "tool.exe");
+        var row = CreateRow();
+        await row.RefreshCommand.ExecuteAsync(null);
+        _process.Failure = new IOException("cannot start");
+
+        await row.RefreshCommand.ExecuteAsync(null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(row.Version, Is.Null);
+            Assert.That(row.VersionText, Is.EqualTo("Installed"));
+            Assert.That(row.HasError, Is.True);
+        });
+    }
+
+    [Test]
     public async Task Install_on_external_selects_the_new_managed_copy()
     {
         var external = _temporary.CreateFile(_externalFolder, "tool.exe", "external");
