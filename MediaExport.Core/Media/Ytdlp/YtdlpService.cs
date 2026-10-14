@@ -69,6 +69,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
     }
 
 
+
     public async Task<IReadOnlyList<string>> DownloadAsync(
         string sourceUrl,
         ExportOptions options,
@@ -76,20 +77,43 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sourceUrl))
-            throw new ArgumentException("A media URL is required.", nameof(sourceUrl));
+            throw new ArgumentException(
+                "A media URL is required.", nameof(sourceUrl));
 
         ArgumentNullException.ThrowIfNull(options);
 
         var format = options.Format.Trim().ToLowerInvariant();
 
-        if (format is not ("mp3" or "mp4"))
+        var isAudio = format is "mp3" or "wav" or "flac" or "m4a";
+        var isVideo = format is "mp4" or "mkv" or "webm";
+
+        if (!isAudio && !isVideo)
+        {
             throw new ArgumentException(
-                $"The format '{options.Format}' is not supported. Use mp3 or mp4.",
+                $"The format '{options.Format}' is not supported.",
                 nameof(options));
+        }
+
+        if (isAudio &&
+            format is "mp3" or "m4a" &&
+            options.AudioBitrateKbps is not (128 or 192 or 256 or 320))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.AudioBitrateKbps),
+                "Choose an audio bitrate of 128, 192, 256, or 320 kbps.");
+        }
+
+        if (isVideo &&
+            options.VideoHeight is not (0 or 480 or 720 or 1080))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.VideoHeight),
+                "Choose Best available, 480p, 720p, or 1080p.");
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Find() checks both the app-managed installation path and PATH.
+        // Find also checks the app-managed installation path.
         var path = tools.Find(Executable)
             ?? throw new InvalidOperationException(
                 "yt-dlp isn't installed. Install it in Settings.");
@@ -107,7 +131,6 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
             StandardErrorEncoding = Encoding.UTF8
         };
 
-        // Keep each argument separate. ArgumentList handles quoting safely.
         string[] commonArguments =
         [
             "--ignore-config",
@@ -124,32 +147,48 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         foreach (var argument in commonArguments)
             startInfo.ArgumentList.Add(argument);
 
-        if (format == "mp3")
+        if (isAudio)
         {
-            // Requires FFmpeg and FFprobe for conversion.
             startInfo.ArgumentList.Add("--extract-audio");
+
             startInfo.ArgumentList.Add("--audio-format");
-            startInfo.ArgumentList.Add("mp3");
-            startInfo.ArgumentList.Add("--audio-quality");
-            startInfo.ArgumentList.Add("0");
+            startInfo.ArgumentList.Add(format);
+
+            // WAV and FLAC are lossless formats, so don't apply the lossy-format bitrate selection to them.
+            if (format is "mp3" or "m4a")
+            {
+                startInfo.ArgumentList.Add("--audio-quality");
+                startInfo.ArgumentList.Add(
+                    $"{options.AudioBitrateKbps}K");
+            }
         }
         else
         {
-            // Prefer the best video and audio streams, then combine them.
-            // Recode when needed so the final file uses the MP4 container.
+            var formatSelector = options.VideoHeight switch
+            {
+                1080 => "bestvideo*[height<=1080]+bestaudio/best[height<=1080]",
+                720 => "bestvideo*[height<=720]+bestaudio/best[height<=720]",
+                480 => "bestvideo*[height<=480]+bestaudio/best[height<=480]",
+                _ => "bestvideo*+bestaudio/best"
+            };
+
             startInfo.ArgumentList.Add("--format");
-            startInfo.ArgumentList.Add("bestvideo*+bestaudio/best");
+            startInfo.ArgumentList.Add(formatSelector);
+
+            // Ensure the exported video uses the selected container.
+            // FFmpeg is required for recoding and stream merging.
             startInfo.ArgumentList.Add("--recode-video");
-            startInfo.ArgumentList.Add("mp4");
+            startInfo.ArgumentList.Add(format);
         }
 
-        // Tell yt-dlp where FFmpeg lives when MediaExport manages its installation.
+        // Use the managed FFmpeg installation when available.
         var ffmpegPath = tools.Find("ffmpeg");
 
         if (ffmpegPath is not null)
         {
             startInfo.ArgumentList.Add("--ffmpeg-location");
-            startInfo.ArgumentList.Add(Path.GetDirectoryName(ffmpegPath)!);
+            startInfo.ArgumentList.Add(
+                Path.GetDirectoryName(ffmpegPath)!);
         }
 
         startInfo.ArgumentList.Add(sourceUrl);
@@ -159,8 +198,6 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         var exportedFiles = new List<string>();
         var errors = new List<string>();
 
-        // yt-dlp writes progress to stderr and the final filepath to stdout.
-        // Read both streams concurrently to prevent the process from blocking.
         var readOutput = ReadOutputAsync(
             process.StandardOutput,
             exportedFiles,
@@ -186,7 +223,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
             }
             catch (InvalidOperationException)
             {
-                // The process already exited.
+                // The process may already have exited.
             }
 
             throw;
@@ -195,10 +232,12 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         if (process.ExitCode != 0)
         {
             var reason = errors.LastOrDefault(line =>
-                line.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase));
+                line.StartsWith(
+                    "ERROR:",
+                    StringComparison.OrdinalIgnoreCase));
 
-            reason ??= errors.LastOrDefault(line =>
-                !string.IsNullOrWhiteSpace(line));
+            reason ??= errors.LastOrDefault(
+                line => !string.IsNullOrWhiteSpace(line));
 
             if (reason is not null)
                 reason = ErrorPrefix().Replace(reason, string.Empty).Trim();
@@ -209,11 +248,10 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
                     : reason);
         }
 
-        // Only return files yt-dlp actually reported and which now exist.
         var existingFiles = exportedFiles
             .Select(file => file.Trim().Trim('"'))
             .Where(file => !string.IsNullOrWhiteSpace(file))
-            .Select(file => Path.GetFullPath(file))
+            .Select(Path.GetFullPath)
             .Where(File.Exists)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -256,7 +294,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
 
             // Typical yt-dlp output:
             // [download]  42.5% of ... at 1.2MiB/s ETA 00:10
-            var match = DownloadProgressPattern().Match(line);
+            var match = DownloadProgressPatternRegex.Match(line);
 
             if (!match.Success)
                 continue;
@@ -285,10 +323,9 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         }
     }
 
-    [GeneratedRegex(
-        @"\[download\]\s+(?<percent>\d+(?:\.\d+)?)%.*?(?:\bat\s+(?<speed>.+?)\s+ETA\s+(?<eta>\S+))?")]
-    private static partial Regex DownloadProgressPattern();
-
+    private static readonly Regex DownloadProgressPatternRegex = new(
+        @"\[download\]\s+(?<percent>\d+(?:\.\d+)?)%.*?(?:\bat\s+(?<speed>.+?)\s+ETA\s+(?<eta>\S+))?",
+        RegexOptions.Compiled);
 
     internal static IReadOnlyList<string> GetSearchArguments(string target, int skip, int limit) =>
     [

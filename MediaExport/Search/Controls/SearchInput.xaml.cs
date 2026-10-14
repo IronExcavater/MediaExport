@@ -267,7 +267,14 @@ public sealed partial class SearchInput : UserControl
 
     private bool IsFocusWithin(DependencyObject ancestor)
     {
-        var focused = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        DependencyObject? focused = null;
+
+        // Must check ref is valid before use
+        if (XamlRoot is not null)
+        {
+            focused = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        }
+
         return VisualTree.IsWithin(focused, ancestor);
     }
 
