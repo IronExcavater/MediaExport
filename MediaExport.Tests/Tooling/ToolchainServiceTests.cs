@@ -11,9 +11,9 @@ public class ToolchainServiceTests
     [Test]
     public void AProgramThatIsntInstalledIsntFound()
     {
-        var tools = new ToolchainService(new SettingsStore(null));
+        var tools = new ToolchainService(new SettingsStore(null), new ToolchainOptions(Path.GetTempPath(), []));
 
-        Assert.That(tools.Locate("a-tool-nobody-has-installed"), Is.Null);
+        Assert.That(tools.Find("a-tool-nobody-has-installed"), Is.Null);
     }
 
     [TestCase("ffmpeg version 7.1-full_build-www.gyan.dev Copyright (c) 2000-2024", "7.1")]
