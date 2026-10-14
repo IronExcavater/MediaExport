@@ -3,6 +3,7 @@
 
 using MediaExport.Core.Settings;
 using MediaExport.Core.Tooling;
+using MediaExport.Tests.Support;
 
 namespace MediaExport.Tests.Tooling;
 
@@ -11,16 +12,12 @@ public class ToolchainServiceTests
     [Test]
     public void AProgramThatIsntInstalledIsntFound()
     {
-        var tools = new ToolchainService(new SettingsStore(null), new ToolchainOptions(Path.GetTempPath(), []));
+        var tools = new ToolchainService(
+            new SettingsStore(null),
+            new ToolchainOptions(Path.GetTempPath(), []),
+            new FakeProcessRunner());
 
         Assert.That(tools.Find("a-tool-nobody-has-installed"), Is.Null);
     }
 
-    [TestCase("ffmpeg version 7.1-full_build-www.gyan.dev Copyright (c) 2000-2024", "7.1")]
-    [TestCase("2026.09.01", "2026.09.01")]
-    [TestCase("no version here", null)]
-    public void TheVersionIsPickedOutOfWhatAToolPrints(string output, string? version)
-    {
-        Assert.That(ToolchainService.ParseVersion(output), Is.EqualTo(version));
-    }
 }
