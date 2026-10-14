@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: MPL-2.0
 
 using MediaExport.Core.Settings;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace MediaExport.Core.Tooling;
 
-public sealed partial class ToolchainService(SettingsStore settings, ToolchainOptions options)
+public sealed partial class ToolchainService(
+    SettingsStore settings,
+    ToolchainOptions options,
+    IProcessRunner processRunner)
 {
     public string Folder { get; } = Path.GetFullPath(options.ManagedFolder);
 
@@ -101,30 +102,36 @@ public sealed partial class ToolchainService(SettingsStore settings, ToolchainOp
     /// <summary>Asks a program for its version by running it.</summary>
     /// <param name="argument">What makes it print its version, such as <c>--version</c>.</param>
     /// <returns>The version, or <c>null</c> if the program wouldn't run or didn't say.</returns>
-    public async Task<string?> ReadVersionAsync(string path, string argument, CancellationToken cancellationToken = default)
+    public async Task<string> ReadVersionAsync(
+        ToolInstallation installation,
+        string argument,
+        CancellationToken cancellationToken = default)
     {
-        var startInfo = new ProcessStartInfo(path, argument)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true
-        };
-
+        ProcessResult result;
         try
         {
-            using var process = Process.Start(startInfo);
-            if (process is null)
-                return null;
-
-            var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken);
-            return ParseVersion(output);
+            result = await processRunner.RunAsync(installation.Path, argument, cancellationToken);
         }
-        catch (Win32Exception)
+        catch (OperationCanceledException)
         {
-            // The file is there but isn't a program that can be run.
-            return null;
+            throw;
         }
+        catch (Exception exception)
+        {
+            throw new ToolInspectionException($"Couldn't inspect {installation.Path}.", exception);
+        }
+
+        if (result.ExitCode != 0)
+        {
+            var lines = result.StandardError.Split(
+                ['\r', '\n'],
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var reason = lines.LastOrDefault() ?? $"The process exited with code {result.ExitCode}.";
+            throw new ToolInspectionException($"Couldn't inspect {installation.Path}. {reason}");
+        }
+
+        return ParseVersion(result.StandardOutput)
+            ?? throw new ToolInspectionException($"Couldn't read a version from {installation.Path}.");
     }
 
     /// <summary>Picks the version out of a line such as <c>ffmpeg version 7.1-full_build</c> or <c>2026.09.01</c>.</summary>

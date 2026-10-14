@@ -95,8 +95,9 @@ public sealed partial class ToolViewModel(ToolInfo tool, ToolchainService toolch
     public async Task RefreshAsync()
     {
         IsChecking = true;
-        ProgramPath = toolchain.Find(tool.Id);
-        Version = ProgramPath is null ? null : await toolchain.ReadVersionAsync(ProgramPath, tool.VersionArgument);
+        var installation = toolchain.Find(tool.Id);
+        ProgramPath = installation?.Path;
+        Version = installation is null ? null : await toolchain.ReadVersionAsync(installation, tool.VersionArgument);
         IsChecking = false;
     }
 
