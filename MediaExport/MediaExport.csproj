@@ -42,6 +42,7 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\MediaExport.Application\MediaExport.Application.csproj" />
     <ProjectReference Include="..\MediaExport.Core\MediaExport.Core.csproj" />
   </ItemGroup>
 
