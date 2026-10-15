@@ -1,12 +1,87 @@
 // Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
+using MediaExport.Core.Exporting;
 using MediaExport.Core.Media.Ytdlp;
+using MediaExport.Core.Settings;
+using MediaExport.Core.Tooling;
+using MediaExport.Tests.Support;
 
 namespace MediaExport.Tests.Media.Ytdlp;
 
 public class YtdlpServiceTests
 {
+    [Test]
+    public void Download_progress_includes_speed_and_eta()
+    {
+        var progress = YtdlpService.ReadProgress("[download]  42.5% of 10MiB at 1.2MiB/s ETA 00:10");
+        var finished = YtdlpService.ReadProgress("[download] 100% of 10MiB in 00:08");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(progress, Is.EqualTo(new ExportProgress(42.5, "1.2MiB/s", "00:10")));
+            Assert.That(finished, Is.EqualTo(new ExportProgress(100, null, null)));
+            Assert.That(YtdlpService.ReadProgress("not progress"), Is.Null);
+        });
+    }
+
+    [Test]
+    public void Download_requires_yt_dlp_and_ffmpeg_before_starting()
+    {
+        using var temporary = new TemporaryDirectory();
+        var toolsFolder = temporary.CreateDirectory("tools");
+        var pathFolder = temporary.CreateDirectory("path");
+        var service = CreateService(toolsFolder, pathFolder);
+        var options = new ExportOptions("mp4", temporary.Path);
+
+        var missingYtDlp = Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await service.DownloadAsync("https://example.test/video", options));
+        temporary.CreateFile(pathFolder, "yt-dlp.exe");
+        var missingFfmpeg = Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await service.DownloadAsync("https://example.test/video", options));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(missingYtDlp!.Message, Does.Contain("yt-dlp isn't installed"));
+            Assert.That(missingFfmpeg!.Message, Does.Contain("FFmpeg isn't installed"));
+        });
+    }
+
+    [Test]
+    public void Download_arguments_match_the_requested_media_without_reencoding()
+    {
+        var video = YtdlpService.GetDownloadArguments(
+            "https://example.test/video",
+            new ExportOptions("mp4", @"C:\Exports", VideoHeight: 720),
+            @"C:\FFmpeg");
+        var audio = YtdlpService.GetDownloadArguments(
+            "https://example.test/audio",
+            new ExportOptions("mp3", @"C:\Exports", AudioBitrateKbps: 320),
+            @"C:\FFmpeg");
+        var webm = YtdlpService.GetDownloadArguments(
+            "https://example.test/video",
+            new ExportOptions("webm", @"C:\Exports"),
+            @"C:\FFmpeg");
+        var mkv = YtdlpService.GetDownloadArguments(
+            "https://example.test/video",
+            new ExportOptions("mkv", @"C:\Exports"),
+            @"C:\FFmpeg");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ValueAfter(video, "--format"), Does.Contain("[ext=mp4][height<=720]"));
+            Assert.That(ValueAfter(video, "--merge-output-format"), Is.EqualTo("mp4"));
+            Assert.That(ValueAfter(video, "--remux-video"), Is.EqualTo("mp4"));
+            Assert.That(video, Does.Not.Contain("--recode-video"));
+            Assert.That(ValueAfter(webm, "--format"), Does.Contain("[ext=webm]"));
+            Assert.That(ValueAfter(mkv, "--format"), Does.Not.Contain("[ext="));
+            Assert.That(ValueAfter(audio, "--audio-format"), Is.EqualTo("mp3"));
+            Assert.That(ValueAfter(audio, "--audio-quality"), Is.EqualTo("320K"));
+            Assert.That(ValueAfter(video, "--ffmpeg-location"), Is.EqualTo(@"C:\FFmpeg"));
+            Assert.That(video.Last(), Is.EqualTo("https://example.test/video"));
+        });
+    }
+
     [Test]
     public void SearchResultsAreReadFromYtdlpsJson()
     {
@@ -120,4 +195,17 @@ public class YtdlpServiceTests
             Assert.That(tracks[0].CreatorUri?.AbsoluteUri, Is.EqualTo("https://soundcloud.com/artist"));
         });
     }
+
+    private static YtdlpService CreateService(string toolsFolder, string pathFolder)
+    {
+        var toolchain = new ToolchainService(
+            new SettingsStore(null),
+            new ToolchainOptions(toolsFolder, [pathFolder]),
+            new HttpClient(),
+            new FakeProcessRunner());
+        return new YtdlpService(toolchain);
+    }
+
+    private static string ValueAfter(IReadOnlyList<string> arguments, string option) =>
+        arguments[arguments.ToList().IndexOf(option) + 1];
 }

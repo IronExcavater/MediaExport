@@ -72,6 +72,9 @@ public sealed class AppSettings
     /// <summary>The exports that finished, newest first.</summary>
     public List<ExportRecord> History { get; set; } = [];
 
+    /// <summary>The folder chosen for new exports, or <c>null</c> to use Downloads.</summary>
+    public string? ExportFolder { get; set; }
+
     public Dictionary<string, ToolSettings> Tools { get; set; } = new()
     {
         ["yt-dlp"] = new ToolSettings
