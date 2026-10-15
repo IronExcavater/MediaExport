@@ -79,6 +79,41 @@ public sealed partial class ToolchainService(
                 .FirstOrDefault();
     }
 
+    private static void CleanupOldBundles(string toolDirectory, string? activeBundleDirectory)
+    {
+        var activeBundle = activeBundleDirectory is null
+            ? null
+            : Path.GetFullPath(activeBundleDirectory);
+
+        foreach (var bundleDirectory in Directory.EnumerateDirectories(
+            toolDirectory, "*.bundle", SearchOption.TopDirectoryOnly))
+        {
+            if (activeBundle is not null &&
+                string.Equals(
+                    Path.GetFullPath(bundleDirectory),
+                    activeBundle,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            try
+            {
+                Directory.Delete(bundleDirectory, recursive: true);
+            }
+            catch (IOException exception)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Couldn't remove old tool bundle '{bundleDirectory}': {exception.Message}");
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Couldn't remove old tool bundle '{bundleDirectory}': {exception.Message}");
+            }
+        }
+    }
+
     private async Task<ToolInstallation> WriteManagedAsync(
         string id,
         Uri downloadUri,
@@ -140,6 +175,7 @@ public sealed partial class ToolchainService(
             settings.Current.Tools[id] = tool;
             settings.Save();
 
+            CleanupOldBundles(installDirectory, isZip ? extractedDirectory : null);
             return new ToolInstallation(target, ToolOrigin.Managed);
         }
         finally
@@ -168,6 +204,19 @@ public sealed partial class ToolchainService(
             var candidate = Path.GetFullPath(Path.Combine(folder, fileName));
             if (File.Exists(candidate))
                 return new ToolInstallation(candidate, ToolOrigin.External);
+        }
+
+        var managedToolFolder = Path.Combine(Folder, id);
+        if (Directory.Exists(managedToolFolder))
+        {
+            var managedCandidate = Directory
+                .EnumerateFiles(managedToolFolder, fileName, SearchOption.TopDirectoryOnly)
+                .FirstOrDefault();
+
+            if (managedCandidate is not null)
+            {
+                return new ToolInstallation(Path.GetFullPath(managedCandidate), ToolOrigin.Managed);
+            }
         }
 
         return null;
