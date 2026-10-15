@@ -236,7 +236,36 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </Expander>
+                    </Expander>                    
+                    <TextBlock Style="{StaticResource SettingsHeaderStyle}" Text="About" />
+                    <Border Style="{StaticResource SettingsGroupStyle}">
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Image
+                                Width="48"
+                                Height="48"
+                                Margin="10,0,0,0"
+                                Source="ms-appx:///Assets/App/Square44x44Logo.scale-200.png" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock>
+                                    <Run FontWeight="SemiBold" Text="MediaExport" />
+                                    <Run Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="1.0.0" />
+                                </TextBlock>
+                                <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="By Niclas Rogulski, Andrew Shillabeer and Ezekiel Paterno" />
+                            </StackPanel>
+                            <StackPanel
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="4">
+                            </StackPanel>
+                        </Grid>
+
+                    </Border>
                 </StackPanel>
             </ScrollViewer>
         </controls:EdgeFade>

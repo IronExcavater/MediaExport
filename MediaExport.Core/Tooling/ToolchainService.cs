@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 using MediaExport.Core.Settings;
+using System.IO.Compression;
 using System.Text.RegularExpressions;
 
 namespace MediaExport.Core.Tooling;
@@ -44,7 +45,16 @@ public sealed partial class ToolchainService(
         if (installation?.Origin != ToolOrigin.Managed || !IsManagedPath(installation.Path))
             throw new InvalidOperationException($"{id} is not installed by MediaExport.");
 
-        File.Delete(installation.Path);
+        // deleate the whole bundle directory 
+        var directory = Path.GetDirectoryName(installation.Path);
+        if (!string.IsNullOrEmpty(directory) && IsManagedPath(directory))
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+        else
+        {
+            File.Delete(installation.Path);
+        }
 
         var tool = GetTool(id)!;
         tool.InstallPath = null;
@@ -54,6 +64,19 @@ public sealed partial class ToolchainService(
         settings.Save();
 
         return Task.CompletedTask;
+    }
+
+    private static string? ResolveExecutable(string root, string preferredExecutable)
+    {
+        var executable = preferredExecutable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? preferredExecutable
+            : preferredExecutable + ".exe";
+
+        return Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .FirstOrDefault(path =>
+                string.Equals(Path.GetFileName(path), executable, StringComparison.OrdinalIgnoreCase))
+            ?? Directory.EnumerateFiles(root, "*.exe", SearchOption.AllDirectories)
+                .FirstOrDefault();
     }
 
     private async Task<ToolInstallation> WriteManagedAsync(
@@ -70,6 +93,7 @@ public sealed partial class ToolchainService(
             : tool.Executable + ".exe";
         var target = Path.GetFullPath(Path.Combine(installDirectory, executable));
         var temporary = Path.Combine(installDirectory, $"{Guid.NewGuid():N}.tmp");
+        var extractedDirectory = Path.Combine(installDirectory, $"{Guid.NewGuid():N}.bundle");
 
         try
         {
@@ -90,9 +114,26 @@ public sealed partial class ToolchainService(
                 await source.CopyToAsync(destination, cancellationToken);
             }
 
-            File.Move(temporary, target, overwrite: true);
+            var isZip = downloadUri.AbsolutePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                    || (response.Content.Headers.ContentType?.MediaType?.Contains("zip", StringComparison.OrdinalIgnoreCase) ?? false);
 
-            tool.InstallPath = target;
+            string installPath;
+
+            if(isZip)
+            {
+                Directory.CreateDirectory(extractedDirectory);
+                ZipFile.ExtractToDirectory(temporary, extractedDirectory);
+
+                installPath = ResolveExecutable(extractedDirectory, executable)
+                    ?? throw new InvalidOperationException($"Couldn't find {executable} in the zip file.");
+            }
+            else
+            {
+                File.Move(temporary, target, overwrite: true);
+                installPath = target;
+            }      
+
+            tool.InstallPath = installPath;
             tool.IsInstalled = true;
             tool.Version = "latest";
             tool.LastCheckedUtc = DateTimeOffset.UtcNow;
