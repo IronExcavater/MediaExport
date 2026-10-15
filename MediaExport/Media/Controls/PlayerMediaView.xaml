@@ -14,7 +14,7 @@
         CornerRadius="8">
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup>
-                <VisualState x:Name="Loaded" />
+                <VisualState x:Name="ContentLoaded" />
                 <VisualState x:Name="Skeleton" />
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>

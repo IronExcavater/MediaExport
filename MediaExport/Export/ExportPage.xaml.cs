@@ -82,8 +82,8 @@ public sealed partial class ExportPage : Page
     }
 
     private async void BrowseOutputFolder_Click(
-    object sender,
-    RoutedEventArgs e)
+        object sender,
+        RoutedEventArgs e)
     {
         var picker = new FolderPicker
         {
@@ -104,4 +104,6 @@ public sealed partial class ExportPage : Page
             ViewModel.SelectedOutputFolder = folder.Path;
         }
     }
+
+    private void Close_Click(object sender, RoutedEventArgs args) => ViewModel.Close();
 }

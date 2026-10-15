@@ -18,13 +18,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\MediaExport.Application\MediaExport.Application.csproj" />
     <ProjectReference Include="..\MediaExport.Core\MediaExport.Core.csproj" />
-    <!-- Plain C# from the app (view models, layout sums) is compiled in here, so it's tested without WinUI. -->
-    <Compile Include="..\MediaExport\Search\SearchViewModel.cs" Link="Linked\SearchViewModel.cs" />
-    <Compile Include="..\MediaExport\Search\SearchTermText.cs" Link="Linked\SearchTermText.cs" />
-    <Compile Include="..\MediaExport\Converters\Format.cs" Link="Linked\Format.cs" />
-    <Compile Include="..\MediaExport\Activity\ActivityViewModel.cs" Link="Linked\ActivityViewModel.cs" />
-    <Compile Include="..\MediaExport\Activity\ExportJob.cs" Link="Linked\ExportJob.cs" />
   </ItemGroup>
 
   <ItemGroup>

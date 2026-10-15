@@ -11,7 +11,9 @@ using MediaExport.Export;
 using MediaExport.Search;
 using MediaExport.Settings;
 using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 
 namespace MediaExport.Services;
@@ -23,11 +25,20 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddMediaExport(this IServiceCollection services, string dataFolder)
     {
         services.AddSingleton(new SettingsStore(Path.Combine(dataFolder, "settings.json")));
+        var searchPath = (Environment.GetEnvironmentVariable("PATH") ?? "")
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(folder => folder.Trim('"'))
+            .Where(folder => folder.Length > 0)
+            .ToList();
+        services.AddSingleton(new ToolchainOptions(Path.Combine(dataFolder, "Tools"), searchPath));
+        services.AddSingleton(new HttpClient());
+        services.AddSingleton<IProcessRunner, SystemProcessRunner>();
         services.AddSingleton<ToolchainService>();
         services.AddSingleton<YtdlpService>();
         services.AddSingleton<IMediaDownloader>(provider => provider.GetRequiredService<YtdlpService>());
 
         services.AddSingleton<IThemeService, ThemeService>();
+        services.AddSingleton<IFolderLauncher, WindowsFolderLauncher>();
 
         services.AddSingleton(new SearchCache(Path.Combine(dataFolder, "search-cache-2.json")));
 

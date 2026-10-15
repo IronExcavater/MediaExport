@@ -68,7 +68,7 @@ public abstract partial class MediaView : UserControl
     private void UpdateSkeleton()
     {
         var isLoading = Media is null;
-        var state = isLoading ? "Skeleton" : "Loaded";
+        var state = isLoading ? "Skeleton" : "ContentLoaded";
         var hasSkeleton = VisualStateManager.GoToState(this, state, useTransitions: false);
         if (isLoading && hasSkeleton && IsLoaded)
             _skeletonPulse.Begin();

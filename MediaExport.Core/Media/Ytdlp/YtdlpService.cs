@@ -114,14 +114,14 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         cancellationToken.ThrowIfCancellationRequested();
 
         // Find also checks the app-managed installation path.
-        var path = tools.Find(Executable)
+        var installation = tools.Find(Executable)
             ?? throw new InvalidOperationException(
                 "yt-dlp isn't installed. Install it in Settings.");
 
         var outputFolder = Path.GetFullPath(options.OutputFolder);
         Directory.CreateDirectory(outputFolder);
 
-        var startInfo = new ProcessStartInfo(path)
+        var startInfo = new ProcessStartInfo(installation.Path)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -182,13 +182,13 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         }
 
         // Use the managed FFmpeg installation when available.
-        var ffmpegPath = tools.Find("ffmpeg");
+        var ffmpeg = tools.Find("ffmpeg");
 
-        if (ffmpegPath is not null)
+        if (ffmpeg is not null)
         {
             startInfo.ArgumentList.Add("--ffmpeg-location");
             startInfo.ArgumentList.Add(
-                Path.GetDirectoryName(ffmpegPath)!);
+                Path.GetDirectoryName(ffmpeg.Path)!);
         }
 
         startInfo.ArgumentList.Add(sourceUrl);
@@ -405,7 +405,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
     // Runs yt-dlp and returns what it wrote to standard output.
     private async Task<string> RunAsync(IEnumerable<string> arguments, CancellationToken cancellationToken)
     {
-        var path = tools.Locate(Executable)
+        var path = tools.Find(Executable)?.Path
             ?? throw new InvalidOperationException("yt-dlp isn't installed. Install it in Settings.");
 
         var startInfo = new ProcessStartInfo(path)
