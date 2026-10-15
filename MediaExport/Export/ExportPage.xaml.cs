@@ -5,6 +5,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
+using System.ComponentModel;
+using System.IO;
+using Windows.Storage;
+using Windows.Storage.Pickers;
+using WinRT.Interop;
 
 namespace MediaExport.Export;
 
@@ -16,6 +21,47 @@ public sealed partial class ExportPage : Page
     public ExportPage()
     {
         InitializeComponent();
+
+        Loaded += ExportPage_Loaded;
+        Unloaded += ExportPage_Unloaded;
+    }
+
+    private void ExportPage_Loaded(object sender, RoutedEventArgs e)
+    {
+        ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+        RefreshSelections();
+    }
+
+    private void ExportPage_Unloaded(object sender, RoutedEventArgs e)
+    {
+        ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+    }
+
+    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(ExportViewModel.Media)
+            or nameof(ExportViewModel.SelectedExportMode)
+            or nameof(ExportViewModel.SelectedFormat)
+            or nameof(ExportViewModel.ExportModes)
+            or nameof(ExportViewModel.AvailableFormats))
+        {
+            DispatcherQueue.TryEnqueue(RefreshSelections);
+        }
+    }
+
+    private void RefreshSelections()
+    {
+        if (ExportModeComboBox.ItemsSource is not null)
+        {
+            ExportModeComboBox.SelectedItem =
+                ViewModel.SelectedExportMode;
+        }
+
+        if (ExportFormatComboBox.ItemsSource is not null)
+        {
+            ExportFormatComboBox.SelectedItem =
+                ViewModel.SelectedFormat;
+        }
     }
 
     public ExportViewModel ViewModel { get; } = App.Current.Services.GetRequiredService<ExportViewModel>();
@@ -33,6 +79,30 @@ public sealed partial class ExportPage : Page
     {
         var mainWindow = (MainWindow)App.Current.MainWindow;
         mainWindow.GoTo("Search");
+    }
+
+    private async void BrowseOutputFolder_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        var picker = new FolderPicker
+        {
+            SuggestedStartLocation = PickerLocationId.Downloads
+        };
+
+        picker.FileTypeFilter.Add("*");
+
+        // Use your application's actual main window.
+        var hwnd = WindowNative.GetWindowHandle(App.Current.MainWindow);
+
+        InitializeWithWindow.Initialize(picker, hwnd);
+
+        StorageFolder? folder = await picker.PickSingleFolderAsync();
+
+        if (folder is not null)
+        {
+            ViewModel.SelectedOutputFolder = folder.Path;
+        }
     }
 
     private void Close_Click(object sender, RoutedEventArgs args) => ViewModel.Close();

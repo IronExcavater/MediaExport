@@ -68,14 +68,264 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         return ReadCreator(json);
     }
 
-    public Task<IReadOnlyList<string>> DownloadAsync(
+
+
+    public async Task<IReadOnlyList<string>> DownloadAsync(
         string sourceUrl,
         ExportOptions options,
         IProgress<ExportProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        if (string.IsNullOrWhiteSpace(sourceUrl))
+            throw new ArgumentException(
+                "A media URL is required.", nameof(sourceUrl));
+
+        ArgumentNullException.ThrowIfNull(options);
+
+        var format = options.Format.Trim().ToLowerInvariant();
+
+        var isAudio = format is "mp3" or "wav" or "flac" or "m4a";
+        var isVideo = format is "mp4" or "mkv" or "webm";
+
+        if (!isAudio && !isVideo)
+        {
+            throw new ArgumentException(
+                $"The format '{options.Format}' is not supported.",
+                nameof(options));
+        }
+
+        if (isAudio &&
+            format is "mp3" or "m4a" &&
+            options.AudioBitrateKbps is not (128 or 192 or 256 or 320))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.AudioBitrateKbps),
+                "Choose an audio bitrate of 128, 192, 256, or 320 kbps.");
+        }
+
+        if (isVideo &&
+            options.VideoHeight is not (0 or 480 or 720 or 1080))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.VideoHeight),
+                "Choose Best available, 480p, 720p, or 1080p.");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Find also checks the app-managed installation path.
+        var installation = tools.Find(Executable)
+            ?? throw new InvalidOperationException(
+                "yt-dlp isn't installed. Install it in Settings.");
+
+        var outputFolder = Path.GetFullPath(options.OutputFolder);
+        Directory.CreateDirectory(outputFolder);
+
+        var startInfo = new ProcessStartInfo(installation.Path)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+
+        string[] commonArguments =
+        [
+            "--ignore-config",
+        "--no-playlist",
+        "--no-warnings",
+        "--encoding", "utf-8",
+        "--newline",
+        "--progress",
+        "--paths", outputFolder,
+        "--output", "%(title)s [%(id)s].%(ext)s",
+        "--print", "after_move:filepath"
+        ];
+
+        foreach (var argument in commonArguments)
+            startInfo.ArgumentList.Add(argument);
+
+        if (isAudio)
+        {
+            startInfo.ArgumentList.Add("--extract-audio");
+
+            startInfo.ArgumentList.Add("--audio-format");
+            startInfo.ArgumentList.Add(format);
+
+            // WAV and FLAC are lossless formats, so don't apply the lossy-format bitrate selection to them.
+            if (format is "mp3" or "m4a")
+            {
+                startInfo.ArgumentList.Add("--audio-quality");
+                startInfo.ArgumentList.Add(
+                    $"{options.AudioBitrateKbps}K");
+            }
+        }
+        else
+        {
+            var formatSelector = options.VideoHeight switch
+            {
+                1080 => "bestvideo*[height<=1080]+bestaudio/best[height<=1080]",
+                720 => "bestvideo*[height<=720]+bestaudio/best[height<=720]",
+                480 => "bestvideo*[height<=480]+bestaudio/best[height<=480]",
+                _ => "bestvideo*+bestaudio/best"
+            };
+
+            startInfo.ArgumentList.Add("--format");
+            startInfo.ArgumentList.Add(formatSelector);
+
+            // Ensure the exported video uses the selected container.
+            // FFmpeg is required for recoding and stream merging.
+            startInfo.ArgumentList.Add("--recode-video");
+            startInfo.ArgumentList.Add(format);
+        }
+
+        // Use the managed FFmpeg installation when available.
+        var ffmpeg = tools.Find("ffmpeg");
+
+        if (ffmpeg is not null)
+        {
+            startInfo.ArgumentList.Add("--ffmpeg-location");
+            startInfo.ArgumentList.Add(
+                Path.GetDirectoryName(ffmpeg.Path)!);
+        }
+
+        startInfo.ArgumentList.Add(sourceUrl);
+
+        using var process = Start(startInfo);
+
+        var exportedFiles = new List<string>();
+        var errors = new List<string>();
+
+        var readOutput = ReadOutputAsync(
+            process.StandardOutput,
+            exportedFiles,
+            cancellationToken);
+
+        var readErrors = ReadErrorsAsync(
+            process.StandardError,
+            errors,
+            progress,
+            cancellationToken);
+
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken);
+            await Task.WhenAll(readOutput, readErrors);
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+                // The process may already have exited.
+            }
+
+            throw;
+        }
+
+        if (process.ExitCode != 0)
+        {
+            var reason = errors.LastOrDefault(line =>
+                line.StartsWith(
+                    "ERROR:",
+                    StringComparison.OrdinalIgnoreCase));
+
+            reason ??= errors.LastOrDefault(
+                line => !string.IsNullOrWhiteSpace(line));
+
+            if (reason is not null)
+                reason = ErrorPrefix().Replace(reason, string.Empty).Trim();
+
+            throw new InvalidOperationException(
+                string.IsNullOrWhiteSpace(reason)
+                    ? $"yt-dlp exited with code {process.ExitCode}."
+                    : reason);
+        }
+
+        var existingFiles = exportedFiles
+            .Select(file => file.Trim().Trim('"'))
+            .Where(file => !string.IsNullOrWhiteSpace(file))
+            .Select(Path.GetFullPath)
+            .Where(File.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (existingFiles.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "yt-dlp finished without reporting an exported file.");
+        }
+
+        progress?.Report(new ExportProgress(100, null, null));
+
+        return existingFiles;
     }
+
+    private static async Task ReadOutputAsync(
+        StreamReader reader,
+        List<string> exportedFiles,
+        CancellationToken cancellationToken)
+    {
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (!string.IsNullOrWhiteSpace(line))
+                exportedFiles.Add(line.Trim());
+        }
+    }
+
+    private static async Task ReadErrorsAsync(
+        StreamReader reader,
+        List<string> errors,
+        IProgress<ExportProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            errors.Add(line);
+
+            // Typical yt-dlp output:
+            // [download]  42.5% of ... at 1.2MiB/s ETA 00:10
+            var match = DownloadProgressPatternRegex.Match(line);
+
+            if (!match.Success)
+                continue;
+
+            if (!double.TryParse(
+                    match.Groups["percent"].Value,
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out var percent))
+            {
+                continue;
+            }
+
+            var speed = match.Groups["speed"].Success
+                ? match.Groups["speed"].Value.Trim()
+                : null;
+
+            var eta = match.Groups["eta"].Success
+                ? match.Groups["eta"].Value.Trim()
+                : null;
+
+            progress?.Report(new ExportProgress(
+                Math.Clamp(percent, 0, 100),
+                speed,
+                eta));
+        }
+    }
+
+    private static readonly Regex DownloadProgressPatternRegex = new(
+        @"\[download\]\s+(?<percent>\d+(?:\.\d+)?)%.*?(?:\bat\s+(?<speed>.+?)\s+ETA\s+(?<eta>\S+))?",
+        RegexOptions.Compiled);
 
     internal static IReadOnlyList<string> GetSearchArguments(string target, int skip, int limit) =>
     [
