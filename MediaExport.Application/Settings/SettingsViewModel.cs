@@ -43,9 +43,11 @@ public sealed partial class SettingsViewModel : ObservableObject
                 new Uri("https://github.com/yt-dlp/yt-dlp"),
                 new Uri("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe")),
             new("ffmpeg", "FFmpeg", "ffmpeg", "-version", new Uri("https://ffmpeg.org"),
-                new Uri("https://github.com/FFmpeg/FFmpeg"), DownloadUri: null),
-            new("ffprobe", "FFprobe", "ffprobe", "-version", new Uri("https://ffmpeg.org/ffprobe.html"),
-                new Uri("https://github.com/FFmpeg/FFmpeg"), DownloadUri: null)
+                new Uri("https://github.com/FFmpeg/FFmpeg"),
+                new Uri("https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip")),
+            new("deno", "Deno", "deno", "--version", new Uri("https://deno.land"),
+                new Uri("https://github.com/denoland/deno"), 
+                new Uri("https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-pc-windows-msvc.zip"))
         ];
         foreach (var tool in tools)
             EnsureToolSettings(tool);
