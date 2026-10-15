@@ -47,12 +47,11 @@ public class ToolViewModelTests
     }
 
     [Test]
-    public async Task Missing_tool_exposes_only_install()
+    public async Task Refresh_exposes_actions_for_missing_external_and_managed_tools()
     {
         var row = CreateRow();
 
         await row.RefreshCommand.ExecuteAsync(null);
-
         Assert.Multiple(() =>
         {
             Assert.That(row.IsMissing, Is.True);
@@ -62,16 +61,8 @@ public class ToolViewModelTests
             Assert.That(row.CanRemove, Is.False);
             Assert.That(row.SourceText, Is.EqualTo("Not found in MediaExport's tools or on PATH"));
         });
-    }
-
-    [Test]
-    public async Task External_tool_offers_a_managed_copy_without_management_actions()
-    {
         var external = _temporary.CreateFile(_externalFolder, "tool.exe");
-        var row = CreateRow();
-
         await row.RefreshCommand.ExecuteAsync(null);
-
         Assert.Multiple(() =>
         {
             Assert.That(row.Installation, Is.EqualTo(new ToolInstallation(Path.GetFullPath(external), ToolOrigin.External)));
@@ -83,16 +74,8 @@ public class ToolViewModelTests
             Assert.That(row.SourceText, Does.Contain("installed outside MediaExport"));
             Assert.That(row.SourceText, Does.Contain("Updates and removal are handled where it was installed"));
         });
-    }
-
-    [Test]
-    public async Task Managed_tool_exposes_update_and_remove()
-    {
         var managed = SeedManaged("old");
-        var row = CreateRow();
-
         await row.RefreshCommand.ExecuteAsync(null);
-
         Assert.Multiple(() =>
         {
             Assert.That(row.Installation, Is.EqualTo(new ToolInstallation(Path.GetFullPath(managed), ToolOrigin.Managed)));
@@ -101,23 +84,6 @@ public class ToolViewModelTests
             Assert.That(row.CanUpdate, Is.True);
             Assert.That(row.CanRemove, Is.True);
             Assert.That(row.SourceText, Does.StartWith("Installed by MediaExport"));
-        });
-    }
-
-    [Test]
-    public async Task Refresh_reports_an_inspection_failure_instead_of_a_healthy_tool()
-    {
-        _temporary.CreateFile(_externalFolder, "tool.exe");
-        _process.Failure = new IOException("cannot start");
-        var row = CreateRow();
-
-        await row.RefreshCommand.ExecuteAsync(null);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(row.HasError, Is.True);
-            Assert.That(row.IsHealthy, Is.False);
-            Assert.That(row.Error, Does.Contain("Couldn't inspect Tool"));
         });
     }
 
@@ -136,6 +102,8 @@ public class ToolViewModelTests
             Assert.That(row.Version, Is.Null);
             Assert.That(row.VersionText, Is.EqualTo("Installed"));
             Assert.That(row.HasError, Is.True);
+            Assert.That(row.IsHealthy, Is.False);
+            Assert.That(row.Error, Does.Contain("Couldn't inspect Tool"));
         });
     }
 

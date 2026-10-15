@@ -68,8 +68,6 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         return ReadCreator(json);
     }
 
-
-
     public async Task<IReadOnlyList<string>> DownloadAsync(
         string sourceUrl,
         ExportOptions options,
@@ -117,6 +115,9 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         var installation = tools.Find(Executable)
             ?? throw new InvalidOperationException(
                 "yt-dlp isn't installed. Install it in Settings.");
+        var ffmpeg = tools.Find("ffmpeg")
+            ?? throw new InvalidOperationException(
+                "FFmpeg isn't installed. Install it in Settings.");
 
         var outputFolder = Path.GetFullPath(options.OutputFolder);
         Directory.CreateDirectory(outputFolder);
@@ -130,68 +131,13 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8
         };
-
-        string[] commonArguments =
-        [
-            "--ignore-config",
-        "--no-playlist",
-        "--no-warnings",
-        "--encoding", "utf-8",
-        "--newline",
-        "--progress",
-        "--paths", outputFolder,
-        "--output", "%(title)s [%(id)s].%(ext)s",
-        "--print", "after_move:filepath"
-        ];
-
-        foreach (var argument in commonArguments)
+        foreach (var argument in GetDownloadArguments(
+                     sourceUrl,
+                     options,
+                     Path.GetDirectoryName(ffmpeg.Path)!))
+        {
             startInfo.ArgumentList.Add(argument);
-
-        if (isAudio)
-        {
-            startInfo.ArgumentList.Add("--extract-audio");
-
-            startInfo.ArgumentList.Add("--audio-format");
-            startInfo.ArgumentList.Add(format);
-
-            // WAV and FLAC are lossless formats, so don't apply the lossy-format bitrate selection to them.
-            if (format is "mp3" or "m4a")
-            {
-                startInfo.ArgumentList.Add("--audio-quality");
-                startInfo.ArgumentList.Add(
-                    $"{options.AudioBitrateKbps}K");
-            }
         }
-        else
-        {
-            var formatSelector = options.VideoHeight switch
-            {
-                1080 => "bestvideo*[height<=1080]+bestaudio/best[height<=1080]",
-                720 => "bestvideo*[height<=720]+bestaudio/best[height<=720]",
-                480 => "bestvideo*[height<=480]+bestaudio/best[height<=480]",
-                _ => "bestvideo*+bestaudio/best"
-            };
-
-            startInfo.ArgumentList.Add("--format");
-            startInfo.ArgumentList.Add(formatSelector);
-
-            // Ensure the exported video uses the selected container.
-            // FFmpeg is required for recoding and stream merging.
-            startInfo.ArgumentList.Add("--recode-video");
-            startInfo.ArgumentList.Add(format);
-        }
-
-        // Use the managed FFmpeg installation when available.
-        var ffmpeg = tools.Find("ffmpeg");
-
-        if (ffmpeg is not null)
-        {
-            startInfo.ArgumentList.Add("--ffmpeg-location");
-            startInfo.ArgumentList.Add(
-                Path.GetDirectoryName(ffmpeg.Path)!);
-        }
-
-        startInfo.ArgumentList.Add(sourceUrl);
 
         using var process = Start(startInfo);
 
@@ -267,6 +213,54 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         return existingFiles;
     }
 
+    internal static IReadOnlyList<string> GetDownloadArguments(
+        string sourceUrl,
+        ExportOptions options,
+        string ffmpegFolder)
+    {
+        var format = options.Format.Trim().ToLowerInvariant();
+        var isAudio = format is "mp3" or "wav" or "flac" or "m4a";
+        var arguments = new List<string>
+        {
+            "--ignore-config",
+            "--no-playlist",
+            "--no-warnings",
+            "--encoding", "utf-8",
+            "--newline",
+            "--progress",
+            "--paths", Path.GetFullPath(options.OutputFolder),
+            "--output", "%(title)s [%(id)s].%(ext)s",
+            "--print", "after_move:filepath"
+        };
+
+        if (isAudio)
+        {
+            arguments.AddRange(["--extract-audio", "--audio-format", format]);
+            if (format is "mp3" or "m4a")
+                arguments.AddRange(["--audio-quality", $"{options.AudioBitrateKbps}K"]);
+        }
+        else
+        {
+            var height = options.VideoHeight == 0 ? "" : $"[height<={options.VideoHeight}]";
+            // Prefer streams already suited to the requested container. Remuxing then stays fast and fails
+            // clearly when incompatible codecs remain, instead of silently performing a lengthy re-encode.
+            var selector = format switch
+            {
+                "mp4" => $"bestvideo*[ext=mp4]{height}+bestaudio[ext=m4a]/best[ext=mp4]{height}/bestvideo*{height}+bestaudio/best{height}",
+                "webm" => $"bestvideo*[ext=webm]{height}+bestaudio[ext=webm]/best[ext=webm]{height}/bestvideo*{height}+bestaudio/best{height}",
+                _ => $"bestvideo*{height}+bestaudio/best{height}"
+            };
+            arguments.AddRange([
+                "--format", selector,
+                "--merge-output-format", format,
+                "--remux-video", format
+            ]);
+        }
+
+        arguments.AddRange(["--ffmpeg-location", ffmpegFolder, sourceUrl]);
+        return arguments;
+    }
+
     private static async Task ReadOutputAsync(
         StreamReader reader,
         List<string> exportedFiles,
@@ -292,40 +286,34 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
 
             errors.Add(line);
 
-            // Typical yt-dlp output:
-            // [download]  42.5% of ... at 1.2MiB/s ETA 00:10
-            var match = DownloadProgressPatternRegex.Match(line);
-
-            if (!match.Success)
-                continue;
-
-            if (!double.TryParse(
-                    match.Groups["percent"].Value,
-                    NumberStyles.Float,
-                    CultureInfo.InvariantCulture,
-                    out var percent))
-            {
-                continue;
-            }
-
-            var speed = match.Groups["speed"].Success
-                ? match.Groups["speed"].Value.Trim()
-                : null;
-
-            var eta = match.Groups["eta"].Success
-                ? match.Groups["eta"].Value.Trim()
-                : null;
-
-            progress?.Report(new ExportProgress(
-                Math.Clamp(percent, 0, 100),
-                speed,
-                eta));
+            if (ReadProgress(line) is { } value)
+                progress?.Report(value);
         }
     }
 
-    private static readonly Regex DownloadProgressPatternRegex = new(
-        @"\[download\]\s+(?<percent>\d+(?:\.\d+)?)%.*?(?:\bat\s+(?<speed>.+?)\s+ETA\s+(?<eta>\S+))?",
-        RegexOptions.Compiled);
+    internal static ExportProgress? ReadProgress(string line)
+    {
+        var percentage = DownloadPercentagePattern().Match(line);
+        if (!percentage.Success || !double.TryParse(
+                percentage.Groups["percent"].Value,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var percent))
+        {
+            return null;
+        }
+
+        var details = DownloadDetailsPattern().Match(line);
+        var speed = details.Success ? details.Groups["speed"].Value : null;
+        var eta = details.Success ? details.Groups["eta"].Value : null;
+        return new ExportProgress(Math.Clamp(percent, 0, 100), speed, eta);
+    }
+
+    [GeneratedRegex(@"^\[download\]\s+(?<percent>\d+(?:\.\d+)?)%")]
+    private static partial Regex DownloadPercentagePattern();
+
+    [GeneratedRegex(@"\bat\s+(?<speed>\S+)\s+ETA\s+(?<eta>\S+)")]
+    private static partial Regex DownloadDetailsPattern();
 
     internal static IReadOnlyList<string> GetSearchArguments(string target, int skip, int limit) =>
     [
