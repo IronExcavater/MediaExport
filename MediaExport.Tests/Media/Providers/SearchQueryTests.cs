@@ -21,19 +21,15 @@ public class SearchQueryTests
         });
     }
 
-    [TestCase("https://example.com/watch", TestName = "A link is not a term")]
-    [TestCase("creator:someone", TestName = "A label nobody knows stays as words")]
-    [TestCase("source:", TestName = "A term without a value stays as words")]
-    [TestCase("12:30", TestName = "A time is not a term")]
-    public void AnythingElseStaysInTheText(string text)
+    [Test]
+    public void AnythingElseStaysInTheText()
     {
-        var search = SearchQuery.Parse(text, IsSource);
-
-        Assert.Multiple(() =>
+        foreach (var text in new[] { "https://example.com/watch", "creator:someone", "source:", "12:30" })
         {
+            var search = SearchQuery.Parse(text, IsSource);
             Assert.That(search.Text, Is.EqualTo(text));
             Assert.That(search.Terms, Is.Empty);
-        });
+        }
     }
 
     [Test]
@@ -89,40 +85,49 @@ public class SearchQueryTests
         Assert.That(search.ToSearchText(), Is.EqualTo("study \"lofi beats\" -\"live\" \"Chillhop\""));
     }
 
-    [TestCase("90s", 90)]
-    [TestCase("3m", 180)]
-    [TestCase("1h30m", 5400)]
-    [TestCase("4", 240, TestName = "A bare number is minutes")]
-    [TestCase("1:30", 5400, TestName = "A colon is between hours and minutes")]
-    [TestCase("1h 30m", 5400, TestName = "Spaces don't matter")]
-    public void ALengthIsReadInHoursMinutesAndSeconds(string written, int seconds)
+    [Test]
+    public void ALengthIsReadInHoursMinutesAndSeconds()
     {
-        Assert.That(SearchQuery.ReadLength(written), Is.EqualTo(TimeSpan.FromSeconds(seconds)));
+        Assert.Multiple(() =>
+        {
+            Assert.That(SearchQuery.ReadLength("90s"), Is.EqualTo(TimeSpan.FromSeconds(90)));
+            Assert.That(SearchQuery.ReadLength("3m"), Is.EqualTo(TimeSpan.FromMinutes(3)));
+            Assert.That(SearchQuery.ReadLength("1h30m"), Is.EqualTo(TimeSpan.FromMinutes(90)));
+            Assert.That(SearchQuery.ReadLength("4"), Is.EqualTo(TimeSpan.FromMinutes(4)));
+            Assert.That(SearchQuery.ReadLength("1:30"), Is.EqualTo(TimeSpan.FromMinutes(90)));
+            Assert.That(SearchQuery.ReadLength("1h 30m"), Is.EqualTo(TimeSpan.FromMinutes(90)));
+        });
     }
 
-    [TestCase("duration", "3m..10m", true)]
-    [TestCase("duration", "3m..", true, TestName = "A range may have only its lower end")]
-    [TestCase("duration", "..10m", true, TestName = "A range may have only its upper end")]
-    [TestCase("duration", "..", false, TestName = "A range needs an end")]
-    [TestCase("duration", "soon..10m", false, TestName = "An end must be readable")]
-    [TestCase("duration", "10m..3m", false, TestName = "The ends must leave something between them")]
-    [TestCase("published", "2024..2025-06", true)]
-    [TestCase("published", "June..", false)]
-    public void ARangeIsValidWhenItsEndsCanBeReadAndLeaveRoom(string label, string value, bool isValid)
+    [Test]
+    public void ARangeIsValidWhenItsEndsCanBeReadAndLeaveRoom()
     {
-        Assert.That(SearchQuery.IsValid(new SearchTerm(label, value)), Is.EqualTo(isValid));
+        Assert.Multiple(() =>
+        {
+            Assert.That(SearchQuery.IsValid(new SearchTerm("duration", "3m..10m")), Is.True);
+            Assert.That(SearchQuery.IsValid(new SearchTerm("duration", "3m..")), Is.True);
+            Assert.That(SearchQuery.IsValid(new SearchTerm("duration", "..10m")), Is.True);
+            Assert.That(SearchQuery.IsValid(new SearchTerm("duration", "..")), Is.False);
+            Assert.That(SearchQuery.IsValid(new SearchTerm("duration", "soon..10m")), Is.False);
+            Assert.That(SearchQuery.IsValid(new SearchTerm("duration", "10m..3m")), Is.False);
+            Assert.That(SearchQuery.IsValid(new SearchTerm("published", "2024..2025-06")), Is.True);
+            Assert.That(SearchQuery.IsValid(new SearchTerm("published", "June..")), Is.False);
+        });
     }
 
-    [TestCase("duration", "1:30", "1h30m")]
-    [TestCase("duration", "90", "1h30m")]
-    [TestCase("duration", "90s", "1m30s")]
-    [TestCase("duration", "soon", "soon", TestName = "What can't be read is left for the range to be turned down")]
-    [TestCase("published", "2024", "2024", TestName = "A year stays a year")]
-    [TestCase("published", "1 June 2024", "2024-06-01")]
-    [TestCase("published", "", "")]
-    public void AnEndIsWrittenTheStandardWayHoweverItWasTyped(string label, string typed, string written)
+    [Test]
+    public void AnEndIsWrittenTheStandardWayHoweverItWasTyped()
     {
-        Assert.That(SearchQuery.NormalizeEnd(label, typed), Is.EqualTo(written));
+        Assert.Multiple(() =>
+        {
+            Assert.That(SearchQuery.NormalizeEnd("duration", "1:30"), Is.EqualTo("1h30m"));
+            Assert.That(SearchQuery.NormalizeEnd("duration", "90"), Is.EqualTo("1h30m"));
+            Assert.That(SearchQuery.NormalizeEnd("duration", "90s"), Is.EqualTo("1m30s"));
+            Assert.That(SearchQuery.NormalizeEnd("duration", "soon"), Is.EqualTo("soon"));
+            Assert.That(SearchQuery.NormalizeEnd("published", "2024"), Is.EqualTo("2024"));
+            Assert.That(SearchQuery.NormalizeEnd("published", "1 June 2024"), Is.EqualTo("2024-06-01"));
+            Assert.That(SearchQuery.NormalizeEnd("published", ""), Is.Empty);
+        });
     }
 
     [Test]

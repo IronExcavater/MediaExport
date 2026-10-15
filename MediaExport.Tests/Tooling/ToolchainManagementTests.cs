@@ -124,23 +124,19 @@ public class ToolchainManagementTests
     }
 
     [Test]
-    public void Update_rejects_an_external_copy()
-    {
-        _temporary.CreateFile(_externalFolder, "yt-dlp.exe");
-
-        Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await CreateService().UpdateAsync("yt-dlp", DownloadUri));
-        Assert.That(_http.RequestCount, Is.Zero);
-    }
-
-    [Test]
-    public void Remove_rejects_an_external_copy()
+    public void Management_rejects_an_external_copy()
     {
         var external = _temporary.CreateFile(_externalFolder, "yt-dlp.exe");
 
         Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await CreateService().UpdateAsync("yt-dlp", DownloadUri));
+        Assert.ThrowsAsync<InvalidOperationException>(
             async () => await CreateService().RemoveAsync("yt-dlp"));
-        Assert.That(File.Exists(external), Is.True);
+        Assert.Multiple(() =>
+        {
+            Assert.That(_http.RequestCount, Is.Zero);
+            Assert.That(File.Exists(external), Is.True);
+        });
     }
 
     [Test]

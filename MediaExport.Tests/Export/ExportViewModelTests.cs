@@ -7,6 +7,7 @@ using MediaExport.Core.Media.Models;
 using MediaExport.Core.Media.Providers;
 using MediaExport.Core.Settings;
 using MediaExport.Export;
+using MediaExport.Tests.Support;
 
 namespace MediaExport.Tests.Export;
 
@@ -69,11 +70,75 @@ public class ExportViewModelTests
         });
     }
 
-    private static ExportViewModel CreateViewModel(IEnumerable<IMediaSearchProvider> providers)
+    [Test]
+    public void Selected_folder_is_persisted_and_restored()
     {
-        var settings = new SettingsStore(null);
-        var activity = new ActivityViewModel(new UnusedDownloader(), settings);
+        using var temporary = new TemporaryDirectory();
+        var path = Path.Combine(temporary.Path, "settings.json");
+        var folder = temporary.CreateDirectory("exports");
+        var export = CreateViewModel([], new SettingsStore(path));
+
+        export.SelectedOutputFolder = folder;
+        var restored = CreateViewModel([], new SettingsStore(path));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(new SettingsStore(path).Current.ExportFolder, Is.EqualTo(folder));
+            Assert.That(restored.SelectedOutputFolder, Is.EqualTo(folder));
+        });
+    }
+
+    [Test]
+    public void Export_queues_the_selected_video_and_audio_options()
+    {
+        var downloader = new CapturingDownloader();
+        var export = CreateViewModel([], downloader: downloader);
+        export.Open(Media);
+        export.SelectedVideoResolution = "720p";
+        export.SelectedFormat = "webm";
+        export.ExportCommand.Execute(null);
+        var video = downloader.Options.Single();
+
+        export.SelectedExportMode = "Audio only";
+        export.SelectedFormat = "m4a";
+        export.SelectedAudioBitrate = "320 kbps";
+        export.ExportCommand.Execute(null);
+        var audio = downloader.Options.Last();
+        export.Open(Media with { Kind = MediaKind.Audio });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(video, Is.EqualTo(new ExportOptions("webm", export.SelectedOutputFolder, 192, 720)));
+            Assert.That(audio, Is.EqualTo(new ExportOptions("m4a", export.SelectedOutputFolder, 320, 0)));
+            Assert.That(export.ExportModes, Is.EqualTo(new[] { "Audio only" }));
+            Assert.That(export.SelectedExportMode, Is.EqualTo("Audio only"));
+            Assert.That(export.SelectedFormat, Is.EqualTo("mp3"));
+        });
+    }
+
+    private static ExportViewModel CreateViewModel(
+        IEnumerable<IMediaSearchProvider> providers,
+        SettingsStore? settings = null,
+        IMediaDownloader? downloader = null)
+    {
+        settings ??= new SettingsStore(null);
+        var activity = new ActivityViewModel(downloader ?? new UnusedDownloader(), settings);
         return new ExportViewModel(activity, settings, providers);
+    }
+
+    private sealed class CapturingDownloader : IMediaDownloader
+    {
+        public List<ExportOptions> Options { get; } = [];
+
+        public Task<IReadOnlyList<string>> DownloadAsync(
+            string sourceUrl,
+            ExportOptions options,
+            IProgress<ExportProgress>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            Options.Add(options);
+            return Task.FromResult<IReadOnlyList<string>>([]);
+        }
     }
 
     private sealed class UnusedDownloader : IMediaDownloader
