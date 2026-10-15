@@ -35,8 +35,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         // Initialize theme from settings
         ThemeIndex = (int)_settings.Current.Theme;
 
-        // ffmpeg and ffprobe come together in an archive, which the app can't unpack yet, so only yt-dlp has
-        // a file to install from.
         ToolInfo[] tools =
         [
             new("yt-dlp", "yt-dlp", "yt-dlp", "--version", new Uri("https://github.com/yt-dlp/yt-dlp#readme"),

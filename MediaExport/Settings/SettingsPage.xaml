@@ -46,7 +46,7 @@
                                 <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="Theme" />
                                 <ComboBox
                                     Grid.Column="2"
-                                    MinWidth="200"
+                                    MinWidth="150"
                                     VerticalAlignment="Center"
                                     AutomationProperties.Name="Theme"
                                     ItemsSource="{x:Bind ViewModel.ThemeOptions}"
@@ -238,7 +238,9 @@
                         </ItemsControl>
                     </Expander>                    
                     <TextBlock Style="{StaticResource SettingsHeaderStyle}" Text="About" />
-                    <Border Style="{StaticResource SettingsGroupStyle}">
+                    <!-- The links might not work if not logged into github as repo is currently private? -->
+                    <Border Style="{StaticResource SettingsGroupStyle}"
+                        Height="80">
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -253,6 +255,7 @@
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock>
                                     <Run FontWeight="SemiBold" Text="MediaExport" />
+                                    <!-- Version is hard coded.  couldn't use "using Windows.ApplicationModel" in the view model?;-->
                                     <Run Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="1.0.0" />
                                 </TextBlock>
                                 <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="By Niclas Rogulski, Andrew Shillabeer and Ezekiel Paterno" />
@@ -261,7 +264,32 @@
                                 Grid.Column="2"
                                 VerticalAlignment="Center"
                                 Orientation="Horizontal"
-                                Spacing="4">
+                                Spacing="4"
+                                Margin="0,0,15,0">                          
+                                <Button
+                                    AutomationProperties.Name="Report a problem"
+                                    Click="Link_Click"
+                                    Style="{StaticResource ToolIconButtonStyle}"
+                                    Tag="https://github.com/IronExcavater/MediaExport"
+                                    ToolTipService.ToolTip="Report a problem">
+                                    <FontIcon FontSize="14" Glyph="&#xEBE8;" />
+                                </Button>
+                                <Button
+                                    AutomationProperties.Name="Source code"
+                                    Click="Link_Click"
+                                    Style="{StaticResource ToolIconButtonStyle}"
+                                    Tag="https://github.com/IronExcavater/MediaExport/issues/new"
+                                    ToolTipService.ToolTip="Source code">
+                                    <FontIcon FontSize="14" Glyph="&#xE943;" />
+                                </Button>
+                                <Button
+                                    AutomationProperties.Name="Licence"
+                                    Click="Link_Click"
+                                    Style="{StaticResource ToolIconButtonStyle}"
+                                    Tag="https://github.com/IronExcavater/MediaExport/blob/main/LICENSE"
+                                    ToolTipService.ToolTip="Licence">
+                                    <FontIcon FontSize="14" Glyph="&#xE8A5;" />
+                                </Button>
                             </StackPanel>
                         </Grid>
 

@@ -25,7 +25,16 @@ public sealed partial class SettingsPage : Page
     // A tool's link button carries the link as its Tag, and it opens in the browser.
     private async void Link_Click(object sender, RoutedEventArgs args)
     {
-        var link = (Uri)((FrameworkElement)sender).Tag;
-        await Launcher.LaunchUriAsync(link);
+        if (((FrameworkElement)sender).Tag is Uri uri)
+        {
+            await Launcher.LaunchUriAsync(uri);
+            return;
+        }
+
+        if (((FrameworkElement)sender).Tag is string s &&
+            Uri.TryCreate(s, UriKind.Absolute, out var parsed))
+        {
+            await Launcher.LaunchUriAsync(parsed);
+        }
     }
 }
