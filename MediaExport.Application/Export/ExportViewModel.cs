@@ -201,6 +201,15 @@ public sealed partial class ExportViewModel : ObservableObject
         Opened?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Clears the media from the Export page without removing it from Recently viewed.</summary>
+    public void Close()
+    {
+        _reading?.Cancel();
+        _reading = null;
+        IsLoading = false;
+        Media = null;
+    }
+
     /// <summary>Opens the media a link is to. The page shows at once, and the media when the link has been read.</summary>
     /// <returns>Why the link couldn't be opened, or <c>null</c> if it was, or if a newer link took its place.</returns>
     public async Task<string?> OpenLinkAsync(Uri link)

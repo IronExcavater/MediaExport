@@ -5,12 +5,6 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 
 namespace MediaExport.Settings;
-// in seporate file to keep the settings model separate from the UI 
-public interface IThemeService
-{
-    AppTheme CurrentTheme { get; }
-    void Apply(AppTheme theme);
-}
 
 // Gets the current theme from the settings and applies it to the app
 public sealed class ThemeService(SettingsStore settings) : IThemeService

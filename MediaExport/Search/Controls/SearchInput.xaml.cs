@@ -42,6 +42,8 @@ public sealed partial class SearchInput : UserControl
 
     private readonly DispatcherQueueTimer _debounceTimer;
     private readonly PointerEventHandler _windowPressed;
+    private string? _message;
+    private bool _isResultsListEnabled = true;
 
     public SearchInput()
     {
@@ -93,10 +95,10 @@ public sealed partial class SearchInput : UserControl
     /// <summary>Something to tell the user under the field, such as why a link couldn't be opened. Typing clears it.</summary>
     public string? Message
     {
-        get;
+        get => _message;
         set
         {
-            field = value;
+            _message = value;
             messageText.Text = value ?? string.Empty;
             UpdateResultsPopup();
         }
@@ -105,13 +107,13 @@ public sealed partial class SearchInput : UserControl
     /// <summary>Whether the results may be listed under the field. A page that shows them itself turns this off.</summary>
     public bool IsResultsListEnabled
     {
-        get;
+        get => _isResultsListEnabled;
         set
         {
-            field = value;
+            _isResultsListEnabled = value;
             UpdateResultsPopup();
         }
-    } = true;
+    }
 
     // Asking only for MinWidth keeps TitleBar stretching the field, which it stops once content wants all the space.
     protected override Size MeasureOverride(Size availableSize)
