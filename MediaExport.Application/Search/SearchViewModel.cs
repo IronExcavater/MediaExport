@@ -246,14 +246,17 @@ public sealed partial class SearchViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Summary))]
+    [NotifyPropertyChangedFor(nameof(Title))]
     public partial bool IsSearching { get; private set; }
 
     /// <summary>Explains an empty result list (nothing found, or an error); otherwise <c>null</c>.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Summary))]
+    [NotifyPropertyChangedFor(nameof(Title))]
+    [NotifyPropertyChangedFor(nameof(EmptyStateMessage))]
     public partial string? Message { get; private set; }
 
-    /// <summary>What the results are: how they are ranked, what was searched for and what narrows them.</summary>
+    /// <summary>The query whose results are shown, or the empty-result heading for that query.</summary>
     public string Title
     {
         get
@@ -262,47 +265,51 @@ public sealed partial class SearchViewModel : ObservableObject
             if (SearchQuery.ReadLink(search.Text) is not null)
                 return "Playlist";
 
-            var exactTerms = search.Terms.Where(term => term.Label == SearchQuery.ExactLabel);
-            var quoted = exactTerms.Select(term => $"\"{term.Value}\"");
-            var parts = quoted.Prepend(search.Text).Where(part => part.Length > 0);
-            var asked = string.Join(' ', parts);
-            var hasWords = asked.Length > 0;
+            var query = search.Text.Trim();
+            var foundNothing = !IsSearching
+                && Results.Count == 0
+                && Message?.StartsWith("No results", StringComparison.Ordinal) == true;
+            if (foundNothing)
+                return query.Length == 0 ? "No results" : $"No results for “{query}”";
 
-            var ranking = hasWords ? "Results" : "Popular";
-            var title = _shownSort == SearchSort.Views ? "Most viewed" : ranking;
-            if (hasWords)
-                title += $" for {asked}";
-
-            var author = search.Terms.FirstOrDefault(term => term.Label == SearchQuery.AuthorLabel)?.Value;
-            if (!string.IsNullOrEmpty(author))
-                title += $" by {author}";
-
-            // The other terms follow in the words of their tooltips.
-            var others = search.Terms.Where(term =>
-                term.Label is SearchQuery.ExcludeLabel or SearchQuery.DurationLabel or SearchQuery.PublishedLabel);
-            var explanations = others.Select(SearchTermText.Explain).Where(explanation => explanation.Length > 0);
-            foreach (var explanation in explanations)
-            {
-                var firstLetter = char.ToLowerInvariant(explanation[0]);
-                title += $", {firstLetter}{explanation[1..]}";
-            }
-
-            return title;
+            return query.Length == 0 ? "Popular" : query;
         }
     }
+
+    /// <summary>The sources, ranking and structured terms behind <see cref="Title"/>.</summary>
+    public string TermSummary
+    {
+        get
+        {
+            var parts = new List<string>();
+            parts.AddRange(_shownProviders.Select(provider => provider.DisplayName));
+            if (_shownSort == SearchSort.Views)
+                parts.Add("Most viewed");
+            parts.AddRange(_shownSearch.Terms
+                .Select(SearchTermText.Explain)
+                .Where(explanation => explanation.Length > 0));
+            return string.Join(" · ", parts);
+        }
+    }
+
+    /// <summary>Whether pagination belongs to a page that contains results.</summary>
+    public bool HasPages => Results.Count > 0;
+
+    /// <summary>Helpful empty-page text, without repeating the no-results heading.</summary>
+    public string EmptyStateMessage => Message?.StartsWith("No results", StringComparison.Ordinal) == true
+        ? "Try different words or remove a filter."
+        : Message ?? string.Empty;
 
     // The search and ranking the results are for, which Title describes.
     private SearchQuery _shownSearch = new(string.Empty, []);
     private SearchSort _shownSort;
+    private IReadOnlyList<IMediaSearchProvider> _shownProviders = [];
 
-    /// <summary>Which results are showing, or why there are none. Empty while a search is still going.</summary>
+    /// <summary>The range of results shown. Empty when there is no result page.</summary>
     public string Summary
     {
         get
         {
-            if (Message is not null)
-                return Message;
-
             if (IsSearching || Results.Count == 0)
                 return string.Empty;
 
@@ -420,6 +427,7 @@ public sealed partial class SearchViewModel : ObservableObject
         var query = search.ToSearchText();
         var page = Page;
         Results.Clear();
+        OnPropertyChanged(nameof(HasPages));
         if (page == 1)
             FirstPageResults.Clear();
         Message = null;
@@ -427,7 +435,9 @@ public sealed partial class SearchViewModel : ObservableObject
         SearchedQuery = query;
         _shownSearch = search;
         _shownSort = Sort;
+        _shownProviders = SelectedProviders.ToList();
         OnPropertyChanged(nameof(Title));
+        OnPropertyChanged(nameof(TermSummary));
 
         // A link to one item or to a creator is opened, not searched for. A link to a list is searched for what
         // the list holds, on the source it is a link to. An empty search is made all the same, for what is popular.
@@ -555,5 +565,7 @@ public sealed partial class SearchViewModel : ObservableObject
         var isLastPage = page == _lastPage;
         HasNextPage = found.Count >= ShareOfPage && !isLastPage;
         OnPropertyChanged(nameof(Summary));
+        OnPropertyChanged(nameof(HasPages));
+        OnPropertyChanged(nameof(Title));
     }
 }
