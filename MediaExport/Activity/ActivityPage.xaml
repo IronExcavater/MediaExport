@@ -30,18 +30,21 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid Margin="12,0,12,4">
-            <Button
-                HorizontalAlignment="Right"
-                VerticalAlignment="Center"
-                Command="{x:Bind ViewModel.ClearFinishedCommand}"
-                ToolTipService.ToolTip="Take every finished export off this list. The exported files are kept."
-                Visibility="{x:Bind ViewModel.HasJobs, Mode=OneWay}">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <FontIcon Glyph="&#xE894;" Style="{StaticResource FieldIconStyle}" />
-                    <TextBlock Text="Clear finished" />
-                </StackPanel>
-            </Button>
+        <Grid Margin="12,0,12,8" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center" Style="{StaticResource PageTitleStyle}" Text="Activity" />
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal" Spacing="6" Visibility="{x:Bind ViewModel.HasJobs, Mode=OneWay}">
+                <TextBlock VerticalAlignment="Center" Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind ViewModel.SelectedCount, Mode=OneWay}" />
+                <TextBlock VerticalAlignment="Center" Style="{StaticResource SecondaryTextStyle}" Text="selected" />
+                <Button Click="SelectAll_Click" Content="Select all" />
+                <Button Command="{x:Bind ViewModel.RetrySelectedCommand}" Content="Retry" />
+                <Button Command="{x:Bind ViewModel.CancelSelectedCommand}" Content="Cancel" />
+                <Button Command="{x:Bind ViewModel.RemoveSelectedCommand}" Content="Remove" />
+                <Button Click="ClearSelection_Click" Content="Clear" />
+            </StackPanel>
         </Grid>
 
         <controls:EmptyStateView
@@ -61,10 +64,12 @@
 
         <controls:EdgeFade Grid.Row="1">
             <ListView
+                x:Name="jobsList"
                 Padding="0,0,0,24"
                 controls:ScrollBarGutter.Mode="Auto"
                 ItemsSource="{x:Bind groupedJobs.View}"
-                SelectionMode="None">
+                SelectionChanged="JobsList_SelectionChanged"
+                SelectionMode="Extended">
                 <ListView.GroupStyle>
                     <GroupStyle HidesIfEmpty="True">
                         <GroupStyle.HeaderTemplate>
@@ -82,7 +87,17 @@
                 </ListView.GroupStyle>
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="local:ExportJob">
-                        <Grid ColumnSpacing="16">
+                        <Grid ColumnSpacing="16" Padding="4,2">
+                            <Grid.ContextFlyout>
+                                <MenuFlyout>
+                                    <MenuFlyoutItem Click="OpenFile_Click" Tag="{x:Bind}" Text="Open file" Visibility="{x:Bind IsCompleted, Mode=OneWay}" />
+                                    <MenuFlyoutItem Command="{x:Bind ShowInFolderCommand}" Text="Show in folder" Visibility="{x:Bind IsCompleted, Mode=OneWay}" />
+                                    <MenuFlyoutItem Click="Open_Click" Tag="{x:Bind}" Text="Export again…" />
+                                    <MenuFlyoutItem Click="CopyLink_Click" Tag="{x:Bind}" Text="Copy link" />
+                                    <MenuFlyoutSeparator />
+                                    <MenuFlyoutItem Click="Remove_Click" Tag="{x:Bind}" Text="Remove from activity" Visibility="{x:Bind IsFinished, Mode=OneWay}" />
+                                </MenuFlyout>
+                            </Grid.ContextFlyout>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
@@ -144,6 +159,7 @@
                                     HorizontalAlignment="Right"
                                     Style="{StaticResource SecondaryTextStyle}"
                                     Text="{x:Bind Detail, Mode=OneWay}" />
+                                <TextBlock HorizontalAlignment="Right" Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind ProgressDetail, Mode=OneWay}" />
                             </StackPanel>
 
                             <StackPanel
@@ -152,37 +168,20 @@
                                 Orientation="Horizontal"
                                 Spacing="2">
                                 <Button
-                                    AutomationProperties.Name="Show in folder"
                                     Command="{x:Bind ShowInFolderCommand}"
-                                    Style="{StaticResource RowIconButtonStyle}"
-                                    ToolTipService.ToolTip="Show in folder"
+                                    Content="Show in folder"
                                     Visibility="{x:Bind IsCompleted, Mode=OneWay}">
-                                    <FontIcon FontSize="12" Glyph="&#xE838;" />
                                 </Button>
                                 <Button
-                                    AutomationProperties.Name="Open on the Export page"
-                                    Click="Open_Click"
-                                    Style="{StaticResource RowIconButtonStyle}"
+                                    Click="Retry_Click"
+                                    Content="Retry"
                                     Tag="{x:Bind}"
-                                    ToolTipService.ToolTip="Open on the Export page">
-                                    <FontIcon FontSize="12" Glyph="&#xE896;" />
+                                    Visibility="{x:Bind CanRetry, Mode=OneWay}">
                                 </Button>
                                 <Button
-                                    AutomationProperties.Name="Cancel"
                                     Command="{x:Bind CancelCommand}"
-                                    Style="{StaticResource RowIconButtonStyle}"
-                                    ToolTipService.ToolTip="Cancel"
+                                    Content="Cancel"
                                     Visibility="{x:Bind IsActive, Mode=OneWay}">
-                                    <FontIcon FontSize="12" Glyph="&#xE71A;" />
-                                </Button>
-                                <Button
-                                    AutomationProperties.Name="Remove from the list"
-                                    Click="Remove_Click"
-                                    Style="{StaticResource RowIconButtonStyle}"
-                                    Tag="{x:Bind}"
-                                    ToolTipService.ToolTip="Remove from the list"
-                                    Visibility="{x:Bind IsFinished, Mode=OneWay}">
-                                    <FontIcon FontSize="10" Glyph="&#xE711;" />
                                 </Button>
                             </StackPanel>
 

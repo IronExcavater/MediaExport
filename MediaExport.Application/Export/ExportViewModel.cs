@@ -56,6 +56,7 @@ public sealed partial class ExportViewModel : ObservableObject
     private readonly ActivityViewModel _activity;
     private readonly SettingsStore _settings;
     private readonly IReadOnlyList<IMediaSearchProvider> _providers;
+    private readonly IMediaDownloader _downloader;
 
     // The link being read. A newer one replaces it, and what an older one finds is ignored.
     private CancellationTokenSource? _reading;
@@ -63,11 +64,13 @@ public sealed partial class ExportViewModel : ObservableObject
     public ExportViewModel(
         ActivityViewModel activity,
         SettingsStore settings,
-        IEnumerable<IMediaSearchProvider> providers)
+        IEnumerable<IMediaSearchProvider> providers,
+        IMediaDownloader downloader)
     {
         _activity = activity;
         _settings = settings;
         _providers = providers.ToList();
+        _downloader = downloader;
 
         if (!string.IsNullOrWhiteSpace(settings.Current.ExportFolder))
             SelectedOutputFolder = settings.Current.ExportFolder;
@@ -105,10 +108,21 @@ public sealed partial class ExportViewModel : ObservableObject
     /// <summary>Whether there is media to show, or will be once its link has been read.</summary>
     public bool IsOpen => Media is not null || IsLoading;
 
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ExportCommand))]
+    public partial bool IsInspecting { get; private set; }
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ExportCommand))]
+    public partial bool IsAvailable { get; private set; } = true;
+
+    [ObservableProperty]
+    public partial string? AvailabilityMessage { get; private set; }
+
     /// <summary>Raised when media is opened or a link starts being read, for the window to show the Export page.</summary>
     public event EventHandler? Opened;
 
-    private bool CanExport() => Media is not null;
+    private bool CanExport() => Media is not null && IsAvailable && !IsInspecting;
 
     partial void OnSelectedOutputFolderChanged(string value)
     {
@@ -176,14 +190,52 @@ public sealed partial class ExportViewModel : ObservableObject
         _activity.Start(Media!, options);
     }
 
-    public void Open(MediaSearchResult media)
+    public void Open(MediaSearchResult media, ExportOptions? options = null)
     {
         _reading?.Cancel();
         _reading = null;
         IsLoading = false;
         Media = media;
+        if (options is not null)
+            Restore(options);
         RecentlyViewed.Remember(new ViewedMedia(media));
+        _ = InspectAsync(media);
         Opened?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void Restore(ExportOptions options)
+    {
+        SelectedOutputFolder = options.OutputFolder;
+        var format = options.Format.ToLowerInvariant();
+        SelectedExportMode = AudioFormats.Contains(format) ? AudioOnlyModeName : VideoModeName;
+        SelectedFormat = format;
+        SelectedAudioBitrate = $"{options.AudioBitrateKbps} kbps";
+        SelectedVideoResolution = options.VideoHeight == 0 ? "Best available" : $"{options.VideoHeight}p";
+    }
+
+    private async Task InspectAsync(MediaSearchResult media)
+    {
+        IsInspecting = true;
+        IsAvailable = false;
+        AvailabilityMessage = null;
+        try
+        {
+            var availability = await _downloader.InspectAsync(media.SourceUrl);
+            if (Media != media)
+                return;
+            IsAvailable = availability.CanExport;
+            AvailabilityMessage = availability.Message;
+        }
+        catch (Exception exception)
+        {
+            if (Media == media)
+                AvailabilityMessage = exception.Message;
+        }
+        finally
+        {
+            if (Media == media)
+                IsInspecting = false;
+        }
     }
 
     /// <summary>Clears the media from the Export page without removing it from Recently viewed.</summary>
@@ -192,6 +244,8 @@ public sealed partial class ExportViewModel : ObservableObject
         _reading?.Cancel();
         _reading = null;
         IsLoading = false;
+        IsInspecting = false;
+        AvailabilityMessage = null;
         Media = null;
     }
 
@@ -216,6 +270,7 @@ public sealed partial class ExportViewModel : ObservableObject
             if (media is not null)
             {
                 RecentlyViewed.Remember(new ViewedMedia(media));
+                await InspectAsync(media);
                 return null;
             }
 

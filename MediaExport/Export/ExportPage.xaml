@@ -93,9 +93,8 @@
                         Grid.Column="1"
                         AutomationProperties.Name="Remove selected media"
                         Click="Close_Click"
-                        Style="{StaticResource RowIconButtonStyle}"
+                        Content="Remove media"
                         ToolTipService.ToolTip="Remove from the Export page">
-                        <FontIcon FontSize="12" Glyph="&#xE711;" />
                     </Button>
                 </Grid>
             </Grid>
@@ -119,7 +118,16 @@
                     VerticalScrollBarVisibility="Auto"
                     Visibility="{x:Bind converters:VisibleWhen.False(ViewModel.IsLoading), Mode=OneWay}">
 
-                    <StackPanel Padding="16" Spacing="18">
+                    <StackPanel Padding="20" Spacing="18">
+                        <ProgressRing HorizontalAlignment="Left" IsActive="{x:Bind ViewModel.IsInspecting, Mode=OneWay}" Visibility="{x:Bind ViewModel.IsInspecting, Mode=OneWay}" />
+                        <InfoBar
+                            IsClosable="False"
+                            IsOpen="{x:Bind converters:Is.NotBlank(ViewModel.AvailabilityMessage), Mode=OneWay}"
+                            Message="{x:Bind ViewModel.AvailabilityMessage, Mode=OneWay}"
+                            Severity="Warning"
+                            Title="Can’t export this media" />
+                        <ContentControl IsEnabled="{x:Bind ViewModel.IsAvailable, Mode=OneWay}">
+                            <StackPanel Spacing="18">
                         <StackPanel Spacing="6">
                             <TextBlock
                                 FontWeight="SemiBold"
@@ -250,6 +258,8 @@
                             </Grid>
                         </StackPanel>
 
+                            </StackPanel>
+                        </ContentControl>
                     </StackPanel>
                 </ScrollViewer>
 
