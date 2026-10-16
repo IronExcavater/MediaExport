@@ -63,6 +63,11 @@ public sealed partial class ActivityViewModel : ObservableObject
         SelectedJobs = jobs.Distinct().ToList();
         OnPropertyChanged(nameof(SelectedJobs));
         OnPropertyChanged(nameof(SelectedCount));
+        RefreshSelectionEligibility();
+    }
+
+    private void RefreshSelectionEligibility()
+    {
         OnPropertyChanged(nameof(CanRetrySelected));
         OnPropertyChanged(nameof(CanCancelSelected));
         OnPropertyChanged(nameof(CanRemoveSelected));
@@ -205,6 +210,7 @@ public sealed partial class ActivityViewModel : ObservableObject
         var job = (ExportJob)sender!;
         OnPropertyChanged(nameof(ActiveProgress));
         OnPropertyChanged(nameof(IsActiveProgressUnknown));
+        RefreshSelectionEligibility();
         if (args.PropertyName != nameof(ExportJob.State))
             return;
 

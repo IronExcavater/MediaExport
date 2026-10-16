@@ -171,13 +171,17 @@ public class ActivityViewModelTests
         downloader.Downloads[1].SetException(new InvalidOperationException("Failed"));
 
         activity.Select([active, failed]);
+        var eligibilityChanges = 0;
+        activity.CancelSelectedCommand.CanExecuteChanged += (_, _) => eligibilityChanges++;
+        downloader.Downloads[0].SetResult([]);
 
         Assert.Multiple(() =>
         {
             Assert.That(activity.SelectedCount, Is.EqualTo(2));
             Assert.That(activity.CanRetrySelected, Is.True);
-            Assert.That(activity.CanCancelSelected, Is.True);
+            Assert.That(activity.CanCancelSelected, Is.False);
             Assert.That(activity.CanRemoveSelected, Is.True);
+            Assert.That(eligibilityChanges, Is.GreaterThan(0));
         });
     }
 
@@ -212,5 +216,19 @@ public class ActivityViewModelTests
         Assert.That(nextRun.Jobs, Has.Count.EqualTo(1));
         Assert.That(nextRun.Jobs[0].IsCompleted, Is.True);
         Assert.That(headings, Is.EqualTo(new[] { "Exporting", "Today" }));
+    }
+
+    [Test]
+    public void A_persisted_drm_failure_remains_non_retryable_after_restart()
+    {
+        var settings = new SettingsStore(null);
+        settings.Current.History =
+        [
+            new ExportRecord(Media, Options, ExportOutcome.Failed, [], "Protected", DateTimeOffset.Now, ExportFailureKind.DrmProtected)
+        ];
+
+        var restored = new ActivityViewModel(new HeldDownloader(), settings).Jobs.Single();
+
+        Assert.That(restored.CanRetry, Is.False);
     }
 }

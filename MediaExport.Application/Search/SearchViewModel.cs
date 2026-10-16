@@ -435,19 +435,19 @@ public sealed partial class SearchViewModel : ObservableObject
         SearchedQuery = query;
         _shownSearch = search;
         _shownSort = Sort;
-        _shownProviders = SelectedProviders.ToList();
         OnPropertyChanged(nameof(Title));
-        OnPropertyChanged(nameof(TermSummary));
 
         // A link to one item or to a creator is opened, not searched for. A link to a list is searched for what
         // the list holds, on the source it is a link to. An empty search is made all the same, for what is popular.
         var link = SearchQuery.ReadLink(Query);
         var listProvider = link is null ? null : FindLinkProvider(link);
         var isList = listProvider?.GetLinkKind(link!) == LinkKind.List;
+        var providers = isList ? [listProvider!] : SelectedProviders.ToList();
+        _shownProviders = providers;
+        OnPropertyChanged(nameof(TermSummary));
         if (link is not null && !isList)
             return;
 
-        var providers = isList ? [listProvider!] : SelectedProviders.ToList();
         if (providers.Count == 0)
         {
             Message = "There are no sources to search.";

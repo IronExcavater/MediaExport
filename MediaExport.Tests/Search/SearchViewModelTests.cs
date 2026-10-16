@@ -229,8 +229,9 @@ public class SearchViewModelTests
     [Test]
     public async Task A_link_to_a_list_is_searched_and_one_to_a_creator_becomes_an_author_term()
     {
+        var other = new FakeProvider("other");
         var lists = new FakeProvider("lists") { LinkKind = LinkKind.List, Results = [Song] };
-        var search = new SearchViewModel([lists], new SearchCache(null)) { Query = "https://site.test/playlist" };
+        var search = new SearchViewModel([other, lists], new SearchCache(null)) { Query = "https://site.test/playlist" };
         await search.SearchAsync();
         var listed = search.Results.ToList();
 
@@ -243,6 +244,7 @@ public class SearchViewModelTests
             Assert.That(listed, Is.EqualTo(new[] { Song }));
             Assert.That(lists.Queries, Is.EqualTo(new[] { "list /playlist from 0" }));
             Assert.That(search.Title, Is.EqualTo("Playlist"));
+            Assert.That(search.TermSummary, Is.EqualTo("lists"));
             Assert.That(problem, Is.Null);
             Assert.That(byCreator.Terms, Is.EqualTo(new[] { new SearchTerm("author", "Lofi Girl") }));
             Assert.That(byCreator.Query, Is.Empty);
