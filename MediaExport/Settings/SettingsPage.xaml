@@ -30,9 +30,9 @@
             <Setter Property="Width" Value="32" />            
         </Style>
         <Style x:Key="DividerStyle" TargetType="Rectangle">
-            <Setter Property="Height" Value="0.5"/>
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Fill" Value="{ThemeResource DividerStrokeColorDefaultBrush}"/>
         </Style>
-
     </Page.Resources>
 
     <!-- Keeping the gutter at all times stops the centred settings from shifting when the scroll bar appears. -->
