@@ -78,11 +78,8 @@ public sealed partial class JustifiedLayout : NonVirtualizingLayout
                 }
             }
 
-            // The pictures are scaled so that the row ends at the edge. The last row is not stretched, or a lone item
-            // would fill the width.
-            var isLastRow = rowEnd == children.Count;
-            var scaleToFit = ScaleToFit(width, rowEnd - rowStart, shapes);
-            var scale = isLastRow ? Math.Min(1, scaleToFit) : scaleToFit;
+            // Every row follows the same width policy, including the final row, so no trailing row ends early.
+            var scale = ScaleToFit(width, rowEnd - rowStart, shapes);
             var pictureHeight = RowHeight * scale;
 
             double left = 0;

@@ -71,8 +71,9 @@ public class ToolViewModelTests
             Assert.That(row.InstallActionText, Is.EqualTo("Install managed copy"));
             Assert.That(row.CanUpdate, Is.False);
             Assert.That(row.CanRemove, Is.False);
-            Assert.That(row.SourceText, Does.Contain("installed outside MediaExport"));
-            Assert.That(row.SourceText, Does.Contain("Updates and removal are handled where it was installed"));
+            Assert.That(row.StatusText, Is.EqualTo("External"));
+            Assert.That(row.SourceText, Is.EqualTo("Updates are managed outside MediaExport."));
+            Assert.That(row.PathText, Is.EqualTo(Path.GetFullPath(external)));
         });
         var managed = SeedManaged("old");
         await row.RefreshCommand.ExecuteAsync(null);

@@ -52,6 +52,30 @@ public sealed partial class ActivityViewModel : ObservableObject
 
     public bool HasJobs => Jobs.Count > 0;
 
+    public IReadOnlyList<ExportJob> SelectedJobs { get; private set; } = [];
+    public int SelectedCount => SelectedJobs.Count;
+    public bool CanRetrySelected => SelectedJobs.Any(job => job.CanRetry);
+    public bool CanCancelSelected => SelectedJobs.Any(job => job.IsActive);
+    public bool CanRemoveSelected => SelectedJobs.Any(job => job.IsFinished);
+
+    public void Select(IEnumerable<ExportJob> jobs)
+    {
+        SelectedJobs = jobs.Distinct().ToList();
+        OnPropertyChanged(nameof(SelectedJobs));
+        OnPropertyChanged(nameof(SelectedCount));
+        RefreshSelectionEligibility();
+    }
+
+    private void RefreshSelectionEligibility()
+    {
+        OnPropertyChanged(nameof(CanRetrySelected));
+        OnPropertyChanged(nameof(CanCancelSelected));
+        OnPropertyChanged(nameof(CanRemoveSelected));
+        RetrySelectedCommand.NotifyCanExecuteChanged();
+        CancelSelectedCommand.NotifyCanExecuteChanged();
+        RemoveSelectedCommand.NotifyCanExecuteChanged();
+    }
+
     /// <summary>How many exports are waiting or running.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasActive))]
@@ -89,6 +113,41 @@ public sealed partial class ActivityViewModel : ObservableObject
     {
         job.CancelCommand.Execute(null);
         Jobs.Remove(job);
+    }
+
+    public void Retry(ExportJob job)
+    {
+        if (!job.Retry())
+            return;
+
+        job.PropertyChanged += Job_PropertyChanged;
+        ActiveCount++;
+        UpdateGroups();
+        SaveHistory();
+        StartNext();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRetrySelected))]
+    private void RetrySelected()
+    {
+        foreach (var job in SelectedJobs.Where(job => job.CanRetry).ToList())
+            Retry(job);
+        Select([]);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanCancelSelected))]
+    private void CancelSelected()
+    {
+        foreach (var job in SelectedJobs.Where(job => job.IsActive))
+            job.CancelCommand.Execute(null);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRemoveSelected))]
+    private void RemoveSelected()
+    {
+        foreach (var job in SelectedJobs.Where(job => job.IsFinished).ToList())
+            Remove(job);
+        Select([]);
     }
 
     private bool CanClearFinished() => Jobs.Any(job => job.IsFinished);
@@ -151,6 +210,7 @@ public sealed partial class ActivityViewModel : ObservableObject
         var job = (ExportJob)sender!;
         OnPropertyChanged(nameof(ActiveProgress));
         OnPropertyChanged(nameof(IsActiveProgressUnknown));
+        RefreshSelectionEligibility();
         if (args.PropertyName != nameof(ExportJob.State))
             return;
 

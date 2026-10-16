@@ -72,10 +72,13 @@ public sealed partial class SearchPage : Page
     // A pressed result opens in the Export page.
     private void Result_Click(object sender, RoutedEventArgs args)
     {
-        var button = (Button)sender;
+        var button = (MediaButton)sender;
         var export = App.Current.Services.GetRequiredService<ExportViewModel>();
         export.Open((MediaSearchResult)button.Tag);
     }
+
+    private void EditSearch_Click(object sender, RoutedEventArgs args) =>
+        ((MainWindow)App.Current.MainWindow).FocusSearch();
 
     // Results are cleared when a new search or page starts, which is when the view goes back to the top.
     private void Results_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs args)

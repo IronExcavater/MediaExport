@@ -35,10 +35,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         ToolchainService toolchain,
         SettingsStore settings,
         IThemeService themeService,
-        IFolderLauncher folderLauncher,
         SearchViewModel search,
         ExportViewModel export,
-        ActivityViewModel activity)
+        ActivityViewModel activity,
+        IFolderLauncher folderLauncher,
+        IAppMetadataProvider metadataProvider)
     {
         _toolchain = toolchain;
         _settings = settings;
@@ -46,7 +47,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         _folderLauncher = folderLauncher;
         _search = search;
         _export = export;
-        _activity = activity;
+        _activity = activity
+
+        App = metadataProvider.Get();
 
         // Initialize theme from settings
         ThemeIndex = (int)_settings.Current.Theme;
@@ -76,6 +79,9 @@ public sealed partial class SettingsViewModel : ObservableObject
                 NotifyHistoryState();
         };
     }
+
+    /// <summary>The app identity and correctly mapped project links shown in About.</summary>
+    public AppMetadata App { get; }
 
     // The Appearance group: the theme.
 

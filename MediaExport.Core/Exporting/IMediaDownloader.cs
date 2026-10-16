@@ -15,14 +15,44 @@ public sealed record ExportOptions(
     int VideoHeight = 0);
 
 /// <param name="Percent">From 0 to 100.</param>
+public enum ExportPhase
+{
+    Inspecting,
+    Downloading,
+    Merging,
+    Converting,
+    Completed
+}
+
 public sealed record ExportProgress(
-    double Percent,
+    double? Percent,
     string? Speed,
-    string? Eta);
+    string? Eta,
+    ExportPhase Phase = ExportPhase.Downloading);
+
+public enum ExportFailureKind
+{
+    Failed,
+    DrmProtected
+}
+
+public sealed class MediaExportException(ExportFailureKind kind, string message, Exception? innerException = null)
+    : InvalidOperationException(message, innerException)
+{
+    public ExportFailureKind Kind { get; } = kind;
+}
+
+public sealed record MediaAvailability(bool CanExport, ExportFailureKind? FailureKind = null, string? Message = null)
+{
+    public static MediaAvailability Available { get; } = new(true);
+}
 
 /// <summary>Exports media to one or more files.</summary>
 public interface IMediaDownloader
 {
+    Task<MediaAvailability> InspectAsync(string sourceUrl, CancellationToken cancellationToken = default) =>
+        Task.FromResult(MediaAvailability.Available);
+
     /// <returns>The full paths of the exported files.</returns>
     Task<IReadOnlyList<string>> DownloadAsync(
         string sourceUrl,
