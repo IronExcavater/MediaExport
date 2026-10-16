@@ -46,6 +46,7 @@ public sealed partial class ExportJob : ObservableObject
         FinishedAt = record.FinishedAt;
         Progress = record.Outcome == ExportOutcome.Completed ? 100 : 0;
         Status = record.Message;
+        FailureKind = record.FailureKind;
         State = record.Outcome switch
         {
             ExportOutcome.Completed => ExportJobState.Completed,
@@ -131,7 +132,7 @@ public sealed partial class ExportJob : ObservableObject
             ExportJobState.Failed => ExportOutcome.Failed,
             _ => ExportOutcome.Cancelled
         };
-        return new ExportRecord(Media, Options, outcome, Files, Status, FinishedAt ?? DateTimeOffset.Now);
+        return new ExportRecord(Media, Options, outcome, Files, Status, FinishedAt ?? DateTimeOffset.Now, FailureKind);
     }
 
     /// <summary>Runs the export to its end. It doesn't throw: a failure becomes the job's state and status.</summary>

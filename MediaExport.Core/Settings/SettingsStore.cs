@@ -43,7 +43,8 @@ public sealed record ExportRecord(
     ExportOutcome Outcome,
     IReadOnlyList<string> Files,
     string Message,
-    DateTimeOffset FinishedAt);
+    DateTimeOffset FinishedAt,
+    ExportFailureKind? FailureKind = null);
 
 /// <summary>Application settings persisted between runs.</summary>
 public sealed class AppSettings
