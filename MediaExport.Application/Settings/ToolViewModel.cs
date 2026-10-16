@@ -19,12 +19,12 @@ public sealed partial class ToolViewModel(ToolInfo tool, ToolchainService toolch
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsInstalled), nameof(IsExternal), nameof(IsManaged))]
     [NotifyPropertyChangedFor(nameof(IsHealthy), nameof(IsMissing), nameof(CanInstall), nameof(CanUpdate), nameof(CanRemove))]
-    [NotifyPropertyChangedFor(nameof(InstallActionText), nameof(VersionText), nameof(SourceText), nameof(RemoveTip))]
+    [NotifyPropertyChangedFor(nameof(InstallActionText), nameof(VersionText), nameof(StatusText), nameof(SourceText), nameof(PathText), nameof(RemoveTip))]
     [NotifyCanExecuteChangedFor(nameof(InstallCommand), nameof(UpdateCommand), nameof(RemoveCommand))]
     public partial ToolInstallation? Installation { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(VersionText))]
+    [NotifyPropertyChangedFor(nameof(VersionText), nameof(StatusText))]
     public partial string? Version { get; private set; }
 
     [ObservableProperty]
@@ -53,6 +53,8 @@ public sealed partial class ToolViewModel(ToolInfo tool, ToolchainService toolch
     public string InstallActionText => IsExternal ? "Install managed copy" : "Install";
 
     public string VersionText => IsInstalled ? Version ?? "Installed" : "Not installed";
+    public string StatusText => IsExternal ? "External" : VersionText;
+    public string PathText => Installation?.Path ?? SourceText;
 
     public string SourceText
     {
@@ -63,10 +65,9 @@ public sealed partial class ToolViewModel(ToolInfo tool, ToolchainService toolch
             if (Installation is null)
                 return "Not found in MediaExport's tools or on PATH";
             if (IsManaged)
-                return $"Installed by MediaExport at {Installation.Path}";
+                return "Installed by MediaExport.";
 
-            return $"Using a tool installed outside MediaExport at {Installation.Path}. "
-                + "Updates and removal are handled where it was installed.";
+            return "Updates are managed outside MediaExport.";
         }
     }
 

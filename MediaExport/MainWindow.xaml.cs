@@ -195,6 +195,9 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>Moves keyboard focus to the shared search field.</summary>
+    public void FocusSearch() => searchInput.FocusQueryBox();
+
     private void SearchInput_Submitted(object? sender, EventArgs args)
     {
         GoTo("Search");
@@ -214,7 +217,7 @@ public sealed partial class MainWindow : Window
 
     private void FocusSearch_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        searchInput.FocusQueryBox();
+        FocusSearch();
         args.Handled = true;
     }
 

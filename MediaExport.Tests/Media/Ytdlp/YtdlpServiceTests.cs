@@ -12,17 +12,42 @@ namespace MediaExport.Tests.Media.Ytdlp;
 public class YtdlpServiceTests
 {
     [Test]
-    public void Download_progress_includes_speed_and_eta()
+    public void Marked_progress_includes_phase_speed_and_eta_and_ignores_noise()
     {
-        var progress = YtdlpService.ReadProgress("[download]  42.5% of 10MiB at 1.2MiB/s ETA 00:10");
-        var finished = YtdlpService.ReadProgress("[download] 100% of 10MiB in 00:08");
+        var progress = YtdlpService.ReadProgress("ME_PROGRESS|downloading| 42.5%|1.2MiB/s|00:10");
+        var merging = YtdlpService.ReadProgress("ME_PROGRESS|merging|||");
+        var converting = YtdlpService.ReadProgress("ME_PROGRESS|converting|||");
 
         Assert.Multiple(() =>
         {
-            Assert.That(progress, Is.EqualTo(new ExportProgress(42.5, "1.2MiB/s", "00:10")));
-            Assert.That(finished, Is.EqualTo(new ExportProgress(100, null, null)));
+            Assert.That(progress, Is.EqualTo(new ExportProgress(42.5, "1.2MiB/s", "00:10", ExportPhase.Downloading)));
+            Assert.That(merging, Is.EqualTo(new ExportProgress(null, null, null, ExportPhase.Merging)));
+            Assert.That(converting, Is.EqualTo(new ExportProgress(null, null, null, ExportPhase.Converting)));
             Assert.That(YtdlpService.ReadProgress("not progress"), Is.Null);
         });
+    }
+
+    [Test]
+    public void Availability_is_blocked_only_when_every_format_is_drm_protected()
+    {
+        var blocked = YtdlpService.ReadAvailability("""{"formats":[{"format_id":"one","has_drm":true},{"format_id":"two","has_drm":true}]}""");
+        var available = YtdlpService.ReadAvailability("""{"formats":[{"format_id":"one","has_drm":true},{"format_id":"two","has_drm":false}]}""");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(blocked.CanExport, Is.False);
+            Assert.That(blocked.FailureKind, Is.EqualTo(ExportFailureKind.DrmProtected));
+            Assert.That(available.CanExport, Is.True);
+        });
+    }
+
+    [Test]
+    public void Drm_console_errors_become_a_typed_export_failure()
+    {
+        var failure = YtdlpService.NormalizeError("This video is DRM protected");
+
+        Assert.That(failure, Is.TypeOf<MediaExportException>());
+        Assert.That(((MediaExportException)failure).Kind, Is.EqualTo(ExportFailureKind.DrmProtected));
     }
 
     [Test]
@@ -78,6 +103,9 @@ public class YtdlpServiceTests
             Assert.That(ValueAfter(audio, "--audio-format"), Is.EqualTo("mp3"));
             Assert.That(ValueAfter(audio, "--audio-quality"), Is.EqualTo("320K"));
             Assert.That(ValueAfter(video, "--ffmpeg-location"), Is.EqualTo(@"C:\FFmpeg"));
+            Assert.That(video, Does.Contain("download:ME_PROGRESS|downloading|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s"));
+            Assert.That(video, Does.Contain("postprocess:ME_PROGRESS|merging|||"));
+            Assert.That(video, Does.Contain("after_move:ME_FILE|%(filepath)s"));
             Assert.That(video.Last(), Is.EqualTo("https://example.test/video"));
         });
     }

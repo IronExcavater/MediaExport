@@ -83,9 +83,19 @@
             SelectionMode="Extended">
             <ListView.ItemContainerStyle>
                 <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="BorderBrush" Value="Transparent" />
                     <Setter Property="Padding" Value="15,0" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="CornerRadius" Value="6" />
                 </Style>
             </ListView.ItemContainerStyle>
+            <ListView.Resources>
+                <StaticResource x:Key="ListViewItemBackgroundSelected" ResourceKey="SubtleFillColorSecondaryBrush" />
+                <StaticResource x:Key="ListViewItemBackgroundSelectedPointerOver" ResourceKey="SubtleFillColorTertiaryBrush" />
+                <StaticResource x:Key="ListViewItemBackgroundSelectedPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                <StaticResource x:Key="ListViewItemBorderBrushSelected" ResourceKey="SubtleFillColorTransparentBrush" />
+            </ListView.Resources>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="providers:IMediaSearchProvider">
                     <StackPanel

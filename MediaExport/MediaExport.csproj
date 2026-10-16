@@ -12,8 +12,17 @@
     <WinUISDKReferences>false</WinUISDKReferences>
     <EnableMsixTooling>true</EnableMsixTooling>
     <Nullable>enable</Nullable>
+    <AssemblyTitle>MediaExport</AssemblyTitle>
+    <Company>Niclas Rogulski, Andrew Shillabeer and Ezekiel Paterno</Company>
+    <RepositoryUrl>https://github.com/IronExcavater/MediaExport</RepositoryUrl>
   </PropertyGroup>
 
+
+  <ItemGroup>
+    <AssemblyMetadata Include="RepositoryUrl" Value="$(RepositoryUrl)" />
+    <AssemblyMetadata Include="ReportIssueUri" Value="$(RepositoryUrl)/issues/new" />
+    <AssemblyMetadata Include="LicenseUri" Value="$(RepositoryUrl)/blob/dev/LICENSE" />
+  </ItemGroup>
 
   <ItemGroup>
     <Content Include="Assets\App\*" />
