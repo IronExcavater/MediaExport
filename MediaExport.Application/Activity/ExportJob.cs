@@ -160,7 +160,8 @@ public sealed partial class ExportJob : ObservableObject
             return;
 
         // A video is fetched as two files, picture then sound, and the bar doesn't run backwards for the second.
-        Progress = Math.Max(Progress, value.Percent);
+        if (value.Percent is { } percent)
+            Progress = Math.Max(Progress, percent);
         Status = value.Eta is null ? $"{Progress:0}%" : $"{Progress:0}%  ·  {value.Eta} left";
     }
 
