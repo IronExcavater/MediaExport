@@ -39,6 +39,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IThemeService, ThemeService>();
         services.AddSingleton<IFolderLauncher, WindowsFolderLauncher>();
+        services.AddSingleton<IAppMetadataProvider, WindowsAppMetadataProvider>();
 
         services.AddSingleton(new SearchCache(Path.Combine(dataFolder, "search-cache-2.json")));
 

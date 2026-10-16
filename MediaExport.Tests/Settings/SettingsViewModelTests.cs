@@ -27,7 +27,7 @@ public class SettingsViewModelTests
             new ToolchainOptions(managedFolder, []),
             client,
             new FakeProcessRunner());
-        var viewModel = new SettingsViewModel(tools, settings, new FakeThemeService(), new FakeFolderLauncher());
+        var viewModel = CreateViewModel(tools, settings);
 
         await viewModel.RefreshToolsAsync();
         await viewModel.RefreshToolsAsync();
@@ -55,7 +55,7 @@ public class SettingsViewModelTests
             new ToolchainOptions(managedFolder, [externalFolder]),
             client,
             new FakeProcessRunner());
-        var viewModel = new SettingsViewModel(tools, settings, new FakeThemeService(), new FakeFolderLauncher());
+        var viewModel = CreateViewModel(tools, settings);
 
         await viewModel.RefreshToolsAsync();
 
@@ -64,6 +64,49 @@ public class SettingsViewModelTests
             Assert.That(handler.RequestCount, Is.Zero);
             Assert.That(File.ReadAllText(external), Is.EqualTo("external"));
         });
+    }
+
+    [Test]
+    public void About_information_comes_from_the_metadata_provider()
+    {
+        using var temporary = new TemporaryDirectory();
+        var settings = new SettingsStore(null);
+        using var client = new HttpClient();
+        var tools = new ToolchainService(
+            settings,
+            new ToolchainOptions(temporary.CreateDirectory("managed"), []),
+            client,
+            new FakeProcessRunner());
+        var metadata = new AppMetadata(
+            "Test Exporter",
+            "2.4.1",
+            "By Test Contributors",
+            new Uri("https://example.test/source"),
+            new Uri("https://example.test/issues/new"),
+            new Uri("https://example.test/licence"));
+
+        var viewModel = new SettingsViewModel(
+            tools,
+            settings,
+            new FakeThemeService(),
+            new FakeFolderLauncher(),
+            new FakeMetadataProvider(metadata));
+
+        Assert.That(viewModel.App, Is.EqualTo(metadata));
+    }
+
+    private static SettingsViewModel CreateViewModel(ToolchainService tools, SettingsStore settings) =>
+        new(tools, settings, new FakeThemeService(), new FakeFolderLauncher(), new FakeMetadataProvider());
+
+    private sealed class FakeMetadataProvider(AppMetadata? metadata = null) : IAppMetadataProvider
+    {
+        public AppMetadata Get() => metadata ?? new AppMetadata(
+            "MediaExport",
+            "1.0.0",
+            "By contributors",
+            new Uri("https://example.test/source"),
+            new Uri("https://example.test/issues/new"),
+            new Uri("https://example.test/licence"));
     }
 
     private sealed class FakeThemeService : IThemeService

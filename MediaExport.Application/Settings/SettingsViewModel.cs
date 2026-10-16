@@ -25,12 +25,14 @@ public sealed partial class SettingsViewModel : ObservableObject
         ToolchainService toolchain,
         SettingsStore settings,
         IThemeService themeService,
-        IFolderLauncher folderLauncher)
+        IFolderLauncher folderLauncher,
+        IAppMetadataProvider metadataProvider)
     {
         _toolchain = toolchain;
         _settings = settings;
         _themeService = themeService;
         _folderLauncher = folderLauncher;
+        App = metadataProvider.Get();
 
         // Initialize theme from settings
         ThemeIndex = (int)_settings.Current.Theme;
@@ -51,6 +53,9 @@ public sealed partial class SettingsViewModel : ObservableObject
             EnsureToolSettings(tool);
         Tools = tools.Select(tool => new ToolViewModel(tool, toolchain)).ToList();
     }
+
+    /// <summary>The app identity and correctly mapped project links shown in About.</summary>
+    public AppMetadata App { get; }
 
     // The Appearance group: the theme.
 
