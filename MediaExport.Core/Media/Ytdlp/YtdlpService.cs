@@ -17,6 +17,9 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
 {
     private const string Executable = "yt-dlp";
     private const string CouldNotStart = "yt-dlp couldn't be started. Try installing it again in Settings.";
+    private const string ProgressMarker = "ME_PROGRESS|";
+    private const string FileMarker = "ME_FILE|";
+    private const string DrmMessage = "It’s protected by DRM, so it can’t be exported.";
 
     /// <summary>Reads a search without downloading anything.</summary>
     /// <param name="target">What yt-dlp should read, such as <c>ytsearch10:cats</c> or a page's URL.</param>
@@ -50,6 +53,27 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         ];
         var json = await RunAsync(arguments, cancellationToken);
         return ReadMedia(json);
+    }
+
+    public async Task<MediaAvailability> InspectAsync(string sourceUrl, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sourceUrl))
+            throw new ArgumentException("A media URL is required.", nameof(sourceUrl));
+
+        string[] arguments =
+        [
+            "--dump-single-json", "--no-playlist",
+            "--quiet", "--no-warnings", "--encoding", "utf-8",
+            sourceUrl
+        ];
+        try
+        {
+            return ReadAvailability(await RunAsync(arguments, cancellationToken));
+        }
+        catch (MediaExportException exception) when (exception.Kind == ExportFailureKind.DrmProtected)
+        {
+            return new MediaAvailability(false, exception.Kind, exception.Message);
+        }
     }
 
     /// <summary>Reads whose page a link to a channel or an artist is.</summary>
@@ -144,13 +168,16 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         var exportedFiles = new List<string>();
         var errors = new List<string>();
 
-        var readOutput = ReadOutputAsync(
+        var readOutput = ReadStreamAsync(
             process.StandardOutput,
             exportedFiles,
+            errors: null,
+            progress,
             cancellationToken);
 
-        var readErrors = ReadErrorsAsync(
+        var readErrors = ReadStreamAsync(
             process.StandardError,
+            exportedFiles,
             errors,
             progress,
             cancellationToken);
@@ -188,10 +215,9 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
             if (reason is not null)
                 reason = ErrorPrefix().Replace(reason, string.Empty).Trim();
 
-            throw new InvalidOperationException(
-                string.IsNullOrWhiteSpace(reason)
-                    ? $"yt-dlp exited with code {process.ExitCode}."
-                    : reason);
+            throw NormalizeError(string.IsNullOrWhiteSpace(reason)
+                ? $"yt-dlp exited with code {process.ExitCode}."
+                : reason);
         }
 
         var existingFiles = exportedFiles
@@ -208,7 +234,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
                 "yt-dlp finished without reporting an exported file.");
         }
 
-        progress?.Report(new ExportProgress(100, null, null));
+        progress?.Report(new ExportProgress(100, null, null, ExportPhase.Completed));
 
         return existingFiles;
     }
@@ -220,6 +246,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
     {
         var format = options.Format.Trim().ToLowerInvariant();
         var isAudio = format is "mp3" or "wav" or "flac" or "m4a";
+        var postProcessPhase = isAudio ? "converting" : "merging";
         var arguments = new List<string>
         {
             "--ignore-config",
@@ -228,9 +255,11 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
             "--encoding", "utf-8",
             "--newline",
             "--progress",
+            "--progress-template", "download:ME_PROGRESS|downloading|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
+            "--progress-template", $"postprocess:ME_PROGRESS|{postProcessPhase}|||",
             "--paths", Path.GetFullPath(options.OutputFolder),
             "--output", "%(title)s [%(id)s].%(ext)s",
-            "--print", "after_move:filepath"
+            "--print", "after_move:ME_FILE|%(filepath)s"
         };
 
         if (isAudio)
@@ -261,21 +290,10 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
         return arguments;
     }
 
-    private static async Task ReadOutputAsync(
+    private static async Task ReadStreamAsync(
         StreamReader reader,
         List<string> exportedFiles,
-        CancellationToken cancellationToken)
-    {
-        while (await reader.ReadLineAsync(cancellationToken) is { } line)
-        {
-            if (!string.IsNullOrWhiteSpace(line))
-                exportedFiles.Add(line.Trim());
-        }
-    }
-
-    private static async Task ReadErrorsAsync(
-        StreamReader reader,
-        List<string> errors,
+        List<string>? errors,
         IProgress<ExportProgress>? progress,
         CancellationToken cancellationToken)
     {
@@ -284,36 +302,69 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
             if (string.IsNullOrWhiteSpace(line))
                 continue;
 
-            errors.Add(line);
-
             if (ReadProgress(line) is { } value)
+            {
                 progress?.Report(value);
+                continue;
+            }
+
+            if (line.StartsWith(FileMarker, StringComparison.Ordinal))
+            {
+                exportedFiles.Add(line[FileMarker.Length..].Trim());
+                continue;
+            }
+
+            errors?.Add(line);
         }
     }
 
     internal static ExportProgress? ReadProgress(string line)
     {
-        var percentage = DownloadPercentagePattern().Match(line);
-        if (!percentage.Success || !double.TryParse(
-                percentage.Groups["percent"].Value,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out var percent))
-        {
+        if (!line.StartsWith(ProgressMarker, StringComparison.Ordinal))
             return null;
-        }
 
-        var details = DownloadDetailsPattern().Match(line);
-        var speed = details.Success ? details.Groups["speed"].Value : null;
-        var eta = details.Success ? details.Groups["eta"].Value : null;
-        return new ExportProgress(Math.Clamp(percent, 0, 100), speed, eta);
+        var parts = line.Split('|');
+        if (parts.Length < 5)
+            return null;
+
+        var phase = parts[1].Trim().ToLowerInvariant() switch
+        {
+            "downloading" => ExportPhase.Downloading,
+            "merging" => ExportPhase.Merging,
+            "converting" => ExportPhase.Converting,
+            _ => (ExportPhase?)null
+        };
+        if (phase is null)
+            return null;
+
+        var percentText = parts[2].Trim().TrimEnd('%');
+        var percent = double.TryParse(percentText, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+            ? Math.Clamp(value, 0, 100)
+            : (double?)null;
+        return new ExportProgress(percent, NullIfBlank(parts[3]), NullIfBlank(parts[4]), phase.Value);
     }
 
-    [GeneratedRegex(@"^\[download\]\s+(?<percent>\d+(?:\.\d+)?)%")]
-    private static partial Regex DownloadPercentagePattern();
+    private static string? NullIfBlank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    [GeneratedRegex(@"\bat\s+(?<speed>\S+)\s+ETA\s+(?<eta>\S+)")]
-    private static partial Regex DownloadDetailsPattern();
+    internal static MediaAvailability ReadAvailability(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        if (!root.TryGetProperty("formats", out var formats) || formats.ValueKind != JsonValueKind.Array)
+            return MediaAvailability.Available;
+
+        var listed = formats.EnumerateArray().ToList();
+        var allProtected = listed.Count > 0 && listed.All(format =>
+            format.TryGetProperty("has_drm", out var drm) && drm.ValueKind == JsonValueKind.True);
+        return allProtected
+            ? new MediaAvailability(false, ExportFailureKind.DrmProtected, DrmMessage)
+            : MediaAvailability.Available;
+    }
+
+    internal static Exception NormalizeError(string reason) =>
+        reason.Contains("DRM", StringComparison.OrdinalIgnoreCase)
+            ? new MediaExportException(ExportFailureKind.DrmProtected, DrmMessage)
+            : new MediaExportException(ExportFailureKind.Failed, reason);
 
     internal static IReadOnlyList<string> GetSearchArguments(string target, int skip, int limit) =>
     [
@@ -426,7 +477,7 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
 
             // An error is written as "ERROR: [site] id: what went wrong", of which only the end is for the user.
             var reason = ErrorPrefix().Replace(lastError, string.Empty);
-            throw new InvalidOperationException(reason);
+            throw NormalizeError(reason);
         }
         catch (OperationCanceledException)
         {
