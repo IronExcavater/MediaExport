@@ -47,7 +47,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _folderLauncher = folderLauncher;
         _search = search;
         _export = export;
-        _activity = activity
+        _activity = activity;
 
         App = metadataProvider.Get();
 
