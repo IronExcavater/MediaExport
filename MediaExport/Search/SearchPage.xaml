@@ -25,13 +25,22 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <TextBlock
-                VerticalAlignment="Center"
-                Style="{StaticResource PageTitleStyle}"
-                Text="{x:Bind ViewModel.Title, Mode=OneWay}"
-                TextTrimming="CharacterEllipsis" />
+            <StackPanel VerticalAlignment="Center" Spacing="2">
+                <TextBlock
+                    Style="{StaticResource PageTitleStyle}"
+                    Text="{x:Bind ViewModel.Title, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis" />
+                <TextBlock
+                    Style="{StaticResource SecondaryTextStyle}"
+                    Text="{x:Bind ViewModel.TermSummary, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap" />
+            </StackPanel>
 
-            <StackPanel Grid.Column="1" Spacing="2">
+            <StackPanel
+                Grid.Column="1"
+                Spacing="2"
+                Visibility="{x:Bind ViewModel.HasPages, Mode=OneWay}">
                 <StackPanel
                     HorizontalAlignment="Center"
                     Orientation="Horizontal"
@@ -107,7 +116,32 @@
                 x:Name="resultsScroll"
                 controls:ScrollBarGutter.Mode="Auto"
                 VerticalAnchorRatio="NaN">
-                <Grid Margin="4">
+                <Grid
+                    MinHeight="{x:Bind resultsScroll.ViewportHeight, Mode=OneWay}"
+                    Margin="4">
+                    <StackPanel
+                        MaxWidth="420"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="12"
+                        Visibility="{x:Bind converters:VisibleWhen.NotBlank(ViewModel.Message), Mode=OneWay}">
+                        <FontIcon
+                            HorizontalAlignment="Center"
+                            FontSize="32"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Glyph="&#xE721;" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            HorizontalTextAlignment="Center"
+                            Style="{StaticResource SecondaryTextStyle}"
+                            Text="{x:Bind ViewModel.EmptyStateMessage, Mode=OneWay}" />
+                        <Button
+                            HorizontalAlignment="Center"
+                            Click="EditSearch_Click"
+                            Content="Edit search"
+                            Style="{StaticResource AccentButtonStyle}" />
+                    </StackPanel>
+
                     <!-- Skeleton cards in the same grid while a page loads, so the results fill in without a jump. -->
                     <ItemsRepeater x:Name="skeletons" Visibility="{x:Bind ViewModel.IsSearching, Mode=OneWay}">
                         <ItemsRepeater.Layout>
@@ -131,14 +165,14 @@
                         </ItemsRepeater.Layout>
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="models:MediaSearchResult">
-                                <Button
+                                <media:MediaButton
                                     controls:JustifiedLayout.Shape="{x:Bind media:MediaThumbnail.ShapeOf(Kind)}"
                                     AutomationProperties.Name="{x:Bind Title}"
                                     Click="Result_Click"
                                     Style="{StaticResource CardButtonStyle}"
                                     Tag="{x:Bind}">
                                     <media:CardMediaView Media="{x:Bind}" />
-                                </Button>
+                                </media:MediaButton>
                             </DataTemplate>
                         </ItemsRepeater.ItemTemplate>
                     </ItemsRepeater>

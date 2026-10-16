@@ -282,10 +282,10 @@
                             x:Name="resultsSkeleton"
                             Padding="16,2"
                             Visibility="Collapsed">
-                            <media:RowMediaView />
-                            <media:RowMediaView />
-                            <media:RowMediaView />
-                            <media:RowMediaView />
+                            <media:RowMediaView Presentation="Compact" />
+                            <media:RowMediaView Presentation="Compact" />
+                            <media:RowMediaView Presentation="Compact" />
+                            <media:RowMediaView Presentation="Compact" />
                         </StackPanel>
                         <controls:EdgeFade x:Name="resultsFade">
                             <ListView
@@ -299,7 +299,7 @@
                                 SelectionMode="None">
                                 <ListView.ItemTemplate>
                                     <DataTemplate x:DataType="models:MediaSearchResult">
-                                        <media:RowMediaView Media="{x:Bind}" />
+                                        <media:RowMediaView Media="{x:Bind}" Presentation="Compact" />
                                     </DataTemplate>
                                 </ListView.ItemTemplate>
                             </ListView>

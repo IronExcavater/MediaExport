@@ -268,21 +268,34 @@ public class SearchViewModelTests
     }
 
     [Test]
-    public async Task The_title_says_what_the_results_are()
+    public async Task The_heading_keeps_the_query_separate_from_its_metadata()
     {
         var search = new SearchViewModel([new FakeProvider("first") { Results = [Song] }], new SearchCache(null));
-        search.Replace("author:someone");
-        await search.SearchAsync();
-        var byAuthor = search.Title;
-
-        search.Replace("sort:views exact:\"lofi beats\" exclude:live study");
+        search.Replace("sort:views exact:\"lofi beats\" exclude:live cats");
         await search.SearchAsync();
 
         Assert.Multiple(() =>
         {
-            Assert.That(byAuthor, Is.EqualTo("Popular by someone"));
-            Assert.That(search.Title, Is.EqualTo("Most viewed for study \"lofi beats\", doesn't have \"live\""));
+            Assert.That(search.Title, Is.EqualTo("cats"));
+            Assert.That(search.TermSummary, Is.EqualTo("first · Most viewed · Has the exact words \"lofi beats\" · Doesn't have \"live\""));
             Assert.That(search.Summary, Is.EqualTo("Results 1 to 1"));
+            Assert.That(search.HasPages, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task An_empty_search_says_no_results_in_the_heading_not_the_pagination()
+    {
+        var search = new SearchViewModel([new FakeProvider("first")], new SearchCache(null)) { Query = "cats" };
+
+        await search.SearchAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(search.Title, Is.EqualTo("No results for “cats”"));
+            Assert.That(search.EmptyStateMessage, Is.EqualTo("Try different words or remove a filter."));
+            Assert.That(search.Summary, Is.Empty);
+            Assert.That(search.HasPages, Is.False);
         });
     }
 
@@ -323,7 +336,9 @@ public class SearchViewModelTests
         Assert.Multiple(() =>
         {
             Assert.That(empty.Message, Is.EqualTo("No results on first. Try different words."));
+            Assert.That(empty.EmptyStateMessage, Is.EqualTo("Try different words or remove a filter."));
             Assert.That(broken.Message, Is.EqualTo("Couldn't search first. Offline"));
+            Assert.That(broken.EmptyStateMessage, Is.EqualTo("Couldn't search first. Offline"));
             Assert.That(broken.IsSearching, Is.False);
             Assert.That(sourceless.Message, Is.EqualTo("There are no sources to search."));
         });
