@@ -44,6 +44,7 @@ public sealed partial class MainWindow : Window
     private readonly SettingsStore _settings = App.Current.Services.GetRequiredService<SettingsStore>();
     private readonly DispatcherQueueTimer _resizeDebounceTimer;
     private bool _isAppNameHidden;
+    private bool _lastSearchWasCleared;
 
     /// <summary>The search state shared by the title bar and Search page.</summary>
     public SearchViewModel Search { get; } = App.Current.Services.GetRequiredService<SearchViewModel>();
@@ -72,14 +73,36 @@ public sealed partial class MainWindow : Window
 
         RestoreWindowSize();
         RestoreSearch();
+        _lastSearchWasCleared = _settings.Current.LastSearch is null;
+
+        Search.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(SearchViewModel.FullText))
+                _lastSearchWasCleared = false;
+        };
+
+        Search.RecentSearches.CollectionChanged += (_, _) =>
+        {
+            if (Search.RecentSearches.Count > 0)
+                _lastSearchWasCleared = false;
+        };
 
         // Whatever opens media, the Export page is where it shows.
         _export.Opened += (_, _) => GoTo("Export");
         RestoreRecentlyViewed();
         Activity.PropertyChanged += Activity_PropertyChanged;
+
+        var settingsViewModel =
+            App.Current.Services.GetRequiredService<SettingsViewModel>();
+
+        settingsViewModel.LastSearchCleared +=
+            (_, _) => _lastSearchWasCleared = true;
+
         Closed += (_, _) =>
         {
-            _settings.Current.LastSearch = Search.FullText;
+            if (!_lastSearchWasCleared)
+                _settings.Current.LastSearch = Search.FullText;
+
             SaveWindowSize();
         };
 

@@ -3,10 +3,17 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MediaExport.Core.Media.Models;
+using MediaExport.Core.Media.Providers;
 using MediaExport.Core.Settings;
 using MediaExport.Core.Tooling;
+using MediaExport.Activity;
+using MediaExport.Export;
+using MediaExport.Search;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -19,18 +26,27 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly SettingsStore _settings;
     private readonly IThemeService _themeService;
     private readonly IFolderLauncher _folderLauncher;
+    private readonly SearchViewModel _search;
+    private readonly ExportViewModel _export;
+    private readonly ActivityViewModel _activity;
     private bool _checkedAutoUpdates;
 
     public SettingsViewModel(
         ToolchainService toolchain,
         SettingsStore settings,
         IThemeService themeService,
-        IFolderLauncher folderLauncher)
+        IFolderLauncher folderLauncher,
+        SearchViewModel search,
+        ExportViewModel export,
+        ActivityViewModel activity)
     {
         _toolchain = toolchain;
         _settings = settings;
         _themeService = themeService;
         _folderLauncher = folderLauncher;
+        _search = search;
+        _export = export;
+        _activity = activity;
 
         // Initialize theme from settings
         ThemeIndex = (int)_settings.Current.Theme;
@@ -50,6 +66,15 @@ public sealed partial class SettingsViewModel : ObservableObject
         foreach (var tool in tools)
             EnsureToolSettings(tool);
         Tools = tools.Select(tool => new ToolViewModel(tool, toolchain)).ToList();
+
+        _search.RecentSearches.CollectionChanged += (_, _) => NotifyHistoryState();
+        _export.RecentlyViewed.CollectionChanged += (_, _) => NotifyHistoryState();
+
+        _activity.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ActivityViewModel.HasFinishedHistory))
+                NotifyHistoryState();
+        };
     }
 
     // The Appearance group: the theme.
@@ -129,4 +154,56 @@ public sealed partial class SettingsViewModel : ObservableObject
         settings.Name = tool.Name;
         settings.Executable = tool.Executable;
     }
+
+    public bool HasRecentSearches =>
+    _settings.Current.LastSearch is not null || _search.RecentSearches.Count > 0;
+
+    public bool HasRecentMedia => _export.RecentlyViewed.Count > 0;
+    public bool HasExportHistory => _activity.HasFinishedHistory;
+    public bool HasAnyHistory => HasRecentSearches || HasRecentMedia || HasExportHistory;
+    public event EventHandler? LastSearchCleared;
+
+    private void NotifyHistoryState()
+    {
+        OnPropertyChanged(nameof(HasRecentSearches));
+        OnPropertyChanged(nameof(HasRecentMedia));
+        OnPropertyChanged(nameof(HasExportHistory));
+        OnPropertyChanged(nameof(HasAnyHistory));
+    }
+
+    [RelayCommand]
+    public void ClearAllHistory()
+    {
+        ClearRecentSearches();
+        ClearRecentMedia();
+        _activity.ClearFinishedCommand.Execute(null);
+        NotifyHistoryState();
+    }
+
+    [RelayCommand]
+    public void ClearRecentSearches()
+    {
+        _search.RecentSearches.Clear();
+        _settings.Current.LastSearch = null;
+        _settings.Save();
+        NotifyHistoryState();
+
+        LastSearchCleared?.Invoke(this, EventArgs.Empty);
+    }
+
+    [RelayCommand]
+    public void ClearRecentMedia()
+    {
+        _export.RecentlyViewed.Clear();
+        _settings.Save();
+        NotifyHistoryState();
+    }
+
+    [RelayCommand]
+    public void ClearExportHistory()
+    {
+        _activity.ClearFinishedCommand.Execute(null);
+        NotifyHistoryState();
+    }
+
 }

@@ -180,10 +180,13 @@ public sealed partial class ActivityViewModel : ObservableObject
             Groups.Add(group);
     }
 
+    public bool HasFinishedHistory => Jobs.Any(job => job.IsFinished);
     private void SaveHistory()
     {
         var finished = Jobs.Where(job => job.IsFinished).Take(HistoryCapacity);
         _settings.Current.History = finished.Select(job => job.ToRecord()).ToList();
+
+        OnPropertyChanged(nameof(HasFinishedHistory));
         _settings.Save();
     }
 }
