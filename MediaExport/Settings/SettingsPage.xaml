@@ -23,8 +23,12 @@
             <Setter Property="CornerRadius" Value="6" />
             <Setter Property="Height" Value="32" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="Width" Value="32" />
+            <Setter Property="Width" Value="32" />            
         </Style>
+        <Style x:Key="DividerStyle" TargetType="Rectangle">
+            <Setter Property="Height" Value="0.5"/>
+        </Style>
+
     </Page.Resources>
 
     <!-- Keeping the gutter at all times stops the centred settings from shifting when the scroll bar appears. -->
@@ -98,7 +102,7 @@
                         HorizontalContentAlignment="Stretch"
                         CornerRadius="8"
                         IsExpanded="True"
-                        MinHeight="65">                      
+                        MinHeight="65">
                         <Expander.Header>
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>
@@ -236,7 +240,97 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </Expander>                    
+                    </Expander>
+
+                    <TextBlock Style="{StaticResource SettingsHeaderStyle}" Text="History" />
+                    <Border Style="{StaticResource SettingsGroupStyle}">
+                        <Border BorderThickness="0" Style="{StaticResource SettingsRowStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <FontIcon Glyph="&#xE74D;" Style="{StaticResource SettingsIconStyle}" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Text="Clear all history" />
+                                <Button
+                                    Grid.Column="2"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Bottom"
+                                    Margin="0,0,0,8"
+                                    Command="{x:Bind ViewModel.ClearAllHistoryCommand}"
+                                    IsEnabled="{x:Bind ViewModel.HasAnyHistory, Mode=OneWay}"
+                                    ToolTipService.ToolTip="Clear the searches, the opened media and the finished exports together">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon FontSize="14" Glyph="&#xE74D;" />
+                                        <TextBlock Text="Clear all" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </Border>
+                    <Border Style="{StaticResource CardStyle}">
+                        <StackPanel Spacing="12">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE721;" Style="{StaticResource SettingsIconStyle}" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Recent searches" />
+                                </StackPanel>
+                                <Button
+                            Grid.Column="2"
+                            MinWidth="72"
+                            Command="{x:Bind ViewModel.ClearRecentSearchesCommand}"
+                            Content="Clear"
+                            IsEnabled="{x:Bind ViewModel.HasRecentSearches, Mode=OneWay}" />
+                            </Grid>
+                            <Rectangle Style="{StaticResource DividerStyle}" />
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE8B2;" Style="{StaticResource SettingsIconStyle}" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Recently opened media" />
+                                </StackPanel>
+                                <Button
+                            Grid.Column="2"
+                            MinWidth="72"
+                            Command="{x:Bind ViewModel.ClearRecentMediaCommand}"
+                            Content="Clear"
+                            IsEnabled="{x:Bind ViewModel.HasRecentMedia, Mode=OneWay}" />
+                            </Grid>
+                            <Rectangle Style="{StaticResource DividerStyle}" />
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE81C;" Style="{StaticResource SettingsIconStyle}" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Finished exports" />                                    
+                                </StackPanel>
+                                <Button
+                            Grid.Column="2"
+                            MinWidth="72"
+                            Command="{x:Bind ViewModel.ClearExportHistoryCommand}"
+                            Content="Clear"
+                            IsEnabled="{x:Bind ViewModel.HasExportHistory, Mode=OneWay}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
                     <TextBlock Style="{StaticResource SettingsHeaderStyle}" Text="About" />
                     <!-- The links might not work if not logged into github as repo is currently private? -->
                     <Border Style="{StaticResource SettingsGroupStyle}"
@@ -262,8 +356,8 @@
                             </StackPanel>
                             <StackPanel
                                 Grid.Column="2"
-                                VerticalAlignment="Center"
                                 Orientation="Horizontal"
+                                VerticalAlignment="Center"
                                 Spacing="4"
                                 Margin="0,0,15,0">                          
                                 <Button
@@ -292,7 +386,6 @@
                                 </Button>
                             </StackPanel>
                         </Grid>
-
                     </Border>
                 </StackPanel>
             </ScrollViewer>

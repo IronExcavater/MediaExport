@@ -35,7 +35,11 @@ public sealed class ThemeService(SettingsStore settings) : IThemeService
             _ => TitleBarTheme.UseDefaultAppMode
         };
 
-        var mainWindow = (MainWindow)App.Current.MainWindow;
+        // SettingsViewModel can apply its initial theme while MainWindow is still being constructed.
+        // OnLaunched applies the theme again after the window has been assigned.
+        if (App.Current.MainWindow is not MainWindow mainWindow)
+            return;
+
         mainWindow.ApplyTheme(elementTheme);
         mainWindow.AppWindow.TitleBar.PreferredTheme = titleBarTheme;
     }
