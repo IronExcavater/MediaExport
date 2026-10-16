@@ -48,6 +48,16 @@ public class ActivityViewModelTests
         }
     }
 
+    private sealed class ReportingDownloader : IMediaDownloader
+    {
+        public Task<IReadOnlyList<string>> DownloadAsync(string sourceUrl, ExportOptions options, IProgress<ExportProgress>? progress = null, CancellationToken cancellationToken = default)
+        {
+            progress!.Report(new ExportProgress(37, "2 MiB/s", "00:12", ExportPhase.Downloading));
+            progress.Report(new ExportProgress(null, null, null, ExportPhase.Merging));
+            throw new InvalidOperationException("Stopped after progress");
+        }
+    }
+
     [Test]
     public void TwoExportsRunAtOnceAndTheNextStartsWhenOneFinishes()
     {
@@ -125,6 +135,65 @@ public class ActivityViewModelTests
         Assert.That(job.State, Is.EqualTo(ExportJobState.Failed));
         Assert.That(job.Status, Is.EqualTo("No connection."));
         Assert.That(activity.HasActive, Is.False);
+        Assert.That(job.CanRetry, Is.True);
+    }
+
+    [Test]
+    public void Retry_reuses_and_resets_the_failed_row_but_drm_stays_terminal()
+    {
+        var downloader = new HeldDownloader();
+        var activity = new ActivityViewModel(downloader, new SettingsStore(null));
+        var retryable = activity.Start(Media, Options);
+        downloader.Downloads[0].SetException(new InvalidOperationException("Temporary failure"));
+
+        activity.Retry(retryable);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(activity.Jobs[0], Is.SameAs(retryable));
+            Assert.That(retryable.State, Is.EqualTo(ExportJobState.Running));
+            Assert.That(retryable.Progress, Is.Zero);
+            Assert.That(retryable.Options, Is.SameAs(Options));
+            Assert.That(downloader.Downloads, Has.Count.EqualTo(2));
+        });
+
+        downloader.Downloads[1].SetException(new MediaExportException(ExportFailureKind.DrmProtected, "Protected"));
+        Assert.That(retryable.CanRetry, Is.False);
+    }
+
+    [Test]
+    public void Selection_enables_only_actions_supported_by_at_least_one_selected_job()
+    {
+        var downloader = new HeldDownloader();
+        var activity = new ActivityViewModel(downloader, new SettingsStore(null));
+        var active = activity.Start(Media, Options);
+        var failed = activity.Start(Media, Options);
+        downloader.Downloads[1].SetException(new InvalidOperationException("Failed"));
+
+        activity.Select([active, failed]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(activity.SelectedCount, Is.EqualTo(2));
+            Assert.That(activity.CanRetrySelected, Is.True);
+            Assert.That(activity.CanCancelSelected, Is.True);
+            Assert.That(activity.CanRemoveSelected, Is.True);
+        });
+    }
+
+    [Test]
+    public async Task Reported_progress_and_phase_are_applied_before_a_fast_process_finishes()
+    {
+        var job = new ExportJob(Media, Options);
+
+        await job.RunAsync(new ReportingDownloader());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(job.Progress, Is.EqualTo(37));
+            Assert.That(job.Phase, Is.EqualTo(ExportPhase.Merging));
+            Assert.That(job.IsIndeterminate, Is.False, "a finished failure no longer animates");
+        });
     }
 
     [Test]

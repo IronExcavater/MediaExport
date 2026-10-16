@@ -29,7 +29,7 @@ public enum ExportJobState
 /// <summary>One export of one media item: waiting, running, or finished in this run of the app or an earlier one.</summary>
 public sealed partial class ExportJob : ObservableObject
 {
-    private readonly CancellationTokenSource _cancellation = new();
+    private CancellationTokenSource _cancellation = new();
 
     public ExportJob(MediaSearchResult media, ExportOptions options)
     {
@@ -59,7 +59,7 @@ public sealed partial class ExportJob : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsActive), nameof(IsFinished), nameof(IsIndeterminate), nameof(Detail))]
-    [NotifyPropertyChangedFor(nameof(IsQueued), nameof(IsRunning), nameof(IsCompleted), nameof(IsFailed), nameof(IsCancelled))]
+    [NotifyPropertyChangedFor(nameof(IsQueued), nameof(IsRunning), nameof(IsCompleted), nameof(IsFailed), nameof(IsCancelled), nameof(CanRetry))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand), nameof(ShowInFolderCommand))]
     public partial ExportJobState State { get; private set; }
 
@@ -77,6 +77,19 @@ public sealed partial class ExportJob : ObservableObject
 
     /// <summary>When it completed, failed or was cancelled. <c>null</c> until then.</summary>
     public DateTimeOffset? FinishedAt { get; private set; }
+    public ExportFailureKind? FailureKind { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ProgressDetail))]
+    public partial string? Speed { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ProgressDetail))]
+    public partial string? Eta { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIndeterminate))]
+    public partial ExportPhase Phase { get; private set; } = ExportPhase.Inspecting;
 
     /// <summary>Whether it is waiting or running, which is to say not finished.</summary>
     public bool IsActive => State is ExportJobState.Queued or ExportJobState.Running;
@@ -86,9 +99,11 @@ public sealed partial class ExportJob : ObservableObject
     public bool IsCompleted => State == ExportJobState.Completed;
     public bool IsFailed => State == ExportJobState.Failed;
     public bool IsCancelled => State == ExportJobState.Cancelled;
+    public bool CanRetry => IsFailed && FailureKind != ExportFailureKind.DrmProtected;
+    public string ProgressDetail => string.Join(" · ", new[] { Speed, Eta is null ? null : $"{Eta} left" }.Where(value => value is not null));
 
     /// <summary>Whether it is running without a percentage yet, as it is while the media is looked up.</summary>
-    public bool IsIndeterminate => IsRunning && Progress <= 0;
+    public bool IsIndeterminate => IsRunning && (Progress <= 0 || Phase is not ExportPhase.Downloading);
 
     /// <summary>Shown under the status: the file type, and the time of day it finished at.</summary>
     public string Detail
@@ -128,7 +143,7 @@ public sealed partial class ExportJob : ObservableObject
 
         State = ExportJobState.Running;
         Status = "Looking it up";
-        var progress = new Progress<ExportProgress>(Report);
+        var progress = new InlineProgress(Report);
         try
         {
             Files = await downloader.DownloadAsync(Media.SourceUrl, Options, progress, _cancellation.Token);
@@ -139,10 +154,20 @@ public sealed partial class ExportJob : ObservableObject
         {
             Finish(ExportJobState.Cancelled, "Cancelled");
         }
+        catch (MediaExportException exception)
+        {
+            FailureKind = exception.Kind;
+            Finish(ExportJobState.Failed, exception.Message);
+        }
         catch (Exception exception)
         {
             Finish(ExportJobState.Failed, exception.Message);
         }
+    }
+
+    private sealed class InlineProgress(Action<ExportProgress> report) : IProgress<ExportProgress>
+    {
+        public void Report(ExportProgress value) => report(value);
     }
 
     // The state is set last, because it is the change that those watching the job act on.
@@ -162,7 +187,37 @@ public sealed partial class ExportJob : ObservableObject
         // A video is fetched as two files, picture then sound, and the bar doesn't run backwards for the second.
         if (value.Percent is { } percent)
             Progress = Math.Max(Progress, percent);
-        Status = value.Eta is null ? $"{Progress:0}%" : $"{Progress:0}%  ·  {value.Eta} left";
+        Phase = value.Phase;
+        Speed = value.Speed;
+        Eta = value.Eta;
+        Status = value.Phase switch
+        {
+            ExportPhase.Merging => "Merging",
+            ExportPhase.Converting => "Converting",
+            ExportPhase.Completed => "Finishing",
+            _ when value.Percent is { } => $"Downloading {Progress:0}%",
+            _ => "Downloading"
+        };
+    }
+
+    /// <summary>Resets a retryable failure in place and returns it to the queue.</summary>
+    public bool Retry()
+    {
+        if (!CanRetry)
+            return false;
+
+        _cancellation.Dispose();
+        _cancellation = new CancellationTokenSource();
+        Files = [];
+        FinishedAt = null;
+        FailureKind = null;
+        Progress = 0;
+        Speed = null;
+        Eta = null;
+        Phase = ExportPhase.Inspecting;
+        Status = "Up next";
+        State = ExportJobState.Queued;
+        return true;
     }
 
     [RelayCommand(CanExecute = nameof(IsActive))]

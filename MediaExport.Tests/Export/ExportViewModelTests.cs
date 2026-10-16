@@ -116,6 +116,29 @@ public class ExportViewModelTests
         });
     }
 
+    [Test]
+    public void Opening_for_export_again_restores_options_and_blocks_drm_media()
+    {
+        var downloader = new InspectingDownloader
+        {
+            Availability = new MediaAvailability(false, ExportFailureKind.DrmProtected, "Protected content")
+        };
+        var export = CreateViewModel([], downloader: downloader);
+        var options = new ExportOptions("webm", @"C:\Exports", VideoHeight: 720);
+
+        export.Open(Media, options);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(export.SelectedFormat, Is.EqualTo("webm"));
+            Assert.That(export.SelectedVideoResolution, Is.EqualTo("720p"));
+            Assert.That(export.SelectedOutputFolder, Is.EqualTo(@"C:\Exports"));
+            Assert.That(export.IsAvailable, Is.False);
+            Assert.That(export.AvailabilityMessage, Is.EqualTo("Protected content"));
+            Assert.That(export.ExportCommand.CanExecute(null), Is.False);
+        });
+    }
+
     private static ExportViewModel CreateViewModel(
         IEnumerable<IMediaSearchProvider> providers,
         SettingsStore? settings = null,
@@ -123,7 +146,16 @@ public class ExportViewModelTests
     {
         settings ??= new SettingsStore(null);
         var activity = new ActivityViewModel(downloader ?? new UnusedDownloader(), settings);
-        return new ExportViewModel(activity, settings, providers);
+        return new ExportViewModel(activity, settings, providers, downloader ?? new UnusedDownloader());
+    }
+
+    private sealed class InspectingDownloader : IMediaDownloader
+    {
+        public MediaAvailability Availability { get; init; } = MediaAvailability.Available;
+        public Task<MediaAvailability> InspectAsync(string sourceUrl, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Availability);
+        public Task<IReadOnlyList<string>> DownloadAsync(string sourceUrl, ExportOptions options, IProgress<ExportProgress>? progress = null, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class CapturingDownloader : IMediaDownloader
