@@ -1,8 +1,13 @@
 // Copyright (C) 2026 Niclas Rogulski, Andrew Shillabeer, Ezekiel Paterno. All rights reserved.
 // SPDX-License-Identifier: MPL-2.0
 
+using MediaExport.Activity;
+using MediaExport.Core.Exporting;
+using MediaExport.Core.Media.Providers;
 using MediaExport.Core.Settings;
 using MediaExport.Core.Tooling;
+using MediaExport.Export;
+using MediaExport.Search;
 using MediaExport.Settings;
 using MediaExport.Tests.Support;
 
@@ -85,18 +90,40 @@ public class SettingsViewModelTests
             new Uri("https://example.test/issues/new"),
             new Uri("https://example.test/licence"));
 
-        var viewModel = new SettingsViewModel(
-            tools,
-            settings,
-            new FakeThemeService(),
-            new FakeFolderLauncher(),
-            new FakeMetadataProvider(metadata));
+        var viewModel = CreateViewModel(tools, settings, metadata);
 
         Assert.That(viewModel.App, Is.EqualTo(metadata));
     }
 
-    private static SettingsViewModel CreateViewModel(ToolchainService tools, SettingsStore settings) =>
-        new(tools, settings, new FakeThemeService(), new FakeFolderLauncher(), new FakeMetadataProvider());
+    private static SettingsViewModel CreateViewModel(
+        ToolchainService tools,
+        SettingsStore settings,
+        AppMetadata? metadata = null)
+    {
+        var downloader = new UnusedDownloader();
+        var activity = new ActivityViewModel(downloader, settings);
+        var search = new SearchViewModel([], new SearchCache(null));
+        var export = new ExportViewModel(activity, settings, [], downloader);
+
+        return new SettingsViewModel(
+            tools,
+            settings,
+            new FakeThemeService(),
+            search,
+            export,
+            activity,
+            new FakeFolderLauncher(),
+            new FakeMetadataProvider(metadata));
+    }
+
+    private sealed class UnusedDownloader : IMediaDownloader
+    {
+        public Task<IReadOnlyList<string>> DownloadAsync(
+            string sourceUrl,
+            ExportOptions options,
+            IProgress<ExportProgress>? progress = null,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
 
     private sealed class FakeMetadataProvider(AppMetadata? metadata = null) : IAppMetadataProvider
     {
