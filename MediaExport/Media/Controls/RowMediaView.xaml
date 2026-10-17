@@ -52,12 +52,12 @@
             Spacing="2">
             <TextBlock
                 FontSize="{x:Bind TitleFontSize, Mode=OneWay}"
-                IsTextSelectionEnabled="True"
                 MaxLines="2"
                 Text="{x:Bind Media.Title, Mode=OneWay}"
                 TextTrimming="CharacterEllipsis"
                 TextWrapping="Wrap" />
             <local:MediaByline Media="{x:Bind Media, Mode=OneWay}" />
+            <ContentPresenter Content="{x:Bind Details, Mode=OneWay}" />
         </StackPanel>
     </Grid>
 </local:MediaView>

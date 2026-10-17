@@ -72,7 +72,7 @@ public sealed partial class SearchPage : Page
     // A pressed result opens in the Export page.
     private void Result_Click(object sender, RoutedEventArgs args)
     {
-        var button = (MediaButton)sender;
+        var button = (Button)sender;
         var export = App.Current.Services.GetRequiredService<ExportViewModel>();
         export.Open((MediaSearchResult)button.Tag);
     }

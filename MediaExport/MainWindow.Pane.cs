@@ -5,6 +5,7 @@ using MediaExport.Activity;
 using MediaExport.Controls;
 using MediaExport.Export;
 using MediaExport.Export.Controls;
+using MediaExport.Settings;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -74,7 +75,20 @@ public sealed partial class MainWindow
             row.Visibility = visibility;
 
         ShowActivityBadge();
+        ShowToolsWarning();
     }
+
+    private void Settings_PropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is nameof(SettingsViewModel.HasMissingTools)
+            or nameof(SettingsViewModel.AreToolsBusy))
+        {
+            ShowToolsWarning();
+        }
+    }
+
+    private void ShowToolsWarning() => toolsWarning.Visibility =
+        Settings.HasMissingTools && !navView.IsCompact ? Visibility.Visible : Visibility.Collapsed;
 
     // The Activity item's badge is at the end of its row. A compact pane has no row, so there the badge takes
     // the icon's place for as long as it shows.

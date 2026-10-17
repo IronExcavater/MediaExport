@@ -45,7 +45,6 @@
 
         <StackPanel x:Name="words" Spacing="2">
             <TextBlock
-                IsTextSelectionEnabled="True"
                 MaxLines="2"
                 Text="{x:Bind Media.Title, Mode=OneWay}"
                 TextTrimming="CharacterEllipsis"
