@@ -185,10 +185,17 @@
                         </Grid.ColumnDefinitions>
                         <FontIcon
                             VerticalAlignment="Center"
+                            AutomationProperties.Name="Missing tools"
                             FontSize="18"
                             Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                            Glyph="&#xE7BA;" />
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            Glyph="&#xE7BA;"
+                            ToolTipService.ToolTip="Missing tools" />
+                        <StackPanel
+                            x:Name="toolsWarningDetails"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            controls:VisibilityTransition.ShowSlide="True"
+                            Spacing="1">
                             <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Missing tools" />
                             <TextBlock
                                 Style="{StaticResource SecondaryTextStyle}"
@@ -196,6 +203,7 @@
                                 TextWrapping="Wrap" />
                         </StackPanel>
                         <Button
+                            x:Name="installMissingToolsButton"
                             Grid.Column="2"
                             Width="36"
                             Height="36"
@@ -204,6 +212,7 @@
                             VerticalAlignment="Center"
                             AutomationProperties.Name="Install missing tools"
                             Command="{x:Bind Settings.InstallMissingToolsCommand}"
+                            controls:VisibilityTransition.ShowSlide="True"
                             Style="{StaticResource AccentButtonStyle}"
                             ToolTipService.ToolTip="Install missing tools">
                             <Grid>
@@ -220,7 +229,7 @@
                                     Visibility="{x:Bind Settings.AreToolsIdle, Mode=OneWay}" />
                             </Grid>
                         </Button>
-                        </Grid>
+                    </Grid>
                 </Border>
             </NavigationView.PaneFooter>
             <NavigationView.MenuItems>

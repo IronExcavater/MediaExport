@@ -84,6 +84,9 @@ public sealed partial class SmoothNavigationView : NavigationView
 
     public event EventHandler? IsCompactChanged;
 
+    /// <summary>Raised after the pane has finished animating to its new width.</summary>
+    public event EventHandler? PaneTransitionCompleted;
+
     /// <summary>The pane's width when it shows icons and names.</summary>
     public double ExpandedPaneLength
     {
@@ -225,6 +228,8 @@ public sealed partial class SmoothNavigationView : NavigationView
             CompositionTarget.Rendering -= OnRendering;
             if (!_isOverlayOpen)
                 _hold = _targetHold = 0;
+
+            PaneTransitionCompleted?.Invoke(this, EventArgs.Empty);
         }
 
         PlacePage();

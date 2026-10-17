@@ -32,6 +32,16 @@ public static class VisibilityTransition
         typeof(VisibilityTransition),
         new PropertyMetadata(false, OnChanged));
 
+    /// <summary>
+    /// Whether the element fades and slides when shown, but leaves the layout immediately when collapsed.
+    /// Useful when its parent is shrinking and retaining the hidden visual would make its content reflow.
+    /// </summary>
+    public static readonly DependencyProperty ShowSlideProperty = DependencyProperty.RegisterAttached(
+        "ShowSlide",
+        typeof(bool),
+        typeof(VisibilityTransition),
+        new PropertyMetadata(false, OnChanged));
+
     public static bool GetFade(UIElement element) => (bool)element.GetValue(FadeProperty);
 
     public static void SetFade(UIElement element, bool value) => element.SetValue(FadeProperty, value);
@@ -40,11 +50,16 @@ public static class VisibilityTransition
 
     public static void SetSlide(UIElement element, bool value) => element.SetValue(SlideProperty, value);
 
+    public static bool GetShowSlide(UIElement element) => (bool)element.GetValue(ShowSlideProperty);
+
+    public static void SetShowSlide(UIElement element, bool value) => element.SetValue(ShowSlideProperty, value);
+
     private static void OnChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
         var element = (UIElement)sender;
         var compositor = ElementCompositionPreview.GetElementVisual(element).Compositor;
-        var slides = GetSlide(element);
+        var showsOnly = GetShowSlide(element);
+        var slides = GetSlide(element) || showsOnly;
         var fades = GetFade(element) || slides;
 
         // An element's Translation is only there to animate once it has been asked for.
@@ -52,7 +67,7 @@ public static class VisibilityTransition
             ElementCompositionPreview.SetIsTranslationEnabled(element, true);
 
         var show = fades ? CreateAnimation(compositor, isShowing: true, slides) : null;
-        var hide = fades ? CreateAnimation(compositor, isShowing: false, slides) : null;
+        var hide = fades && !showsOnly ? CreateAnimation(compositor, isShowing: false, slides) : null;
         ElementCompositionPreview.SetImplicitShowAnimation(element, show);
         ElementCompositionPreview.SetImplicitHideAnimation(element, hide);
     }
