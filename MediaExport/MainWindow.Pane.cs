@@ -30,6 +30,7 @@ public sealed partial class MainWindow
         _export.RecentlyViewed.Load(unpinned, pinned);
         ShowRecentlyViewed();
         navView.IsCompactChanged += (_, _) => ShowPaneText();
+        navView.PaneTransitionCompleted += (_, _) => ShowToolsWarning();
 
         _export.RecentlyViewed.CollectionChanged += (_, _) =>
         {
@@ -87,8 +88,21 @@ public sealed partial class MainWindow
         }
     }
 
-    private void ShowToolsWarning() => toolsWarning.Visibility =
-        Settings.HasMissingTools && !navView.IsCompact ? Visibility.Visible : Visibility.Collapsed;
+    private void ShowToolsWarning()
+    {
+        toolsWarning.Visibility = Settings.HasMissingTools ? Visibility.Visible : Visibility.Collapsed;
+
+        // Keep the caution visible in a compact pane while its explanatory content follows the same transition
+        // as the other pane labels.
+        // IsCompact changes before the pane begins animating. Waiting until it reaches its expanded width keeps
+        // this multi-line content from wrapping into a tall strip while that width is still growing.
+        var hasExpandedWidth = navView.OpenPaneLength >= navView.ExpandedPaneLength;
+        var detailsVisibility = !navView.IsCompact && hasExpandedWidth
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        toolsWarningDetails.Visibility = detailsVisibility;
+        installMissingToolsButton.Visibility = detailsVisibility;
+    }
 
     // The Activity item's badge is at the end of its row. A compact pane has no row, so there the badge takes
     // the icon's place for as long as it shows.

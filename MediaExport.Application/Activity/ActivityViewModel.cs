@@ -56,7 +56,7 @@ public sealed partial class ActivityViewModel : ObservableObject
     public int SelectedCount => SelectedJobs.Count;
     public bool HasSelection => SelectedCount > 0;
     public bool ShowSelectAll => HasJobs && !HasSelection;
-    public string SelectionSummary => SelectedCount == 1 ? "1 selected" : $"{SelectedCount} selected";
+    public string SelectionSummary => SelectedCount == 1 ? "1 item selected" : $"{SelectedCount} items selected";
     public bool CanRemoveSelected => HasSelection;
 
     public void Select(IEnumerable<ExportJob> jobs)
@@ -78,7 +78,7 @@ public sealed partial class ActivityViewModel : ObservableObject
 
     /// <summary>How many exports are waiting or running.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasActive))]
+    [NotifyPropertyChangedFor(nameof(HasActive), nameof(ActiveSummary))]
     public partial int ActiveCount { get; private set; }
 
     public bool HasActive => ActiveCount > 0;
@@ -88,14 +88,31 @@ public sealed partial class ActivityViewModel : ObservableObject
     {
         get
         {
-            var active = Jobs.Where(job => job.IsActive);
-            var progress = active.Select(job => job.Progress);
-            return progress.DefaultIfEmpty(0).Average();
+            var running = Jobs.Where(job => job.IsRunning).ToList();
+            return running.Count > 0 && running.All(job => job.HasDownloadProgress)
+                ? running.Average(job => job.Progress)
+                : 0;
         }
     }
 
-    /// <summary>Whether none of them has a percentage yet, so there is nothing to show but that they are busy.</summary>
-    public bool IsActiveProgressUnknown => ActiveProgress <= 0;
+    /// <summary>Whether an active export is in a phase without meaningful percentage progress.</summary>
+    public bool IsActiveProgressUnknown
+    {
+        get
+        {
+            var running = Jobs.Where(job => job.IsRunning).ToList();
+            return HasActive && (running.Count == 0 || running.Any(job => !job.HasDownloadProgress));
+        }
+    }
+
+    public string ActiveSummary
+    {
+        get
+        {
+            var count = ActiveCount == 1 ? "1 export" : $"{ActiveCount} exports";
+            return IsActiveProgressUnknown ? $"{count} active" : $"{count} active · {ActiveProgress:0}%";
+        }
+    }
 
     /// <summary>Adds an export to the queue. It starts at once if fewer than the limit are running.</summary>
     public ExportJob Start(MediaSearchResult media, ExportOptions options)
@@ -195,6 +212,7 @@ public sealed partial class ActivityViewModel : ObservableObject
         var job = (ExportJob)sender!;
         OnPropertyChanged(nameof(ActiveProgress));
         OnPropertyChanged(nameof(IsActiveProgressUnknown));
+        OnPropertyChanged(nameof(ActiveSummary));
         RefreshSelectionEligibility();
         if (args.PropertyName != nameof(ExportJob.State))
             return;

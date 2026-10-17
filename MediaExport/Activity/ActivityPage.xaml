@@ -47,29 +47,25 @@
                 Click="SelectAll_Click"
                 Content="Select all"
                 Visibility="{x:Bind ViewModel.ShowSelectAll, Mode=OneWay}" />
-            <Border
+            <StackPanel
                 Grid.Column="1"
-                Padding="10,4,4,4"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="10"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="6"
                 Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay}">
-                <StackPanel VerticalAlignment="Center" Orientation="Horizontal" Spacing="6">
-                    <TextBlock
-                        Margin="0,0,4,0"
-                        VerticalAlignment="Center"
-                        Style="{StaticResource BodyStrongTextBlockStyle}"
-                        Text="{x:Bind ViewModel.SelectionSummary, Mode=OneWay}" />
-                    <Button Click="ClearSelection_Click" Content="Clear" Style="{StaticResource SubtleButtonStyle}" />
-                    <Button Command="{x:Bind ViewModel.RemoveSelectedCommand}">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon FontSize="14" Glyph="&#xE74D;" />
-                            <TextBlock Text="Remove" />
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
-            </Border>
+                <TextBlock
+                    Margin="0,0,4,0"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource SecondaryTextStyle}"
+                    Text="{x:Bind ViewModel.SelectionSummary, Mode=OneWay}" />
+                <Button Click="ClearSelection_Click" Content="Clear" Style="{StaticResource SubtleButtonStyle}" />
+                <Button Command="{x:Bind ViewModel.RemoveSelectedCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon FontSize="14" Glyph="&#xE74D;" />
+                        <TextBlock Text="Remove" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
         </Grid>
 
         <controls:EmptyStateView
@@ -156,12 +152,12 @@
                                                 TextWrapping="Wrap"
                                                 ToolTipService.ToolTip="{x:Bind Status, Mode=OneWay}" />
                                         </Grid>
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind Detail, Mode=OneWay}" />
-                                            <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind ProgressDetail, Mode=OneWay}" />
-                                        </StackPanel>
+                                        <TextBlock
+                                            Style="{StaticResource SecondaryTextStyle}"
+                                            Text="{x:Bind SecondaryDetail, Mode=OneWay}"
+                                            TextTrimming="CharacterEllipsis" />
                                         <ProgressBar
-                                            Height="3"
+                                            Height="4"
                                             IsIndeterminate="{x:Bind IsIndeterminate, Mode=OneWay}"
                                             Visibility="{x:Bind IsActive, Mode=OneWay}"
                                             Value="{x:Bind Progress, Mode=OneWay}" />

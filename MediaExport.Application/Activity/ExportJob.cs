@@ -59,14 +59,14 @@ public sealed partial class ExportJob : ObservableObject
     public ExportOptions Options { get; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsActive), nameof(IsFinished), nameof(IsIndeterminate), nameof(Detail))]
+    [NotifyPropertyChangedFor(nameof(IsActive), nameof(IsFinished), nameof(IsIndeterminate), nameof(Detail), nameof(SecondaryDetail))]
     [NotifyPropertyChangedFor(nameof(IsQueued), nameof(IsRunning), nameof(IsCompleted), nameof(IsFailed), nameof(IsCancelled), nameof(CanRetry))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand), nameof(ShowInFolderCommand))]
     public partial ExportJobState State { get; private set; }
 
     /// <summary>From 0 to 100.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsIndeterminate))]
+    [NotifyPropertyChangedFor(nameof(IsIndeterminate), nameof(ProgressDetail), nameof(SecondaryDetail))]
     public partial double Progress { get; private set; }
 
     /// <summary>Where the export stands, in words: its place in the queue, how far it is, or why it failed.</summary>
@@ -81,16 +81,20 @@ public sealed partial class ExportJob : ObservableObject
     public ExportFailureKind? FailureKind { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ProgressDetail))]
+    [NotifyPropertyChangedFor(nameof(ProgressDetail), nameof(SecondaryDetail))]
     public partial string? Speed { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ProgressDetail))]
+    [NotifyPropertyChangedFor(nameof(ProgressDetail), nameof(SecondaryDetail))]
     public partial string? Eta { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsIndeterminate))]
+    [NotifyPropertyChangedFor(nameof(IsIndeterminate), nameof(ProgressDetail), nameof(SecondaryDetail))]
     public partial ExportPhase Phase { get; private set; } = ExportPhase.Inspecting;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIndeterminate), nameof(ProgressDetail), nameof(SecondaryDetail))]
+    public partial bool HasDownloadProgress { get; private set; }
 
     /// <summary>Whether it is waiting or running, which is to say not finished.</summary>
     public bool IsActive => State is ExportJobState.Queued or ExportJobState.Running;
@@ -101,10 +105,18 @@ public sealed partial class ExportJob : ObservableObject
     public bool IsFailed => State == ExportJobState.Failed;
     public bool IsCancelled => State == ExportJobState.Cancelled;
     public bool CanRetry => IsFailed && FailureKind != ExportFailureKind.DrmProtected;
-    public string ProgressDetail => string.Join(" · ", new[] { Speed, Eta is null ? null : $"{Eta} left" }.Where(value => value is not null));
+    public string ProgressDetail => string.Join(" · ", new[]
+    {
+        HasDownloadProgress ? $"{Progress:0}%" : null,
+        Speed,
+        Eta is null ? null : $"{Eta} left"
+    }.Where(value => value is not null));
+
+    public string SecondaryDetail => string.Join(" · ", new[] { Detail, ProgressDetail }
+        .Where(value => !string.IsNullOrWhiteSpace(value)));
 
     /// <summary>Whether it is running without a percentage yet, as it is while the media is looked up.</summary>
-    public bool IsIndeterminate => IsRunning && (Progress <= 0 || Phase is not ExportPhase.Downloading);
+    public bool IsIndeterminate => IsRunning && !HasDownloadProgress;
 
     /// <summary>Shown under the status: the file type, and the time of day it finished at.</summary>
     public string Detail
@@ -116,7 +128,7 @@ public sealed partial class ExportJob : ObservableObject
                 return format;
 
             var time = FinishedAt.Value.LocalDateTime.ToShortTimeString();
-            return $"{format}  ·  {time}";
+            return $"{format} · {time}";
         }
     }
 
@@ -185,18 +197,17 @@ public sealed partial class ExportJob : ObservableObject
         if (State != ExportJobState.Running)
             return;
 
-        // A video is fetched as two files, picture then sound, and the bar doesn't run backwards for the second.
-        if (value.Percent is { } percent)
-            Progress = Math.Max(Progress, percent);
         Phase = value.Phase;
-        Speed = value.Speed;
-        Eta = value.Eta;
+        HasDownloadProgress = value.Phase == ExportPhase.Downloading && value.Percent.HasValue;
+        if (HasDownloadProgress)
+            Progress = value.Percent!.Value;
+        Speed = value.Phase == ExportPhase.Downloading ? value.Speed : null;
+        Eta = value.Phase == ExportPhase.Downloading ? value.Eta : null;
         Status = value.Phase switch
         {
             ExportPhase.Merging => "Merging",
             ExportPhase.Converting => "Converting",
             ExportPhase.Completed => "Finishing",
-            _ when value.Percent is { } => $"Downloading {Progress:0}%",
             _ => "Downloading"
         };
     }
@@ -213,6 +224,7 @@ public sealed partial class ExportJob : ObservableObject
         FinishedAt = null;
         FailureKind = null;
         Progress = 0;
+        HasDownloadProgress = false;
         Speed = null;
         Eta = null;
         Phase = ExportPhase.Inspecting;

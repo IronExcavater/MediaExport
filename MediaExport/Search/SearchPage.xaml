@@ -25,17 +25,11 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel VerticalAlignment="Center" Spacing="2">
-                <TextBlock
-                    Style="{StaticResource PageTitleStyle}"
-                    Text="{x:Bind ViewModel.Title, Mode=OneWay}"
-                    TextTrimming="CharacterEllipsis" />
-                <TextBlock
-                    Style="{StaticResource SecondaryTextStyle}"
-                    Text="{x:Bind ViewModel.TermSummary, Mode=OneWay}"
-                    TextTrimming="CharacterEllipsis"
-                    TextWrapping="NoWrap" />
-            </StackPanel>
+            <TextBlock
+                VerticalAlignment="Center"
+                Style="{StaticResource PageTitleStyle}"
+                Text="{x:Bind ViewModel.Title, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis" />
 
             <StackPanel
                 Grid.Column="1"
