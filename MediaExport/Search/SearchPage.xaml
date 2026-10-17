@@ -165,14 +165,14 @@
                         </ItemsRepeater.Layout>
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="models:MediaSearchResult">
-                                <media:MediaButton
+                                <Button
                                     controls:JustifiedLayout.Shape="{x:Bind media:MediaThumbnail.ShapeOf(Kind)}"
                                     AutomationProperties.Name="{x:Bind Title}"
                                     Click="Result_Click"
                                     Style="{StaticResource CardButtonStyle}"
                                     Tag="{x:Bind}">
                                     <media:CardMediaView Media="{x:Bind}" />
-                                </media:MediaButton>
+                                </Button>
                             </DataTemplate>
                         </ItemsRepeater.ItemTemplate>
                     </ItemsRepeater>

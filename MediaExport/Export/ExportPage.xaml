@@ -10,6 +10,19 @@
     Background="Transparent"
     NavigationCacheMode="Required">
 
+    <Page.Resources>
+        <Style x:Key="ExportIconButtonStyle" BasedOn="{StaticResource SubtleButtonStyle}" TargetType="Button">
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+        <Style x:Key="OptionLabelStyle" BasedOn="{StaticResource CaptionTextBlockStyle}" TargetType="TextBlock">
+            <Setter Property="Margin" Value="2,0,0,0" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
+    </Page.Resources>
+
     <Grid MaxWidth="{StaticResource PageMaxWidth}" Padding="24,16,24,24">
         <controls:EmptyStateView
             Title="Choose media to export"
@@ -25,11 +38,6 @@
             </controls:EmptyStateView.Action>
         </controls:EmptyStateView>
 
-        <!--
-            The media that is open and how it is to be exported. A wide window has the media as a card on the left
-            and the panel beside it. A narrow one has the media as a row along the top and the panel under it.
-            Either way the page fits the window, so nothing scrolls.
-        -->
         <Grid
             x:Name="editor"
             ColumnSpacing="24"
@@ -37,21 +45,14 @@
             Visibility="{x:Bind ViewModel.IsOpen, Mode=OneWay}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition x:Name="panelColumn" Width="360" />
+                <ColumnDefinition x:Name="panelColumn" Width="380" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition x:Name="mediaRow" Height="*" />
                 <RowDefinition x:Name="panelRow" Height="Auto" />
             </Grid.RowDefinitions>
 
-            <!--
-                There is one player, which the two layouts place differently, so what is playing carries on when
-                the window is resized. It is a skeleton of itself while the media's link is being read.
-            -->
-            <Grid
-                x:Name="mediaArea"
-                ColumnSpacing="12"
-                RowSpacing="12">
+            <Grid x:Name="mediaArea" ColumnSpacing="12" RowSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -67,21 +68,19 @@
                     HorizontalAlignment="Left"
                     Media="{x:Bind ViewModel.Media, Mode=OneWay}" />
 
-                <!-- FallbackValue empties the title while there is no media, or the last one's would stay. -->
                 <Grid
                     x:Name="words"
                     Grid.Row="1"
                     Grid.ColumnSpan="2"
                     VerticalAlignment="Center"
-                    ColumnSpacing="8"
+                    ColumnSpacing="12"
                     SizeChanged="Editor_SizeChanged">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <StackPanel VerticalAlignment="Center" Spacing="3">
                         <TextBlock
-                            IsTextSelectionEnabled="True"
                             MaxLines="2"
                             Style="{StaticResource SubtitleTextBlockStyle}"
                             Text="{x:Bind ViewModel.Media.Title, Mode=OneWay, FallbackValue=''}"
@@ -91,10 +90,11 @@
                     </StackPanel>
                     <Button
                         Grid.Column="1"
-                        AutomationProperties.Name="Remove selected media"
+                        AutomationProperties.Name="Remove media"
                         Click="Close_Click"
-                        Content="Remove media"
-                        ToolTipService.ToolTip="Remove from the Export page">
+                        Style="{StaticResource ExportIconButtonStyle}"
+                        ToolTipService.ToolTip="Remove media from this page">
+                        <FontIcon FontSize="16" Glyph="&#xE711;" />
                     </Button>
                 </Grid>
             </Grid>
@@ -102,7 +102,6 @@
             <Grid
                 x:Name="panel"
                 Grid.Column="1"
-                Grid.Row="0"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
@@ -112,158 +111,99 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Export settings. The button remains fixed in the row below. -->
-                <ScrollViewer
-                    Grid.Row="0"
-                    VerticalScrollBarVisibility="Auto"
-                    Visibility="{x:Bind converters:VisibleWhen.False(ViewModel.IsLoading), Mode=OneWay}">
-
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Padding="20" Spacing="18">
-                        <ProgressRing HorizontalAlignment="Left" IsActive="{x:Bind ViewModel.IsInspecting, Mode=OneWay}" Visibility="{x:Bind ViewModel.IsInspecting, Mode=OneWay}" />
+                        <StackPanel Spacing="3">
+                            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Export options" />
+                            <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="Choose the file, quality, and destination." />
+                        </StackPanel>
+
                         <InfoBar
                             IsClosable="False"
                             IsOpen="{x:Bind converters:Is.NotBlank(ViewModel.AvailabilityMessage), Mode=OneWay}"
                             Message="{x:Bind ViewModel.AvailabilityMessage, Mode=OneWay}"
                             Severity="Warning"
                             Title="Can’t export this media" />
-                        <ContentControl IsEnabled="{x:Bind ViewModel.IsAvailable, Mode=OneWay}">
-                            <StackPanel Spacing="18">
-                        <StackPanel Spacing="6">
-                            <TextBlock
-                                FontWeight="SemiBold"
-                                Text="Export type" />
 
-                            <ComboBox
-                                HorizontalAlignment="Stretch"
-                                x:Name="ExportModeComboBox"
-                                ItemsSource="{x:Bind ViewModel.ExportModes, Mode=OneWay}"
-                                SelectedItem="{x:Bind ViewModel.SelectedExportMode, Mode=TwoWay}" />
-                        </StackPanel>
-                        
-                        <!-- Format -->
-                        <StackPanel Spacing="6">
-                            <TextBlock
-                                FontSize="20"
-                                FontWeight="SemiBold"
-                                Text="Export settings" />
+                        <ContentControl IsEnabled="{x:Bind ViewModel.CanEditExport, Mode=OneWay}">
+                            <StackPanel Spacing="16">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Style="{StaticResource OptionLabelStyle}" Text="Export" />
+                                        <ComboBox
+                                            x:Name="ExportModeComboBox"
+                                            HorizontalAlignment="Stretch"
+                                            ItemsSource="{x:Bind ViewModel.ExportModes, Mode=OneWay}"
+                                            SelectedItem="{x:Bind ViewModel.SelectedExportMode, Mode=TwoWay}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="6">
+                                        <TextBlock Style="{StaticResource OptionLabelStyle}" Text="Format" />
+                                        <ComboBox
+                                            x:Name="ExportFormatComboBox"
+                                            HorizontalAlignment="Stretch"
+                                            ItemsSource="{x:Bind ViewModel.AvailableFormats, Mode=OneWay}"
+                                            SelectedItem="{x:Bind ViewModel.SelectedFormat, Mode=TwoWay}" />
+                                    </StackPanel>
+                                </Grid>
 
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Choose your format and quality." />
-
-                            <TextBlock
-                                Margin="0,8,0,0"
-                                FontWeight="SemiBold"
-                                Text="Format" />
-
-                            <ComboBox
-                                HorizontalAlignment="Stretch"
-                                x:Name="ExportFormatComboBox"
-                                ItemsSource="{x:Bind ViewModel.AvailableFormats, Mode=OneWay}"
-                                SelectedItem="{x:Bind ViewModel.SelectedFormat, Mode=TwoWay}" />
-                        </StackPanel>
-
-                        <!-- Audio options -->
-                        <StackPanel
-                            Spacing="8"
-                            Visibility="{x:Bind converters:VisibleWhen.True(ViewModel.IsAudioExport), Mode=OneWay}">
-
-                            <TextBlock
-                                FontSize="16"
-                                FontWeight="SemiBold"
-                                Text="Audio quality" />
-
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Higher bitrates generally produce larger files." />
-
-                            <TextBlock
-                                Margin="0,4,0,0"
-                                FontWeight="SemiBold"
-                                Text="Bitrate" />
-
-                            <ComboBox
-                                HorizontalAlignment="Stretch"
-                                ItemsSource="{x:Bind ViewModel.AudioBitrates, Mode=OneWay}"
-                                SelectedItem="{x:Bind ViewModel.SelectedAudioBitrate, Mode=TwoWay}" />
-
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Bitrate applies to MP3 and M4A. WAV and FLAC use their format's audio encoding settings." />
-                        </StackPanel>
-
-                        <!-- Video options -->
-                        <StackPanel
-                            Spacing="8"
-                            Visibility="{x:Bind converters:VisibleWhen.False(ViewModel.IsAudioExport), Mode=OneWay}">
-
-                            <TextBlock
-                                FontSize="16"
-                                FontWeight="SemiBold"
-                                Text="Video quality" />
-
-                            <TextBlock
-                                Margin="0,4,0,0"
-                                FontWeight="SemiBold"
-                                Text="Maximum resolution" />
-
-                            <ComboBox
-                                HorizontalAlignment="Stretch"
-                                ItemsSource="{x:Bind ViewModel.VideoResolutions, Mode=OneWay}"
-                                SelectedItem="{x:Bind ViewModel.SelectedVideoResolution, Mode=TwoWay}" />
-
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="The downloader selects the best available video at or below this resolution when possible." />
-                        </StackPanel>
-
-
-                        <!-- Save location -->
-                        <StackPanel Spacing="8">
-                            <TextBlock
-                                FontWeight="SemiBold"
-                                Text="Save location" />
-
-                            <Grid ColumnSpacing="8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <Border
-                                    Padding="10,9"
-                                    Background="{ThemeResource LayerFillColorAltBrush}"
-                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="6">
-                                    <TextBlock
-                                        Text="{x:Bind ViewModel.SelectedOutputFolder, Mode=OneWay}"
-                                        TextTrimming="CharacterEllipsis"
-                                        VerticalAlignment="Center" />
+                                <Border Padding="14" Background="{ThemeResource LayerFillColorAltBrush}" CornerRadius="8">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock FontWeight="SemiBold" Text="Quality" />
+                                        <StackPanel Spacing="6" Visibility="{x:Bind converters:VisibleWhen.True(ViewModel.IsAudioExport), Mode=OneWay}">
+                                            <TextBlock Style="{StaticResource OptionLabelStyle}" Text="Audio bitrate" />
+                                            <ComboBox
+                                                HorizontalAlignment="Stretch"
+                                                ItemsSource="{x:Bind ViewModel.AudioBitrates, Mode=OneWay}"
+                                                SelectedItem="{x:Bind ViewModel.SelectedAudioBitrate, Mode=TwoWay}" />
+                                            <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="MP3 and M4A use the selected bitrate." />
+                                        </StackPanel>
+                                        <StackPanel Spacing="6" Visibility="{x:Bind converters:VisibleWhen.False(ViewModel.IsAudioExport), Mode=OneWay}">
+                                            <TextBlock Style="{StaticResource OptionLabelStyle}" Text="Maximum resolution" />
+                                            <ComboBox
+                                                HorizontalAlignment="Stretch"
+                                                ItemsSource="{x:Bind ViewModel.VideoResolutions, Mode=OneWay}"
+                                                SelectedItem="{x:Bind ViewModel.SelectedVideoResolution, Mode=TwoWay}" />
+                                            <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="The best available stream up to this resolution is selected." />
+                                        </StackPanel>
+                                    </StackPanel>
                                 </Border>
 
-                                <Button
-                                    Grid.Column="1"
-                                    Click="BrowseOutputFolder_Click"
-                                    VerticalAlignment="Stretch">
-                                    <StackPanel
-                                        Orientation="Horizontal"
-                                        Spacing="6">
-                                        <FontIcon Glyph="&#xE8B7;" />
-                                        <TextBlock Text="Browse" />
-                                    </StackPanel>
-                                </Button>
-                            </Grid>
-                        </StackPanel>
-
+                                <StackPanel Spacing="6">
+                                    <TextBlock Style="{StaticResource OptionLabelStyle}" Text="Save to" />
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border
+                                            MinHeight="38"
+                                            Padding="10,8"
+                                            Background="{ThemeResource LayerFillColorAltBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="8">
+                                            <TextBlock
+                                                VerticalAlignment="Center"
+                                                Text="{x:Bind ViewModel.SelectedOutputFolder, Mode=OneWay}"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </Border>
+                                        <Button Grid.Column="1" Click="BrowseOutputFolder_Click" ToolTipService.ToolTip="Choose export folder">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon FontSize="14" Glyph="&#xE8B7;" />
+                                                <TextBlock Text="Browse" />
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                             </StackPanel>
                         </ContentControl>
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- The one button that makes the export, always at the bottom. -->
                 <Border
                     Grid.Row="1"
                     Padding="16,12,16,14"
@@ -272,18 +212,52 @@
                     BorderThickness="0,1,0,0"
                     CornerRadius="0,0,11,11">
                     <Button
-                        Height="44"
+                        MinHeight="48"
                         HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
                         AutomationProperties.Name="Export"
                         Command="{x:Bind ViewModel.ExportCommand}"
                         Style="{StaticResource AccentButtonStyle}">
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon FontSize="16" Glyph="&#xE896;" />
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid Width="18" Height="18">
+                                <FontIcon
+                                    FontSize="16"
+                                    Glyph="&#xE896;"
+                                    Visibility="{x:Bind converters:VisibleWhen.False(ViewModel.IsExportBusy), Mode=OneWay}" />
+                                <ProgressRing
+                                    Width="18"
+                                    Height="18"
+                                    MinWidth="0"
+                                    MinHeight="0"
+                                    IsActive="{x:Bind ViewModel.IsExportBusy, Mode=OneWay}"
+                                    Visibility="{x:Bind ViewModel.IsExportBusy, Mode=OneWay}" />
+                            </Grid>
                             <TextBlock
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
                                 FontSize="15"
                                 FontWeight="SemiBold"
-                                Text="Export" />
-                        </StackPanel>
+                                Text="{x:Bind ViewModel.ExportActionText, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Text="{x:Bind ViewModel.ExportProgressDetail, Mode=OneWay}" />
+                            <ProgressBar
+                                Grid.ColumnSpan="3"
+                                Height="3"
+                                Margin="0,30,0,0"
+                                VerticalAlignment="Top"
+                                IsIndeterminate="{x:Bind ViewModel.IsExportProgressIndeterminate, Mode=OneWay}"
+                                Value="{x:Bind ViewModel.ExportProgress, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.IsExporting, Mode=OneWay}" />
+                        </Grid>
                     </Button>
                 </Border>
             </Grid>
@@ -296,8 +270,6 @@
                         <AdaptiveTrigger MinWindowWidth="{x:Bind shell:WindowSizes.Wide}" />
                     </VisualState.StateTriggers>
                 </VisualState>
-
-                <!-- The media becomes a row, a small player with its title beside it, and the panel fills the rest. -->
                 <VisualState x:Name="Narrow">
                     <VisualState.StateTriggers>
                         <AdaptiveTrigger MinWindowWidth="0" />

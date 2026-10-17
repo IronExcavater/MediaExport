@@ -26,6 +26,9 @@ public sealed partial class RowMediaView : MediaView
     public static readonly DependencyProperty TitleFontSizeProperty = DependencyProperty.Register(
         nameof(TitleFontSize), typeof(double), typeof(RowMediaView), new PropertyMetadata(16d));
 
+    public static readonly DependencyProperty DetailsProperty = DependencyProperty.Register(
+        nameof(Details), typeof(object), typeof(RowMediaView), new PropertyMetadata(null));
+
     public RowMediaView()
     {
         InitializeComponent();
@@ -64,6 +67,13 @@ public sealed partial class RowMediaView : MediaView
     {
         get => (double)GetValue(TitleFontSizeProperty);
         set => SetValue(TitleFontSizeProperty, value);
+    }
+
+    /// <summary>Optional content placed below the shared title and byline without duplicating the media layout.</summary>
+    public object? Details
+    {
+        get => GetValue(DetailsProperty);
+        set => SetValue(DetailsProperty, value);
     }
 
     private static void OnPresentationChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)

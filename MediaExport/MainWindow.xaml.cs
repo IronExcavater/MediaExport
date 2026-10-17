@@ -54,6 +54,9 @@ public sealed partial class MainWindow : Window
     /// <summary>The exports that are waiting and running, which the Activity item's badge counts.</summary>
     public ActivityViewModel Activity { get; } = App.Current.Services.GetRequiredService<ActivityViewModel>();
 
+    /// <summary>The tool state shown in Settings and in the navigation pane warning.</summary>
+    public SettingsViewModel Settings { get; } = App.Current.Services.GetRequiredService<SettingsViewModel>();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -92,11 +95,9 @@ public sealed partial class MainWindow : Window
         RestoreRecentlyViewed();
         Activity.PropertyChanged += Activity_PropertyChanged;
 
-        var settingsViewModel =
-            App.Current.Services.GetRequiredService<SettingsViewModel>();
-
-        settingsViewModel.LastSearchCleared +=
+        Settings.LastSearchCleared +=
             (_, _) => _lastSearchWasCleared = true;
+        Settings.PropertyChanged += Settings_PropertyChanged;
 
         Closed += (_, _) =>
         {
@@ -113,7 +114,7 @@ public sealed partial class MainWindow : Window
     }
 
     // The minimum size and the caption buttons' width are in screen pixels, so both are converted by display scale.
-    private void Root_Loaded(object sender, RoutedEventArgs args)
+    private async void Root_Loaded(object sender, RoutedEventArgs args)
     {
         var scale = root.XamlRoot.RasterizationScale;
         if (AppWindow.Presenter is OverlappedPresenter presenter)
@@ -134,6 +135,8 @@ public sealed partial class MainWindow : Window
         double reservedWidth = AppWindow.TitleBar.RightInset;
         var neededWidth = reservedWidth / scale;
         titleBar.Margin = new Thickness(0, 0, neededWidth - reservedWidth, 0);
+
+        await Settings.RefreshToolsAsync();
     }
 
     // The app opens on the search it was closed with, or on what is popular. The results are usually remembered

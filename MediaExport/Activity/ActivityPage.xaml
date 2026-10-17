@@ -21,6 +21,12 @@
         <Style x:Key="StateIconStyle" TargetType="FontIcon">
             <Setter Property="FontSize" Value="14" />
         </Style>
+        <Style x:Key="ActivityIconButtonStyle" BasedOn="{StaticResource SubtleButtonStyle}" TargetType="Button">
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
     </Page.Resources>
 
     <!-- 12 less side padding and a 12 heading inset leave room for the rows' focus ring, as on the Search page. -->
@@ -36,15 +42,34 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock VerticalAlignment="Center" Style="{StaticResource PageTitleStyle}" Text="Activity" />
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal" Spacing="6" Visibility="{x:Bind ViewModel.HasJobs, Mode=OneWay}">
-                <TextBlock VerticalAlignment="Center" Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind ViewModel.SelectedCount, Mode=OneWay}" />
-                <TextBlock VerticalAlignment="Center" Style="{StaticResource SecondaryTextStyle}" Text="selected" />
-                <Button Click="SelectAll_Click" Content="Select all" />
-                <Button Command="{x:Bind ViewModel.RetrySelectedCommand}" Content="Retry" />
-                <Button Command="{x:Bind ViewModel.CancelSelectedCommand}" Content="Cancel" />
-                <Button Command="{x:Bind ViewModel.RemoveSelectedCommand}" Content="Remove" />
-                <Button Click="ClearSelection_Click" Content="Clear" />
-            </StackPanel>
+            <Button
+                Grid.Column="1"
+                Click="SelectAll_Click"
+                Content="Select all"
+                Visibility="{x:Bind ViewModel.ShowSelectAll, Mode=OneWay}" />
+            <Border
+                Grid.Column="1"
+                Padding="10,4,4,4"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="10"
+                Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay}">
+                <StackPanel VerticalAlignment="Center" Orientation="Horizontal" Spacing="6">
+                    <TextBlock
+                        Margin="0,0,4,0"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="{x:Bind ViewModel.SelectionSummary, Mode=OneWay}" />
+                    <Button Click="ClearSelection_Click" Content="Clear" Style="{StaticResource SubtleButtonStyle}" />
+                    <Button Command="{x:Bind ViewModel.RemoveSelectedCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon FontSize="14" Glyph="&#xE74D;" />
+                            <TextBlock Text="Remove" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
         </Grid>
 
         <controls:EmptyStateView
@@ -72,15 +97,16 @@
                 SelectionMode="Extended">
                 <ListView.GroupStyle>
                     <GroupStyle HidesIfEmpty="True">
+                        <GroupStyle.HeaderContainerStyle>
+                            <Style TargetType="ListViewHeaderItem">
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="HorizontalContentAlignment" Value="Left" />
+                                <Setter Property="Padding" Value="12,14,12,6" />
+                            </Style>
+                        </GroupStyle.HeaderContainerStyle>
                         <GroupStyle.HeaderTemplate>
                             <DataTemplate x:DataType="local:JobGroup">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="{x:Bind Title}" />
-                                    <TextBlock
-                                        VerticalAlignment="Center"
-                                        Style="{StaticResource SecondaryTextStyle}"
-                                        Text="{x:Bind Count}" />
-                                </StackPanel>
+                                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="{x:Bind Title}" />
                             </DataTemplate>
                         </GroupStyle.HeaderTemplate>
                     </GroupStyle>
@@ -101,76 +127,60 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            <media:RowMediaView Media="{x:Bind Media}" />
+                            <media:RowMediaView Media="{x:Bind Media}">
+                                <media:RowMediaView.Details>
+                                    <StackPanel Margin="0,6,0,0" Spacing="5">
+                                        <Grid ColumnSpacing="6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <ProgressRing
+                                                Width="14"
+                                                Height="14"
+                                                MinWidth="0"
+                                                MinHeight="0"
+                                                IsActive="{x:Bind IsRunning, Mode=OneWay}"
+                                                Visibility="{x:Bind IsRunning, Mode=OneWay}" />
+                                            <FontIcon Foreground="{ThemeResource TextFillColorSecondaryBrush}" Glyph="&#xE823;" Style="{StaticResource StateIconStyle}" Visibility="{x:Bind IsQueued, Mode=OneWay}" />
+                                            <FontIcon Foreground="{ThemeResource SystemFillColorSuccessBrush}" Glyph="&#xEC61;" Style="{StaticResource StateIconStyle}" Visibility="{x:Bind IsCompleted, Mode=OneWay}" />
+                                            <FontIcon Foreground="{ThemeResource SystemFillColorCriticalBrush}" Glyph="&#xEA39;" Style="{StaticResource StateIconStyle}" Visibility="{x:Bind IsFailed, Mode=OneWay}" />
+                                            <FontIcon Foreground="{ThemeResource TextFillColorSecondaryBrush}" Glyph="&#xE711;" Style="{StaticResource StateIconStyle}" Visibility="{x:Bind IsCancelled, Mode=OneWay}" />
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                MaxLines="2"
+                                                Text="{x:Bind Status, Mode=OneWay}"
+                                                TextTrimming="CharacterEllipsis"
+                                                TextWrapping="Wrap"
+                                                ToolTipService.ToolTip="{x:Bind Status, Mode=OneWay}" />
+                                        </Grid>
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind Detail, Mode=OneWay}" />
+                                            <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind ProgressDetail, Mode=OneWay}" />
+                                        </StackPanel>
+                                        <ProgressBar
+                                            Height="3"
+                                            IsIndeterminate="{x:Bind IsIndeterminate, Mode=OneWay}"
+                                            Visibility="{x:Bind IsActive, Mode=OneWay}"
+                                            Value="{x:Bind Progress, Mode=OneWay}" />
+                                    </StackPanel>
+                                </media:RowMediaView.Details>
+                            </media:RowMediaView>
 
-                            <!-- How the export stands, then what was made and when it finished. -->
                             <StackPanel
                                 Grid.Column="1"
-                                MaxWidth="280"
-                                VerticalAlignment="Center"
-                                Spacing="2">
-                                <Grid HorizontalAlignment="Right" ColumnSpacing="6">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <!-- One of these shows, for the state the export is in. -->
-                                    <ProgressRing
-                                        Width="14"
-                                        Height="14"
-                                        MinWidth="0"
-                                        MinHeight="0"
-                                        IsActive="{x:Bind IsRunning, Mode=OneWay}"
-                                        Visibility="{x:Bind IsRunning, Mode=OneWay}" />
-                                    <FontIcon
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Glyph="&#xE823;"
-                                        Style="{StaticResource StateIconStyle}"
-                                        Visibility="{x:Bind IsQueued, Mode=OneWay}" />
-                                    <FontIcon
-                                        Foreground="{ThemeResource SystemFillColorSuccessBrush}"
-                                        Glyph="&#xEC61;"
-                                        Style="{StaticResource StateIconStyle}"
-                                        Visibility="{x:Bind IsCompleted, Mode=OneWay}" />
-                                    <FontIcon
-                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                        Glyph="&#xEA39;"
-                                        Style="{StaticResource StateIconStyle}"
-                                        Visibility="{x:Bind IsFailed, Mode=OneWay}" />
-                                    <FontIcon
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Glyph="&#xE711;"
-                                        Style="{StaticResource StateIconStyle}"
-                                        Visibility="{x:Bind IsCancelled, Mode=OneWay}" />
-                                    <TextBlock
-                                        Grid.Column="1"
-                                        MaxLines="2"
-                                        Text="{x:Bind Status, Mode=OneWay}"
-                                        TextAlignment="Right"
-                                        TextTrimming="CharacterEllipsis"
-                                        TextWrapping="Wrap"
-                                        ToolTipService.ToolTip="{x:Bind Status, Mode=OneWay}" />
-                                </Grid>
-                                <TextBlock
-                                    HorizontalAlignment="Right"
-                                    Style="{StaticResource SecondaryTextStyle}"
-                                    Text="{x:Bind Detail, Mode=OneWay}" />
-                                <TextBlock HorizontalAlignment="Right" Style="{StaticResource SecondaryTextStyle}" Text="{x:Bind ProgressDetail, Mode=OneWay}" />
-                            </StackPanel>
-
-                            <StackPanel
-                                Grid.Column="2"
                                 VerticalAlignment="Center"
                                 Orientation="Horizontal"
-                                Spacing="2">
+                                Spacing="6">
                                 <Button
+                                    AutomationProperties.Name="Show in folder"
                                     Command="{x:Bind ShowInFolderCommand}"
-                                    Content="Show in folder"
+                                    Style="{StaticResource ActivityIconButtonStyle}"
+                                    ToolTipService.ToolTip="Show in folder"
                                     Visibility="{x:Bind IsCompleted, Mode=OneWay}">
+                                    <FontIcon FontSize="16" Glyph="&#xE838;" />
                                 </Button>
                                 <Button
                                     Click="Retry_Click"
@@ -184,14 +194,6 @@
                                     Visibility="{x:Bind IsActive, Mode=OneWay}">
                                 </Button>
                             </StackPanel>
-
-                            <!-- Along the row's bottom edge, so progress doesn't make the row taller. -->
-                            <ProgressBar
-                                Grid.ColumnSpan="3"
-                                VerticalAlignment="Bottom"
-                                IsIndeterminate="{x:Bind IsIndeterminate, Mode=OneWay}"
-                                Visibility="{x:Bind IsActive, Mode=OneWay}"
-                                Value="{x:Bind Progress, Mode=OneWay}" />
                         </Grid>
                     </DataTemplate>
                 </ListView.ItemTemplate>
