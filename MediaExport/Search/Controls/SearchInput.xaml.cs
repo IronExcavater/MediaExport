@@ -610,7 +610,7 @@ public sealed partial class SearchInput : UserControl
     }
 
     /// <summary>The pin button's icon, which is filled in on a search that is pinned.</summary>
-    public static string PinGlyph(bool isPinned) => isPinned ? "\uE840" : "\uE718";
+    public static string PinGlyph(bool isPinned) => isPinned ? "\uE77A" : "\uE718";
 
     public static string PinAction(bool isPinned) => isPinned ? "Unpin" : "Pin";
 

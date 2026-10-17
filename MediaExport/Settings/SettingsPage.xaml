@@ -40,11 +40,6 @@
         <controls:EdgeFade>
             <ScrollViewer controls:ScrollBarGutter.Mode="Stable">
                 <StackPanel Padding="24,0,24,32" Spacing="4">
-                    <StackPanel.ChildrenTransitions>
-                        <TransitionCollection>
-                            <RepositionThemeTransition />
-                        </TransitionCollection>
-                    </StackPanel.ChildrenTransitions>
                     <TextBlock Style="{StaticResource SettingsHeaderStyle}" Text="Appearance" />
                     <Border Style="{StaticResource SettingsGroupStyle}">
                         <Border BorderThickness="0" Style="{StaticResource SettingsRowStyle}">

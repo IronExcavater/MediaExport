@@ -234,8 +234,10 @@
                     <NavigationViewItem.InfoBadge>
                         <InfoBadge
                             x:Name="activityBadge"
+                            AutomationProperties.Name="{x:Bind Activity.ActiveSummary, Mode=OneWay}"
                             DataContext="{x:Bind Activity}"
                             Style="{StaticResource ProgressBadgeStyle}"
+                            ToolTipService.ToolTip="{x:Bind Activity.ActiveSummary, Mode=OneWay}"
                             Visibility="{x:Bind Activity.HasActive, Mode=OneWay}" />
                     </NavigationViewItem.InfoBadge>
                 </NavigationViewItem>

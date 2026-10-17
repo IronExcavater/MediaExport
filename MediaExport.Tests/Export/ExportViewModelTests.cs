@@ -130,7 +130,8 @@ public class ExportViewModelTests
         {
             Assert.That(export.IsExporting, Is.True);
             Assert.That(export.ExportProgress, Is.EqualTo(42));
-            Assert.That(export.ExportActionText, Is.EqualTo("Downloading 42%"));
+            Assert.That(export.ExportActionText, Is.EqualTo("Downloading"));
+            Assert.That(export.ExportProgressDetail, Is.EqualTo("42% · 2 MiB/s · 00:12 left"));
             Assert.That(export.ExportCommand.CanExecute(null), Is.False);
         });
 

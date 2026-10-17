@@ -113,7 +113,7 @@
 
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Padding="20" Spacing="16">
-                        <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Export" />
+                        <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Export Options" />
 
                         <InfoBar
                             IsClosable="False"

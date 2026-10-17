@@ -58,6 +58,23 @@ public class ActivityViewModelTests
         }
     }
 
+    private sealed class StagedDownloader(params ExportProgress[] reports) : IMediaDownloader
+    {
+        public TaskCompletionSource<IReadOnlyList<string>> Completion { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<IReadOnlyList<string>> DownloadAsync(
+            string sourceUrl,
+            ExportOptions options,
+            IProgress<ExportProgress>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            foreach (var report in reports)
+                progress!.Report(report);
+            return Completion.Task;
+        }
+    }
+
     [Test]
     public void TwoExportsRunAtOnceAndTheNextStartsWhenOneFinishes()
     {
@@ -193,6 +210,41 @@ public class ActivityViewModelTests
             Assert.That(job.Progress, Is.EqualTo(37));
             Assert.That(job.Phase, Is.EqualTo(ExportPhase.Merging));
             Assert.That(job.IsIndeterminate, Is.False, "a finished failure no longer animates");
+        });
+    }
+
+    [Test]
+    public void A_new_download_stage_replaces_the_previous_stages_percentage()
+    {
+        var downloader = new StagedDownloader(
+            new ExportProgress(100, "3 MiB/s", "00:00"),
+            new ExportProgress(24, "1 MiB/s", "00:05"));
+        var activity = new ActivityViewModel(downloader, new SettingsStore(null));
+
+        var job = activity.Start(Media, Options);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(job.Progress, Is.EqualTo(24));
+            Assert.That(job.Status, Is.EqualTo("Downloading"));
+            Assert.That(job.ProgressDetail, Is.EqualTo("24% · 1 MiB/s · 00:05 left"));
+        });
+    }
+
+    [Test]
+    public void Queue_progress_is_indeterminate_while_a_running_job_is_merging()
+    {
+        var downloader = new StagedDownloader(
+            new ExportProgress(100, "3 MiB/s", "00:00"),
+            new ExportProgress(null, null, null, ExportPhase.Merging));
+        var activity = new ActivityViewModel(downloader, new SettingsStore(null));
+
+        activity.Start(Media, Options);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(activity.IsActiveProgressUnknown, Is.True);
+            Assert.That(activity.ActiveProgress, Is.Zero);
         });
     }
 
