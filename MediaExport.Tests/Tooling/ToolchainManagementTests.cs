@@ -4,6 +4,7 @@
 using MediaExport.Core.Settings;
 using MediaExport.Core.Tooling;
 using MediaExport.Tests.Support;
+using System.IO.Compression;
 
 namespace MediaExport.Tests.Tooling;
 
@@ -56,6 +57,41 @@ public class ToolchainManagementTests
             Assert.That(_settings.Current.Tools["yt-dlp"].IsInstalled, Is.False);
             Assert.That(service.Find("yt-dlp"), Is.EqualTo(new ToolInstallation(Path.GetFullPath(external), ToolOrigin.External)));
         });
+    }
+
+    [Test]
+    public async Task Manage_WhenInstallingZip_ReturnsExecutablePathAndRemovesWholeToolDirectory()
+    {
+        // Arrange
+        using var archiveStream = new MemoryStream();
+        using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry("ffmpeg/bin/ffmpeg.exe");
+            await using var entryStream = entry.Open();
+            await entryStream.WriteAsync("ffmpeg"u8.ToArray());
+        }
+
+        _http.Content = archiveStream.ToArray();
+        var service = CreateService();
+        var toolDirectory = Path.Combine(_managedFolder, "ffmpeg");
+
+        // Act
+        var installed = await service.InstallAsync(
+            "ffmpeg",
+            new Uri("https://example.test/ffmpeg.zip"));
+
+        // Assert installation path before removing the archive.
+        Assert.Multiple(() =>
+        {
+            Assert.That(installed.Path, Is.EqualTo(_settings.Current.Tools["ffmpeg"].InstallPath));
+            Assert.That(File.Exists(installed.Path), Is.True);
+        });
+
+        // Act
+        await service.RemoveAsync("ffmpeg");
+
+        // Assert
+        Assert.That(Directory.Exists(toolDirectory), Is.False);
     }
 
     [Test]

@@ -41,15 +41,15 @@ public sealed partial class ToolchainService(
     public Task RemoveAsync(string id, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ValidateToolId(id);
         var installation = Find(id);
         if (installation?.Origin != ToolOrigin.Managed || !IsManagedPath(installation.Path))
             throw new InvalidOperationException($"{id} is not installed by MediaExport.");
 
-        // deleate the whole bundle directory 
-        var directory = Path.GetDirectoryName(installation.Path);
-        if (!string.IsNullOrEmpty(directory) && IsManagedPath(directory))
+        var toolDirectory = Path.GetFullPath(Path.Combine(Folder, id));
+        if (IsManagedPath(toolDirectory) && IsWithinDirectory(toolDirectory, installation.Path))
         {
-            Directory.Delete(directory, recursive: true);
+            Directory.Delete(toolDirectory, recursive: true);
         }
         else
         {
@@ -119,6 +119,7 @@ public sealed partial class ToolchainService(
         Uri downloadUri,
         CancellationToken cancellationToken)
     {
+        ValidateToolId(id);
         var tool = GetTool(id) ?? new ToolSettings { Id = id, Executable = id };
         var installDirectory = Path.Combine(Folder, id);
         Directory.CreateDirectory(installDirectory);
@@ -176,7 +177,7 @@ public sealed partial class ToolchainService(
             settings.Save();
 
             CleanupOldBundles(installDirectory, isZip ? extractedDirectory : null);
-            return new ToolInstallation(target, ToolOrigin.Managed);
+            return new ToolInstallation(installPath, ToolOrigin.Managed);
         }
         finally
         {
@@ -229,6 +230,29 @@ public sealed partial class ToolchainService(
             && relative != ".."
             && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
             && !relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal);
+    }
+
+    private static bool IsWithinDirectory(string directory, string path)
+    {
+        var relative = Path.GetRelativePath(
+            Path.GetFullPath(directory),
+            Path.GetFullPath(path));
+
+        return !Path.IsPathRooted(relative)
+            && relative != ".."
+            && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+            && !relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal);
+    }
+
+    private static void ValidateToolId(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id) ||
+            id is "." or ".." ||
+            !string.Equals(Path.GetFileName(id), id, StringComparison.Ordinal) ||
+            id.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            throw new ArgumentException("Tool id must be a simple directory name.", nameof(id));
+        }
     }
 
     /// <summary>Asks a program for its version by running it.</summary>
