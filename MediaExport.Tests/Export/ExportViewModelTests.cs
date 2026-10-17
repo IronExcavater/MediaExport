@@ -46,9 +46,19 @@ public class ExportViewModelTests
         var downloader = new CapturingDownloader();
         var export = CreateViewModel([], settings, downloader);
         export.Open(Media);
+        var propertyChanges = new List<string>();
+        export.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName is not null)
+                propertyChanges.Add(args.PropertyName);
+        };
+
+        // Act
         export.SelectedExportMode = "Audio only";
         var audioFormats = export.AvailableFormats.ToArray();
         var audioDefault = export.SelectedFormat;
+        var audioChanges = propertyChanges.ToArray();
+        propertyChanges.Clear();
         export.SelectedExportMode = "Video";
         var videoFormats = export.AvailableFormats.ToArray();
         var videoDefault = export.SelectedFormat;
@@ -56,7 +66,6 @@ public class ExportViewModelTests
         export.SelectedVideoResolution = "720p";
         export.SelectedFormat = "webm";
 
-        // Act
         export.ExportCommand.Execute(null);
         var restored = CreateViewModel([], new SettingsStore(settingsPath));
 
@@ -65,6 +74,11 @@ public class ExportViewModelTests
         {
             Assert.That(audioFormats, Is.EqualTo(new[] { "mp3", "wav", "flac", "m4a" }));
             Assert.That(audioDefault, Is.EqualTo("mp3"));
+            Assert.That(audioChanges, Does.Contain(nameof(ExportViewModel.AvailableFormats)));
+            Assert.That(audioChanges, Does.Contain(nameof(ExportViewModel.SelectedFormat)));
+            Assert.That(
+                Array.IndexOf(audioChanges, nameof(ExportViewModel.AvailableFormats)),
+                Is.LessThan(Array.IndexOf(audioChanges, nameof(ExportViewModel.SelectedFormat))));
             Assert.That(videoFormats, Is.EqualTo(new[] { "mp4", "mkv", "webm" }));
             Assert.That(videoDefault, Is.EqualTo("mp4"));
             Assert.That(downloader.Options.Single(), Is.EqualTo(new ExportOptions("webm", outputFolder, 192, 720)));

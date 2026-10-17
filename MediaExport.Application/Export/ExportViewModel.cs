@@ -39,9 +39,7 @@ public sealed partial class ExportViewModel : ObservableObject
 
     public IReadOnlyList<string> ExportModes => IsAudioSource ? AudioOnlyMode : AudioVideoModes;
     [ObservableProperty]
-    [NotifyPropertyChangedFor(
-        nameof(IsAudioExport),
-        nameof(AvailableFormats))]
+    [NotifyPropertyChangedFor(nameof(IsAudioExport))]
     public partial string SelectedExportMode { get; set; } = VideoModeName;
     public bool IsAudioSource => Media?.Kind == MediaKind.Audio;
     public bool IsAudioExport => SelectedExportMode == AudioOnlyModeName;
@@ -201,6 +199,9 @@ public sealed partial class ExportViewModel : ObservableObject
             return;
         }
 
+        // The format list must reach the UI before its new selection. Otherwise the ComboBox rejects mp3 while
+        // it still contains video formats (or mp4 while it still contains audio formats) and displays a blank.
+        OnPropertyChanged(nameof(AvailableFormats));
         SelectedFormat = IsAudioExport ? "mp3" : "mp4";
     }
 
