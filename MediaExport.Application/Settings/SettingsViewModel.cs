@@ -69,6 +69,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         foreach (var tool in tools)
             EnsureToolSettings(tool);
         Tools = tools.Select(tool => new ToolViewModel(tool, toolchain)).ToList();
+        foreach (var tool in Tools)
+            tool.PropertyChanged += (_, _) => NotifyToolState();
 
         _search.RecentSearches.CollectionChanged += (_, _) => NotifyHistoryState();
         _export.RecentlyViewed.CollectionChanged += (_, _) => NotifyHistoryState();
@@ -110,6 +112,23 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>The programs the app depends on, each with whether it is installed.</summary>
     public IReadOnlyList<ToolViewModel> Tools { get; }
+    public int MissingToolCount => Tools.Count(tool => !tool.IsChecking && !tool.IsInstalled);
+    public bool HasMissingTools => MissingToolCount > 0;
+    public bool AreToolsBusy => Tools.Any(tool => tool.IsBusy || tool.IsChecking);
+    public bool AreToolsIdle => !AreToolsBusy;
+    public string MissingToolsMessage => MissingToolCount == 1
+        ? "1 required tool is missing"
+        : $"{MissingToolCount} required tools are missing";
+
+    private void NotifyToolState()
+    {
+        OnPropertyChanged(nameof(MissingToolCount));
+        OnPropertyChanged(nameof(HasMissingTools));
+        OnPropertyChanged(nameof(AreToolsBusy));
+        OnPropertyChanged(nameof(AreToolsIdle));
+        OnPropertyChanged(nameof(MissingToolsMessage));
+        InstallMissingToolsCommand.NotifyCanExecuteChanged();
+    }
 
     /// <summary>
     /// Whether the tools are kept up to date. Each tool has a setting of its own for this, and the page has one
@@ -133,6 +152,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public async Task RefreshToolsAsync()
     {
         await Task.WhenAll(Tools.Select(tool => tool.RefreshCommand.ExecuteAsync(null)));
+        NotifyToolState();
         if (_checkedAutoUpdates)
             return;
 
@@ -143,6 +163,17 @@ public sealed partial class SettingsViewModel : ObservableObject
             settings.AutoUpdate);
         foreach (var tool in updates)
             await tool.UpdateCommand.ExecuteAsync(null);
+        NotifyToolState();
+    }
+
+    private bool CanInstallMissingTools() => HasMissingTools && !AreToolsBusy;
+
+    [RelayCommand(CanExecute = nameof(CanInstallMissingTools))]
+    private async Task InstallMissingToolsAsync()
+    {
+        foreach (var tool in Tools.Where(tool => !tool.IsInstalled && tool.CanInstall).ToList())
+            await tool.InstallCommand.ExecuteAsync(null);
+        NotifyToolState();
     }
 
     /// <summary>Opens the folder the app installs tools into, which is made first if nothing is installed yet.</summary>

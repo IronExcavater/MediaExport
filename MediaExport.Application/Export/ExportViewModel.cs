@@ -110,19 +110,64 @@ public sealed partial class ExportViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ExportCommand))]
+    [NotifyPropertyChangedFor(nameof(IsExportBusy), nameof(CanEditExport), nameof(IsExportProgressIndeterminate), nameof(ExportActionText))]
     public partial bool IsInspecting { get; private set; }
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ExportCommand))]
+    [NotifyPropertyChangedFor(nameof(CanEditExport))]
     public partial bool IsAvailable { get; private set; } = true;
 
     [ObservableProperty]
     public partial string? AvailabilityMessage { get; private set; }
 
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ExportCommand))]
+    [NotifyPropertyChangedFor(nameof(IsExporting), nameof(IsExportBusy), nameof(CanEditExport), nameof(ExportProgress))]
+    [NotifyPropertyChangedFor(nameof(IsExportProgressIndeterminate), nameof(ExportActionText), nameof(ExportProgressDetail))]
+    public partial ExportJob? CurrentJob { get; private set; }
+
+    public bool IsExporting => CurrentJob?.IsActive == true;
+    public bool IsExportBusy => IsInspecting || IsExporting;
+    public bool CanEditExport => IsAvailable && !IsExportBusy;
+    public double ExportProgress => CurrentJob?.Progress ?? 0;
+    public bool IsExportProgressIndeterminate => IsInspecting || CurrentJob?.IsIndeterminate == true;
+    public string ExportProgressDetail => CurrentJob?.ProgressDetail ?? string.Empty;
+    public string ExportActionText => IsInspecting
+        ? "Checking media"
+        : CurrentJob switch
+        {
+            { IsActive: true } => CurrentJob.Status,
+            { IsCompleted: true } => "Export again",
+            { IsFailed: true } => "Try again",
+            { IsCancelled: true } => "Export again",
+            _ => "Export"
+        };
+
     /// <summary>Raised when media is opened or a link starts being read, for the window to show the Export page.</summary>
     public event EventHandler? Opened;
 
-    private bool CanExport() => Media is not null && IsAvailable && !IsInspecting;
+    private bool CanExport() => Media is not null && IsAvailable && !IsInspecting && !IsExporting;
+
+    partial void OnCurrentJobChanged(ExportJob? oldValue, ExportJob? newValue)
+    {
+        if (oldValue is not null)
+            oldValue.PropertyChanged -= CurrentJob_PropertyChanged;
+        if (newValue is not null)
+            newValue.PropertyChanged += CurrentJob_PropertyChanged;
+    }
+
+    private void CurrentJob_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        OnPropertyChanged(nameof(IsExporting));
+        OnPropertyChanged(nameof(IsExportBusy));
+        OnPropertyChanged(nameof(CanEditExport));
+        OnPropertyChanged(nameof(ExportProgress));
+        OnPropertyChanged(nameof(IsExportProgressIndeterminate));
+        OnPropertyChanged(nameof(ExportActionText));
+        OnPropertyChanged(nameof(ExportProgressDetail));
+        ExportCommand.NotifyCanExecuteChanged();
+    }
 
     partial void OnSelectedOutputFolderChanged(string value)
     {
@@ -187,7 +232,7 @@ public sealed partial class ExportViewModel : ObservableObject
             bitrate,
             videoHeight);
 
-        _activity.Start(Media!, options);
+        CurrentJob = _activity.Start(Media!, options);
     }
 
     public void Open(MediaSearchResult media, ExportOptions? options = null)
@@ -195,6 +240,7 @@ public sealed partial class ExportViewModel : ObservableObject
         _reading?.Cancel();
         _reading = null;
         IsLoading = false;
+        CurrentJob = null;
         Media = media;
         if (options is not null)
             Restore(options);
@@ -246,6 +292,7 @@ public sealed partial class ExportViewModel : ObservableObject
         IsLoading = false;
         IsInspecting = false;
         AvailabilityMessage = null;
+        CurrentJob = null;
         Media = null;
     }
 

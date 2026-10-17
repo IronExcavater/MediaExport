@@ -361,10 +361,21 @@ public sealed partial class YtdlpService(ToolchainService tools) : IMediaDownloa
             : MediaAvailability.Available;
     }
 
-    internal static Exception NormalizeError(string reason) =>
-        reason.Contains("DRM", StringComparison.OrdinalIgnoreCase)
-            ? new MediaExportException(ExportFailureKind.DrmProtected, DrmMessage)
-            : new MediaExportException(ExportFailureKind.Failed, reason);
+    internal static Exception NormalizeError(string reason)
+    {
+        if (reason.Contains("DRM", StringComparison.OrdinalIgnoreCase))
+            return new MediaExportException(ExportFailureKind.DrmProtected, DrmMessage);
+
+        if (reason.Contains("403", StringComparison.OrdinalIgnoreCase)
+            || reason.Contains("Forbidden", StringComparison.OrdinalIgnoreCase))
+        {
+            return new MediaExportException(
+                ExportFailureKind.Failed,
+                "The media provider refused the download (HTTP 403). Retry it; if it keeps happening, update yt-dlp and try without a VPN or proxy.");
+        }
+
+        return new MediaExportException(ExportFailureKind.Failed, reason);
+    }
 
     internal static IReadOnlyList<string> GetSearchArguments(string target, int skip, int limit) =>
     [

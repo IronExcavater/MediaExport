@@ -162,26 +162,22 @@ public class ActivityViewModelTests
     }
 
     [Test]
-    public void Selection_enables_only_actions_supported_by_at_least_one_selected_job()
+    public async Task Removing_selected_jobs_cancels_active_work_and_clears_the_selection()
     {
-        var downloader = new HeldDownloader();
+        var downloader = new CancelAwareDownloader();
         var activity = new ActivityViewModel(downloader, new SettingsStore(null));
         var active = activity.Start(Media, Options);
-        var failed = activity.Start(Media, Options);
-        downloader.Downloads[1].SetException(new InvalidOperationException("Failed"));
+        await downloader.Started.Task;
 
-        activity.Select([active, failed]);
-        var eligibilityChanges = 0;
-        activity.CancelSelectedCommand.CanExecuteChanged += (_, _) => eligibilityChanges++;
-        downloader.Downloads[0].SetResult([]);
+        activity.Select([active]);
+        activity.RemoveSelectedCommand.Execute(null);
 
         Assert.Multiple(() =>
         {
-            Assert.That(activity.SelectedCount, Is.EqualTo(2));
-            Assert.That(activity.CanRetrySelected, Is.True);
-            Assert.That(activity.CanCancelSelected, Is.False);
-            Assert.That(activity.CanRemoveSelected, Is.True);
-            Assert.That(eligibilityChanges, Is.GreaterThan(0));
+            Assert.That(downloader.Token.IsCancellationRequested, Is.True);
+            Assert.That(activity.Jobs, Is.Empty);
+            Assert.That(activity.SelectedCount, Is.Zero);
+            Assert.That(activity.HasSelection, Is.False);
         });
     }
 
