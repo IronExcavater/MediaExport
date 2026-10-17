@@ -15,11 +15,11 @@
             <Setter Property="Padding" Value="12,0" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Width" Value="112" />
+            <Setter Property="MinWidth" Value="96" />
         </Style>
         <Style x:Key="ToolActionButtonStyle" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
             <Setter Property="Height" Value="32" />
-            <Setter Property="Width" Value="144" />
+            <Setter Property="MinWidth" Value="112" />
             <Setter Property="Padding" Value="12,0" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
         </Style>
@@ -147,7 +147,7 @@
                                         ToolTipService.ToolTip="Open the folder where MediaExport installs tools">
                                         <StackPanel Orientation="Horizontal" Spacing="6">
                                             <FontIcon FontSize="12" Glyph="&#xE838;" />
-                                            <TextBlock VerticalAlignment="Center" Text="Open folder" />
+                                            <TextBlock VerticalAlignment="Center" Text="Folder" />
                                         </StackPanel>
                                     </Button>
                                 </StackPanel>

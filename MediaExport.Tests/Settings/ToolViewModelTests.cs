@@ -68,7 +68,7 @@ public class ToolViewModelTests
             Assert.That(row.Installation, Is.EqualTo(new ToolInstallation(Path.GetFullPath(external), ToolOrigin.External)));
             Assert.That(row.IsExternal, Is.True);
             Assert.That(row.CanInstall, Is.True);
-            Assert.That(row.InstallActionText, Is.EqualTo("Install managed copy"));
+            Assert.That(row.InstallActionText, Is.EqualTo("Install copy"));
             Assert.That(row.CanUpdate, Is.False);
             Assert.That(row.CanRemove, Is.False);
             Assert.That(row.StatusText, Is.EqualTo("External"));

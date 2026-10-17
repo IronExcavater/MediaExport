@@ -165,57 +165,63 @@
             ItemInvoked="NavView_ItemInvoked"
             Loaded="NavView_Loaded"
             SelectionChanged="NavView_SelectionChanged">
-            <NavigationView.PaneFooter>
-                <Border
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem
                     x:Name="toolsWarning"
-                    Margin="8,6,8,8"
-                    Padding="12"
-                    Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
-                    BorderBrush="{ThemeResource SystemFillColorCautionBrush}"
-                    BorderThickness="1"
-                    CornerRadius="10"
+                    AutomationProperties.Name="Missing tools"
+                    HorizontalContentAlignment="Stretch"
+                    IsTabStop="False"
+                    SelectsOnInvoked="False"
                     Visibility="Collapsed">
-                    <StackPanel Spacing="10">
-                        <Grid ColumnSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <FontIcon
-                                VerticalAlignment="Top"
-                                FontSize="18"
-                                Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                                Glyph="&#xE7BA;" />
-                            <StackPanel Grid.Column="1" Spacing="2">
-                                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Tools required" />
-                                <TextBlock
-                                    Style="{StaticResource SecondaryTextStyle}"
-                                    Text="{x:Bind Settings.MissingToolsMessage, Mode=OneWay}" />
-                            </StackPanel>
-                        </Grid>
-                        <Button
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Center"
-                            Command="{x:Bind Settings.InstallMissingToolsCommand}"
-                            Style="{StaticResource AccentButtonStyle}">
-                            <StackPanel Orientation="Horizontal" Spacing="7">
-                                <ProgressRing
-                                    Width="14"
-                                    Height="14"
-                                    MinWidth="0"
-                                    MinHeight="0"
-                                    IsActive="{x:Bind Settings.AreToolsBusy, Mode=OneWay}"
-                                    Visibility="{x:Bind Settings.AreToolsBusy, Mode=OneWay}" />
+                    <Border
+                        Margin="0,4,0,6"
+                        Padding="12"
+                        Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                        BorderBrush="{ThemeResource SystemFillColorCautionBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10">
+                        <StackPanel Spacing="10">
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
                                 <FontIcon
-                                    FontSize="13"
-                                    Glyph="&#xE896;"
-                                    Visibility="{x:Bind Settings.AreToolsIdle, Mode=OneWay}" />
-                                <TextBlock Text="Install tools" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
-                </Border>
-            </NavigationView.PaneFooter>
+                                    VerticalAlignment="Top"
+                                    FontSize="18"
+                                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                    Glyph="&#xE7BA;" />
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Tools required" />
+                                    <TextBlock
+                                        Style="{StaticResource SecondaryTextStyle}"
+                                        Text="{x:Bind Settings.MissingToolsMessage, Mode=OneWay}" />
+                                </StackPanel>
+                            </Grid>
+                            <Button
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                Command="{x:Bind Settings.InstallMissingToolsCommand}"
+                                Style="{StaticResource AccentButtonStyle}">
+                                <StackPanel Orientation="Horizontal" Spacing="7">
+                                    <ProgressRing
+                                        Width="14"
+                                        Height="14"
+                                        MinWidth="0"
+                                        MinHeight="0"
+                                        IsActive="{x:Bind Settings.AreToolsBusy, Mode=OneWay}"
+                                        Visibility="{x:Bind Settings.AreToolsBusy, Mode=OneWay}" />
+                                    <FontIcon
+                                        FontSize="13"
+                                        Glyph="&#xE896;"
+                                        Visibility="{x:Bind Settings.AreToolsIdle, Mode=OneWay}" />
+                                    <TextBlock Text="Install tools" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="Search" Icon="Find" Tag="Search" />
                 <NavigationViewItem Content="Export" Icon="Download" Tag="Export" />

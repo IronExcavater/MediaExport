@@ -50,7 +50,7 @@ public sealed partial class ToolViewModel(ToolInfo tool, ToolchainService toolch
     public bool CanInstall => !IsBusy && !IsChecking && !IsManaged && tool.DownloadUri is not null;
     public bool CanUpdate => !IsBusy && !IsChecking && IsManaged && tool.DownloadUri is not null;
     public bool CanRemove => !IsBusy && !IsChecking && IsManaged;
-    public string InstallActionText => IsExternal ? "Install managed copy" : "Install";
+    public string InstallActionText => IsExternal ? "Install copy" : "Install";
 
     public string VersionText => IsInstalled ? Version ?? "Installed" : "Not installed";
     public string StatusText => IsExternal ? "External" : VersionText;

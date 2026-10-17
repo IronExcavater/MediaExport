@@ -137,6 +137,7 @@ public sealed partial class MainWindow : Window
         titleBar.Margin = new Thickness(0, 0, neededWidth - reservedWidth, 0);
 
         await Settings.RefreshToolsAsync();
+        ShowToolsWarning();
     }
 
     // The app opens on the search it was closed with, or on what is popular. The results are usually remembered
