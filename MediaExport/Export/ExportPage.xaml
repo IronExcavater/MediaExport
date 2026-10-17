@@ -112,11 +112,8 @@
                 </Grid.RowDefinitions>
 
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Padding="20" Spacing="18">
-                        <StackPanel Spacing="3">
-                            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Export options" />
-                            <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="Choose the file, quality, and destination." />
-                        </StackPanel>
+                    <StackPanel Padding="20" Spacing="16">
+                        <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Export" />
 
                         <InfoBar
                             IsClosable="False"
@@ -125,15 +122,17 @@
                             Severity="Warning"
                             Title="Can’t export this media" />
 
-                        <ContentControl IsEnabled="{x:Bind ViewModel.CanEditExport, Mode=OneWay}">
-                            <StackPanel Spacing="16">
+                        <ContentControl
+                            HorizontalContentAlignment="Stretch"
+                            IsEnabled="{x:Bind ViewModel.CanEditExport, Mode=OneWay}">
+                            <StackPanel Spacing="14">
                                 <Grid ColumnSpacing="12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Spacing="6">
-                                        <TextBlock Style="{StaticResource OptionLabelStyle}" Text="Export" />
+                                        <TextBlock Style="{StaticResource OptionLabelStyle}" Text="Type" />
                                         <ComboBox
                                             x:Name="ExportModeComboBox"
                                             HorizontalAlignment="Stretch"
@@ -150,38 +149,31 @@
                                     </StackPanel>
                                 </Grid>
 
-                                <Border Padding="14" Background="{ThemeResource LayerFillColorAltBrush}" CornerRadius="8">
-                                    <StackPanel Spacing="8">
-                                        <TextBlock FontWeight="SemiBold" Text="Quality" />
-                                        <StackPanel Spacing="6" Visibility="{x:Bind converters:VisibleWhen.True(ViewModel.IsAudioExport), Mode=OneWay}">
-                                            <TextBlock Style="{StaticResource OptionLabelStyle}" Text="Audio bitrate" />
-                                            <ComboBox
-                                                HorizontalAlignment="Stretch"
-                                                ItemsSource="{x:Bind ViewModel.AudioBitrates, Mode=OneWay}"
-                                                SelectedItem="{x:Bind ViewModel.SelectedAudioBitrate, Mode=TwoWay}" />
-                                            <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="MP3 and M4A use the selected bitrate." />
-                                        </StackPanel>
-                                        <StackPanel Spacing="6" Visibility="{x:Bind converters:VisibleWhen.False(ViewModel.IsAudioExport), Mode=OneWay}">
-                                            <TextBlock Style="{StaticResource OptionLabelStyle}" Text="Maximum resolution" />
-                                            <ComboBox
-                                                HorizontalAlignment="Stretch"
-                                                ItemsSource="{x:Bind ViewModel.VideoResolutions, Mode=OneWay}"
-                                                SelectedItem="{x:Bind ViewModel.SelectedVideoResolution, Mode=TwoWay}" />
-                                            <TextBlock Style="{StaticResource SecondaryTextStyle}" Text="The best available stream up to this resolution is selected." />
-                                        </StackPanel>
-                                    </StackPanel>
-                                </Border>
+                                <StackPanel Spacing="6" Visibility="{x:Bind converters:VisibleWhen.True(ViewModel.IsAudioExport), Mode=OneWay}">
+                                    <TextBlock Style="{StaticResource OptionLabelStyle}" Text="Audio quality" />
+                                    <ComboBox
+                                        HorizontalAlignment="Stretch"
+                                        ItemsSource="{x:Bind ViewModel.AudioBitrates, Mode=OneWay}"
+                                        SelectedItem="{x:Bind ViewModel.SelectedAudioBitrate, Mode=TwoWay}" />
+                                </StackPanel>
+                                <StackPanel Spacing="6" Visibility="{x:Bind converters:VisibleWhen.False(ViewModel.IsAudioExport), Mode=OneWay}">
+                                    <TextBlock Style="{StaticResource OptionLabelStyle}" Text="Maximum resolution" />
+                                    <ComboBox
+                                        HorizontalAlignment="Stretch"
+                                        ItemsSource="{x:Bind ViewModel.VideoResolutions, Mode=OneWay}"
+                                        SelectedItem="{x:Bind ViewModel.SelectedVideoResolution, Mode=TwoWay}" />
+                                </StackPanel>
 
                                 <StackPanel Spacing="6">
-                                    <TextBlock Style="{StaticResource OptionLabelStyle}" Text="Save to" />
+                                    <TextBlock Style="{StaticResource OptionLabelStyle}" Text="Folder" />
                                     <Grid ColumnSpacing="8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <Border
-                                            MinHeight="38"
-                                            Padding="10,8"
+                                            MinHeight="40"
+                                            Padding="12,8"
                                             Background="{ThemeResource LayerFillColorAltBrush}"
                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                             BorderThickness="1"
@@ -191,11 +183,13 @@
                                                 Text="{x:Bind ViewModel.SelectedOutputFolder, Mode=OneWay}"
                                                 TextTrimming="CharacterEllipsis" />
                                         </Border>
-                                        <Button Grid.Column="1" Click="BrowseOutputFolder_Click" ToolTipService.ToolTip="Choose export folder">
-                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <FontIcon FontSize="14" Glyph="&#xE8B7;" />
-                                                <TextBlock Text="Browse" />
-                                            </StackPanel>
+                                        <Button
+                                            Grid.Column="1"
+                                            AutomationProperties.Name="Choose export folder"
+                                            Click="BrowseOutputFolder_Click"
+                                            Style="{StaticResource ExportIconButtonStyle}"
+                                            ToolTipService.ToolTip="Choose export folder">
+                                            <FontIcon FontSize="15" Glyph="&#xE8B7;" />
                                         </Button>
                                     </Grid>
                                 </StackPanel>

@@ -7,6 +7,17 @@
         html { scrollbar-width: none; background: transparent; }
         body { margin: 0; height: 200000px; }
         iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+
+        /* Provider players keep desktop-sized controls in a small iframe. Give them a larger virtual viewport,
+           then scale the whole player back into the available space so video, waveform, and controls all fit. */
+        @media (max-width: 340px), (max-height: 140px) {
+            iframe {
+                width: 138.8889%;
+                height: 138.8889%;
+                transform: scale(.72);
+                transform-origin: top left;
+            }
+        }
     </style>
 </head>
 <body>
