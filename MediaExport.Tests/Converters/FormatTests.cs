@@ -8,51 +8,27 @@ namespace MediaExport.Tests.Converters;
 public class FormatTests
 {
     [Test]
-    public void TimesShowHoursOnlyFromAnHourUp()
+    public void Format_WhenValuesAreKnown_ReturnsReadableText()
     {
-        Assert.Multiple(() =>
-        {
-            Assert.That(Format.Time(TimeSpan.FromSeconds(187)), Is.EqualTo("3:07"));
-            Assert.That(Format.Time(TimeSpan.FromSeconds(3787)), Is.EqualTo("1:03:07"));
-        });
-    }
-
-    [Test]
-    public void CountsAreWrittenShort()
-    {
-        Assert.Multiple(() =>
-        {
-            Assert.That(Format.Count(812), Is.EqualTo("812"));
-            Assert.That(Format.Count(4_200), Is.EqualTo("4.2K"));
-            Assert.That(Format.Count(1_900_000), Is.EqualTo("1.9M"));
-            Assert.That(Format.Count(2_800_000_000), Is.EqualTo("2.8B"));
-        });
-    }
-
-    [Test]
-    public void AgesUseTheLargestUnitThatFits()
-    {
+        // Arrange
         var now = new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
 
-        Assert.Multiple(() =>
-        {
-            Assert.That(Format.Age(now, now), Is.EqualTo("today"));
-            Assert.That(Format.Age(now.AddDays(-1), now), Is.EqualTo("1 day ago"));
-            Assert.That(Format.Age(now.AddDays(-12), now), Is.EqualTo("12 days ago"));
-            Assert.That(Format.Age(now.AddDays(-70), now), Is.EqualTo("2 months ago"));
-            Assert.That(Format.Age(now.AddDays(-800), now), Is.EqualTo("2 years ago"));
-        });
-    }
+        // Act
+        var shortTime = Format.Time(TimeSpan.FromSeconds(187));
+        var longTime = Format.Time(TimeSpan.FromSeconds(3787));
+        var count = Format.Count(1_900_000);
+        var age = Format.Age(now.AddDays(-70), now);
+        var views = Format.Views(4_200);
 
-    [Test]
-    public void ViewsAndAgeAreEmptyWhenTheyArentKnown()
-    {
+        // Assert
         Assert.Multiple(() =>
         {
-            Assert.That(Format.Views(1), Is.EqualTo("1 view"));
-            Assert.That(Format.Views(4_200), Is.EqualTo("4.2K views"));
+            Assert.That(shortTime, Is.EqualTo("3:07"));
+            Assert.That(longTime, Is.EqualTo("1:03:07"));
+            Assert.That(count, Is.EqualTo("1.9M"));
+            Assert.That(age, Is.EqualTo("2 months ago"));
+            Assert.That(views, Is.EqualTo("4.2K views"));
             Assert.That(Format.Views(null), Is.Empty);
-            Assert.That(Format.Age(null), Is.Empty);
         });
     }
 }

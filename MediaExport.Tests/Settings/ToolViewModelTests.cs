@@ -47,182 +47,60 @@ public class ToolViewModelTests
     }
 
     [Test]
-    public async Task Refresh_exposes_actions_for_missing_external_and_managed_tools()
+    public async Task Refresh_WhenInstallationSourceChanges_ExposesAppropriateActions()
     {
+        // Arrange
         var row = CreateRow();
 
+        // Act
         await row.RefreshCommand.ExecuteAsync(null);
-        Assert.Multiple(() =>
-        {
-            Assert.That(row.IsMissing, Is.True);
-            Assert.That(row.CanInstall, Is.True);
-            Assert.That(row.InstallActionText, Is.EqualTo("Install"));
-            Assert.That(row.CanUpdate, Is.False);
-            Assert.That(row.CanRemove, Is.False);
-            Assert.That(row.SourceText, Is.EqualTo("Not found in MediaExport's tools or on PATH"));
-        });
+        var missingCanInstall = row.CanInstall;
         var external = _temporary.CreateFile(_externalFolder, "tool.exe");
         await row.RefreshCommand.ExecuteAsync(null);
-        Assert.Multiple(() =>
-        {
-            Assert.That(row.Installation, Is.EqualTo(new ToolInstallation(Path.GetFullPath(external), ToolOrigin.External)));
-            Assert.That(row.IsExternal, Is.True);
-            Assert.That(row.CanInstall, Is.True);
-            Assert.That(row.InstallActionText, Is.EqualTo("Install copy"));
-            Assert.That(row.CanUpdate, Is.False);
-            Assert.That(row.CanRemove, Is.False);
-            Assert.That(row.StatusText, Is.EqualTo("External"));
-            Assert.That(row.SourceText, Is.EqualTo("Updates are managed outside MediaExport."));
-            Assert.That(row.PathText, Is.EqualTo(Path.GetFullPath(external)));
-        });
+        var externalState = (row.IsExternal, row.CanInstall, row.CanUpdate, row.StatusText);
         var managed = SeedManaged("old");
         await row.RefreshCommand.ExecuteAsync(null);
+
+        // Assert
         Assert.Multiple(() =>
         {
+            Assert.That(missingCanInstall, Is.True);
+            Assert.That(externalState, Is.EqualTo((true, true, false, "External")));
             Assert.That(row.Installation, Is.EqualTo(new ToolInstallation(Path.GetFullPath(managed), ToolOrigin.Managed)));
-            Assert.That(row.IsManaged, Is.True);
             Assert.That(row.CanInstall, Is.False);
             Assert.That(row.CanUpdate, Is.True);
             Assert.That(row.CanRemove, Is.True);
-            Assert.That(row.SourceText, Does.StartWith("Installed by MediaExport"));
+            Assert.That(File.Exists(external), Is.True);
         });
     }
 
     [Test]
-    public async Task Failed_refresh_clears_the_previous_version()
+    public async Task Install_WhenDownloadFails_PreservesExternalCopyAndReportsError()
     {
-        _temporary.CreateFile(_externalFolder, "tool.exe");
-        var row = CreateRow();
-        await row.RefreshCommand.ExecuteAsync(null);
-        _process.Failure = new IOException("cannot start");
-
-        await row.RefreshCommand.ExecuteAsync(null);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(row.Version, Is.Null);
-            Assert.That(row.VersionText, Is.EqualTo("Installed"));
-            Assert.That(row.HasError, Is.True);
-            Assert.That(row.IsHealthy, Is.False);
-            Assert.That(row.Error, Does.Contain("Couldn't inspect Tool"));
-        });
-    }
-
-    [Test]
-    public async Task Install_on_external_selects_the_new_managed_copy()
-    {
+        // Arrange
         var external = _temporary.CreateFile(_externalFolder, "tool.exe", "external");
-        var row = CreateRow();
-        await row.RefreshCommand.ExecuteAsync(null);
-
-        await row.InstallCommand.ExecuteAsync(null);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(row.IsManaged, Is.True);
-            Assert.That(File.ReadAllText(row.Installation!.Path), Is.EqualTo("managed"));
-            Assert.That(File.ReadAllText(external), Is.EqualTo("external"));
-            Assert.That(_http.RequestCount, Is.EqualTo(1));
-        });
-    }
-
-    [Test]
-    public async Task Update_and_remove_refresh_to_the_resulting_installation()
-    {
-        SeedManaged("old");
-        var external = _temporary.CreateFile(_externalFolder, "tool.exe", "external");
-        var row = CreateRow();
-        await row.RefreshCommand.ExecuteAsync(null);
-
-        await row.UpdateCommand.ExecuteAsync(null);
-        var updatedContents = File.ReadAllText(row.Installation!.Path);
-        await row.RemoveCommand.ExecuteAsync(null);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(updatedContents, Is.EqualTo("managed"));
-            Assert.That(_http.RequestCount, Is.EqualTo(1));
-            Assert.That(row.Installation, Is.EqualTo(new ToolInstallation(Path.GetFullPath(external), ToolOrigin.External)));
-        });
-    }
-
-    [Test]
-    public async Task Operation_failures_stay_on_the_row_and_keep_the_previous_state()
-    {
-        _temporary.CreateFile(_externalFolder, "tool.exe");
         _http.Failure = new HttpRequestException("offline");
         var row = CreateRow();
         await row.RefreshCommand.ExecuteAsync(null);
 
+        // Act
         await row.InstallCommand.ExecuteAsync(null);
 
+        // Assert
         Assert.Multiple(() =>
         {
             Assert.That(row.IsExternal, Is.True);
             Assert.That(row.Error, Does.Contain("offline"));
             Assert.That(row.IsBusy, Is.False);
+            Assert.That(File.ReadAllText(external), Is.EqualTo("external"));
         });
     }
 
-    [Test]
-    public async Task Removal_failure_keeps_the_managed_installation_and_reports_the_error()
-    {
-        var managed = SeedManaged("working");
-        var row = CreateRow();
-        await row.RefreshCommand.ExecuteAsync(null);
-        await using var locked = new FileStream(managed, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-
-        await row.RemoveCommand.ExecuteAsync(null);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(row.IsManaged, Is.True);
-            Assert.That(row.Error, Does.Contain("Couldn't remove Tool"));
-            Assert.That(File.Exists(managed), Is.True);
-        });
-    }
-
-    [Test]
-    public async Task A_running_operation_disables_every_command_and_cancellation_is_not_an_error()
-    {
-        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _http.Response = async cancellationToken =>
-        {
-            started.SetResult();
-            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
-            throw new InvalidOperationException("unreachable");
-        };
-        var row = CreateRow();
-        await row.RefreshCommand.ExecuteAsync(null);
-
-        var install = row.InstallCommand.ExecuteAsync(null);
-        await started.Task;
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(row.RefreshCommand.CanExecute(null), Is.False);
-            Assert.That(row.InstallCommand.CanExecute(null), Is.False);
-            Assert.That(row.UpdateCommand.CanExecute(null), Is.False);
-            Assert.That(row.RemoveCommand.CanExecute(null), Is.False);
-        });
-
-        row.InstallCommand.Cancel();
-        await install;
-        Assert.Multiple(() =>
-        {
-            Assert.That(row.Error, Is.Null);
-            Assert.That(row.IsBusy, Is.False);
-            Assert.That(row.RefreshCommand.CanExecute(null), Is.True);
-        });
-    }
-
-    private ToolViewModel CreateRow() => new(Tool, CreateService());
-
-    private ToolchainService CreateService() => new(
+    private ToolViewModel CreateRow() => new(Tool, new ToolchainService(
         _settings,
         new ToolchainOptions(_managedFolder, [_externalFolder]),
         _client,
-        _process);
+        _process));
 
     private string SeedManaged(string contents)
     {

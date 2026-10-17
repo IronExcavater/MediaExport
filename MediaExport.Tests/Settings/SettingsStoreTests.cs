@@ -8,36 +8,35 @@ namespace MediaExport.Tests.Settings;
 public class SettingsStoreTests
 {
     [Test]
-    public void SavedSettingsAreReadBack()
+    public void Load_WhenFileIsSavedOrInvalid_RestoresValuesOrDefaults()
     {
-        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "settings.json");
+        // Arrange
+        var folder = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var savedPath = Path.Combine(folder, "saved.json");
+        var invalidPath = Path.Combine(folder, "invalid.json");
+        Directory.CreateDirectory(folder);
+
         try
         {
-            var store = new SettingsStore(path);
+            var store = new SettingsStore(savedPath);
             store.Current.IsPaneOpen = false;
             store.Save();
+            File.WriteAllText(invalidPath, "not json");
 
-            Assert.That(new SettingsStore(path).Current.IsPaneOpen, Is.False);
+            // Act
+            var saved = new SettingsStore(savedPath).Current;
+            var defaults = new SettingsStore(invalidPath).Current;
+
+            // Assert
+            Assert.Multiple(() =>
+            {
+                Assert.That(saved.IsPaneOpen, Is.False);
+                Assert.That(defaults.IsPaneOpen, Is.True);
+            });
         }
         finally
         {
-            Directory.Delete(Path.GetDirectoryName(path)!, recursive: true);
-        }
-    }
-
-    [Test]
-    public void AnUnreadableFileGivesTheDefaults()
-    {
-        var path = Path.GetTempFileName();
-        try
-        {
-            File.WriteAllText(path, "not json");
-
-            Assert.That(new SettingsStore(path).Current.IsPaneOpen, Is.True);
-        }
-        finally
-        {
-            File.Delete(path);
+            Directory.Delete(folder, recursive: true);
         }
     }
 }
