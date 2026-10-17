@@ -95,6 +95,41 @@ public class SettingsViewModelTests
         Assert.That(viewModel.App, Is.EqualTo(metadata));
     }
 
+    [Test]
+    public async Task Missing_tool_warning_follows_the_results_of_tool_discovery()
+    {
+        using var temporary = new TemporaryDirectory();
+        var managedFolder = temporary.CreateDirectory("managed");
+        var externalFolder = temporary.CreateDirectory("external");
+        var settings = new SettingsStore(null);
+        using var client = new HttpClient();
+        var tools = new ToolchainService(
+            settings,
+            new ToolchainOptions(managedFolder, [externalFolder]),
+            client,
+            new FakeProcessRunner());
+        var viewModel = CreateViewModel(tools, settings);
+
+        await viewModel.RefreshToolsAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.HasMissingTools, Is.True);
+            Assert.That(viewModel.MissingToolCount, Is.EqualTo(3));
+        });
+
+        temporary.CreateFile(externalFolder, "yt-dlp.exe");
+        temporary.CreateFile(externalFolder, "ffmpeg.exe");
+        temporary.CreateFile(externalFolder, "deno.exe");
+        await viewModel.RefreshToolsAsync();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(viewModel.HasMissingTools, Is.False);
+            Assert.That(viewModel.MissingToolCount, Is.Zero);
+        });
+    }
+
     private static SettingsViewModel CreateViewModel(
         ToolchainService tools,
         SettingsStore settings,

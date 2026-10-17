@@ -117,6 +117,42 @@ public class ExportViewModelTests
     }
 
     [Test]
+    public async Task Export_button_tracks_the_active_jobs_phase_and_progress()
+    {
+        var downloader = new ProgressDownloader();
+        var export = CreateViewModel([], downloader: downloader);
+        export.Open(Media);
+
+        export.ExportCommand.Execute(null);
+        await downloader.Started.Task;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(export.IsExporting, Is.True);
+            Assert.That(export.ExportProgress, Is.EqualTo(42));
+            Assert.That(export.ExportActionText, Is.EqualTo("Downloading 42%"));
+            Assert.That(export.ExportCommand.CanExecute(null), Is.False);
+        });
+
+        var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        export.CurrentJob!.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ExportJob.State) && export.CurrentJob.IsFinished)
+                finished.TrySetResult();
+        };
+        downloader.Download.SetResult([]);
+        await finished.Task;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(export.IsExporting, Is.False);
+            Assert.That(export.ExportProgress, Is.EqualTo(100));
+            Assert.That(export.ExportActionText, Is.EqualTo("Export again"));
+            Assert.That(export.ExportCommand.CanExecute(null), Is.True);
+        });
+    }
+
+    [Test]
     public void Opening_for_export_again_restores_options_and_blocks_drm_media()
     {
         var downloader = new InspectingDownloader
@@ -170,6 +206,23 @@ public class ExportViewModelTests
         {
             Options.Add(options);
             return Task.FromResult<IReadOnlyList<string>>([]);
+        }
+    }
+
+    private sealed class ProgressDownloader : IMediaDownloader
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<IReadOnlyList<string>> Download { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<IReadOnlyList<string>> DownloadAsync(
+            string sourceUrl,
+            ExportOptions options,
+            IProgress<ExportProgress>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            progress!.Report(new ExportProgress(42, "2 MiB/s", "00:12"));
+            Started.SetResult();
+            return Download.Task;
         }
     }
 

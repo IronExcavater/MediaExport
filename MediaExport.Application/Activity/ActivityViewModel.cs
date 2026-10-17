@@ -54,25 +54,25 @@ public sealed partial class ActivityViewModel : ObservableObject
 
     public IReadOnlyList<ExportJob> SelectedJobs { get; private set; } = [];
     public int SelectedCount => SelectedJobs.Count;
-    public bool CanRetrySelected => SelectedJobs.Any(job => job.CanRetry);
-    public bool CanCancelSelected => SelectedJobs.Any(job => job.IsActive);
-    public bool CanRemoveSelected => SelectedJobs.Any(job => job.IsFinished);
+    public bool HasSelection => SelectedCount > 0;
+    public bool ShowSelectAll => HasJobs && !HasSelection;
+    public string SelectionSummary => SelectedCount == 1 ? "1 selected" : $"{SelectedCount} selected";
+    public bool CanRemoveSelected => HasSelection;
 
     public void Select(IEnumerable<ExportJob> jobs)
     {
         SelectedJobs = jobs.Distinct().ToList();
         OnPropertyChanged(nameof(SelectedJobs));
         OnPropertyChanged(nameof(SelectedCount));
+        OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(ShowSelectAll));
+        OnPropertyChanged(nameof(SelectionSummary));
         RefreshSelectionEligibility();
     }
 
     private void RefreshSelectionEligibility()
     {
-        OnPropertyChanged(nameof(CanRetrySelected));
-        OnPropertyChanged(nameof(CanCancelSelected));
         OnPropertyChanged(nameof(CanRemoveSelected));
-        RetrySelectedCommand.NotifyCanExecuteChanged();
-        CancelSelectedCommand.NotifyCanExecuteChanged();
         RemoveSelectedCommand.NotifyCanExecuteChanged();
     }
 
@@ -127,25 +127,10 @@ public sealed partial class ActivityViewModel : ObservableObject
         StartNext();
     }
 
-    [RelayCommand(CanExecute = nameof(CanRetrySelected))]
-    private void RetrySelected()
-    {
-        foreach (var job in SelectedJobs.Where(job => job.CanRetry).ToList())
-            Retry(job);
-        Select([]);
-    }
-
-    [RelayCommand(CanExecute = nameof(CanCancelSelected))]
-    private void CancelSelected()
-    {
-        foreach (var job in SelectedJobs.Where(job => job.IsActive))
-            job.CancelCommand.Execute(null);
-    }
-
     [RelayCommand(CanExecute = nameof(CanRemoveSelected))]
     private void RemoveSelected()
     {
-        foreach (var job in SelectedJobs.Where(job => job.IsFinished).ToList())
+        foreach (var job in SelectedJobs.Where(Jobs.Contains).ToList())
             Remove(job);
         Select([]);
     }
@@ -228,6 +213,7 @@ public sealed partial class ActivityViewModel : ObservableObject
     private void OnJobsChanged()
     {
         OnPropertyChanged(nameof(HasJobs));
+        OnPropertyChanged(nameof(ShowSelectAll));
         ClearFinishedCommand.NotifyCanExecuteChanged();
         UpdateGroups();
         SaveHistory();

@@ -51,6 +51,20 @@ public class YtdlpServiceTests
     }
 
     [Test]
+    public void Forbidden_downloads_explain_the_recovery_options()
+    {
+        var failure = YtdlpService.NormalizeError("unable to download video data: HTTP Error 403: Forbidden");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(failure, Is.TypeOf<MediaExportException>());
+            Assert.That(failure.Message, Does.Contain("Retry"));
+            Assert.That(failure.Message, Does.Contain("update yt-dlp"));
+            Assert.That(failure.Message, Does.Contain("VPN or proxy"));
+        });
+    }
+
+    [Test]
     public void Download_requires_yt_dlp_and_ffmpeg_before_starting()
     {
         using var temporary = new TemporaryDirectory();
