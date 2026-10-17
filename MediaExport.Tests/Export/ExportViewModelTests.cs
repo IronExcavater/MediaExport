@@ -36,7 +36,7 @@ public class ExportViewModelTests
     }
 
     [Test]
-    public void Export_WhenOptionsAreSelected_QueuesValuesAndPersistsFolder()
+    public void Export_WhenOptionsChange_UpdatesFormatsQueuesValuesAndPersistsFolder()
     {
         // Arrange
         using var temporary = new TemporaryDirectory();
@@ -46,6 +46,12 @@ public class ExportViewModelTests
         var downloader = new CapturingDownloader();
         var export = CreateViewModel([], settings, downloader);
         export.Open(Media);
+        export.SelectedExportMode = "Audio only";
+        var audioFormats = export.AvailableFormats.ToArray();
+        var audioDefault = export.SelectedFormat;
+        export.SelectedExportMode = "Video";
+        var videoFormats = export.AvailableFormats.ToArray();
+        var videoDefault = export.SelectedFormat;
         export.SelectedOutputFolder = outputFolder;
         export.SelectedVideoResolution = "720p";
         export.SelectedFormat = "webm";
@@ -57,6 +63,10 @@ public class ExportViewModelTests
         // Assert
         Assert.Multiple(() =>
         {
+            Assert.That(audioFormats, Is.EqualTo(new[] { "mp3", "wav", "flac", "m4a" }));
+            Assert.That(audioDefault, Is.EqualTo("mp3"));
+            Assert.That(videoFormats, Is.EqualTo(new[] { "mp4", "mkv", "webm" }));
+            Assert.That(videoDefault, Is.EqualTo("mp4"));
             Assert.That(downloader.Options.Single(), Is.EqualTo(new ExportOptions("webm", outputFolder, 192, 720)));
             Assert.That(restored.SelectedOutputFolder, Is.EqualTo(outputFolder));
         });
