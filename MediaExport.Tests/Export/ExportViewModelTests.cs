@@ -19,14 +19,13 @@ public class ExportViewModelTests
     [Test]
     public async Task OpenLink_WhenProviderFails_ReturnsProblemAndClearsLoadingState()
     {
-        // Arrange
-        var provider = new FakeProvider { Failure = new InvalidOperationException("Offline") };
-        var export = CreateViewModel([provider]);
+        var provider = new FakeProvider {
+            Failure = new InvalidOperationException("Offline")
+        };
 
-        // Act
+        var export = CreateViewModel([provider]);
         var problem = await export.OpenLinkAsync(new Uri("https://example.test/id"));
 
-        // Assert
         Assert.Multiple(() =>
         {
             Assert.That(problem, Is.EqualTo("Couldn't open that link. Offline"));
@@ -38,50 +37,60 @@ public class ExportViewModelTests
     [Test]
     public void Export_WhenOptionsChange_UpdatesFormatsQueuesValuesAndPersistsFolder()
     {
-        // Arrange
         using var temporary = new TemporaryDirectory();
         var settingsPath = Path.Combine(temporary.Path, "settings.json");
         var outputFolder = temporary.CreateDirectory("exports");
         var settings = new SettingsStore(settingsPath);
         var downloader = new CapturingDownloader();
         var export = CreateViewModel([], settings, downloader);
+
         export.Open(Media);
+
         var propertyChanges = new List<string>();
+
         export.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName is not null)
                 propertyChanges.Add(args.PropertyName);
         };
 
-        // Act
         export.SelectedExportMode = "Audio only";
+
         var audioFormats = export.AvailableFormats.ToArray();
         var audioDefault = export.SelectedFormat;
         var audioChanges = propertyChanges.ToArray();
+
         propertyChanges.Clear();
         export.SelectedExportMode = "Video";
+
         var videoFormats = export.AvailableFormats.ToArray();
         var videoDefault = export.SelectedFormat;
+
         export.SelectedOutputFolder = outputFolder;
         export.SelectedVideoResolution = "720p";
         export.SelectedFormat = "webm";
-
         export.ExportCommand.Execute(null);
+
         var restored = CreateViewModel([], new SettingsStore(settingsPath));
 
-        // Assert
         Assert.Multiple(() =>
         {
             Assert.That(audioFormats, Is.EqualTo(new[] { "mp3", "wav", "flac", "m4a" }));
             Assert.That(audioDefault, Is.EqualTo("mp3"));
             Assert.That(audioChanges, Does.Contain(nameof(ExportViewModel.AvailableFormats)));
             Assert.That(audioChanges, Does.Contain(nameof(ExportViewModel.SelectedFormat)));
+
             Assert.That(
                 Array.IndexOf(audioChanges, nameof(ExportViewModel.AvailableFormats)),
                 Is.LessThan(Array.IndexOf(audioChanges, nameof(ExportViewModel.SelectedFormat))));
+
             Assert.That(videoFormats, Is.EqualTo(new[] { "mp4", "mkv", "webm" }));
             Assert.That(videoDefault, Is.EqualTo("mp4"));
-            Assert.That(downloader.Options.Single(), Is.EqualTo(new ExportOptions("webm", outputFolder, 192, 720)));
+
+            Assert.That(
+                downloader.Options.Single(),
+                Is.EqualTo(new ExportOptions("webm", outputFolder, 192, 720)));
+
             Assert.That(restored.SelectedOutputFolder, Is.EqualTo(outputFolder));
         });
     }
@@ -89,26 +98,29 @@ public class ExportViewModelTests
     [Test]
     public async Task Export_WhenJobReportsProgress_UpdatesButtonUntilCompletion()
     {
-        // Arrange
         var downloader = new ProgressDownloader();
         var export = CreateViewModel([], downloader: downloader);
-        export.Open(Media);
 
-        // Act
+        export.Open(Media);
         export.ExportCommand.Execute(null);
+
         await downloader.Started.Task;
+
         var activeText = export.ExportActionText;
         var activeDetail = export.ExportProgressDetail;
-        var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finished =
+            new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
         export.CurrentJob!.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(ExportJob.State) && export.CurrentJob.IsFinished)
                 finished.TrySetResult();
         };
+
         downloader.Download.SetResult([]);
+
         await finished.Task;
 
-        // Assert
         Assert.Multiple(() =>
         {
             Assert.That(activeText, Is.EqualTo("Downloading"));
@@ -116,6 +128,36 @@ public class ExportViewModelTests
             Assert.That(export.ExportProgress, Is.EqualTo(100));
             Assert.That(export.ExportActionText, Is.EqualTo("Export again"));
             Assert.That(export.ExportCommand.CanExecute(null), Is.True);
+        });
+    }
+
+
+    [Test]
+    public void Changing_export_mode_updates_available_formats()
+    {
+        var export = CreateViewModel([]);
+
+        export.Open(Media);
+        export.SelectedExportMode = "Audio only";
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                export.AvailableFormats,
+                Is.EqualTo(new[] { "mp3", "wav", "flac", "m4a" }));
+
+            Assert.That(export.SelectedFormat, Is.EqualTo("mp3"));
+        });
+
+        export.SelectedExportMode = "Video";
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                export.AvailableFormats,
+                Is.EqualTo(new[] { "mp4", "mkv", "webm" }));
+
+            Assert.That(export.SelectedFormat, Is.EqualTo("mp4"));
         });
     }
 
@@ -147,8 +189,11 @@ public class ExportViewModelTests
 
     private sealed class ProgressDownloader : IMediaDownloader
     {
-        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public TaskCompletionSource<IReadOnlyList<string>> Download { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Started { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<IReadOnlyList<string>> Download { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task<IReadOnlyList<string>> DownloadAsync(
             string sourceUrl,
@@ -179,12 +224,32 @@ public class ExportViewModelTests
         public MediaKind Kind => MediaKind.Video;
         public Exception? Failure { get; init; }
         public LinkKind GetLinkKind(Uri link) => LinkKind.Item;
-        public Task<MediaSearchResult?> FindByLinkAsync(Uri link, CancellationToken cancellationToken = default) =>
-            Failure is null ? Task.FromResult<MediaSearchResult?>(Media) : Task.FromException<MediaSearchResult?>(Failure);
-        public Task<IReadOnlyList<MediaSearchResult>> SearchAsync(string query, int skip = 0, int limit = 10, SearchSort sort = SearchSort.Relevance, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<MediaSearchResult>>([]);
-        public Task<IReadOnlyList<MediaSearchResult>> ListByLinkAsync(Uri link, int skip = 0, int limit = 10, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<MediaSearchResult>>([]);
-        public Task<string?> FindCreatorAsync(Uri link, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
+
+        public Task<MediaSearchResult?> FindByLinkAsync(
+            Uri link,
+            CancellationToken cancellationToken = default)
+            => Failure is null
+            ? Task.FromResult<MediaSearchResult?>(Media)
+            : Task.FromException<MediaSearchResult?>(Failure);
+
+        public Task<IReadOnlyList<MediaSearchResult>> SearchAsync(
+            string query,
+            int skip = 0,
+            int limit = 10,
+            SearchSort sort = SearchSort.Relevance,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<MediaSearchResult>>([]);
+
+        public Task<IReadOnlyList<MediaSearchResult>> ListByLinkAsync(
+            Uri link,
+            int skip = 0,
+            int limit = 10,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<MediaSearchResult>>([]);
+
+        public Task<string?> FindCreatorAsync(
+            Uri link,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult<string?>(null);
     }
 }
